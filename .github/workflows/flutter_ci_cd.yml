@@ -66,10 +66,20 @@ jobs:
           cp ~/certificates/SeChat_App_Store.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
           
           # List available certificates and profiles
-          echo "Available certificates:"
+          echo "Available certificates in build keychain:"
           security find-identity -v -p codesigning build.keychain
+          echo ""
+          echo "Available certificates in default keychain:"
+          security find-identity -v -p codesigning
+          echo ""
           echo "Installed provisioning profiles:"
           ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
+          echo ""
+          echo "Checking provisioning profile content:"
+          for profile in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision; do
+            echo "Profile: $(basename "$profile")"
+            security cms -D -i "$profile" 2>/dev/null | grep -A 1 "<key>Name</key>" | grep "<string>" || echo "Could not read profile"
+          done
 
       - name: Build Android AAB
         run: flutter build appbundle --release
@@ -90,7 +100,9 @@ jobs:
           flutter build ipa --release \
             --export-options-plist=ios/ExportOptions.plist \
             --build-name=1.0.1 \
-            --build-number=2
+            --build-number=2 \
+            --verbose \
+            -- -allowProvisioningUpdates
 
       - name: Upload Android AAB
         uses: actions/upload-artifact@v4
