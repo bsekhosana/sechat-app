@@ -42,10 +42,10 @@ jobs:
           mkdir -p ~/certificates
           
           # Decode and save distribution certificate
-          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > ~/certificates/distribution_certificate.p12
+          echo "$APPLE_CERTIFICATE_P12" | base64 -d > ~/certificates/distribution_certificate.p12
           
           # Decode and save provisioning profile
-          echo "$APPLE_PROVISIONING_PROFILE" | base64 --decode > ~/certificates/SeChat_App_Store.mobileprovision
+          echo "$APPLE_PROVISIONING_PROFILE" | base64 -d > ~/certificates/SeChat_App_Store.mobileprovision
           
           # Create and configure keychain
           security create-keychain -p "build" build.keychain
