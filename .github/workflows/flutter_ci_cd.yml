@@ -22,23 +22,45 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Setup iOS certificates
+        run: |
+          # Create certificates directory
+          mkdir -p ~/certificates
+          
+          # Decode and save distribution certificate
+          echo "${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_P12 }}" | base64 --decode > ~/certificates/distribution_certificate.p12
+          
+          # Decode and save provisioning profile
+          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 --decode > ~/certificates/SeChat_App_Store.mobileprovision
+          
+          # Import certificate to keychain
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import ~/certificates/distribution_certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}" -A
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          
+          # Install provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp ~/certificates/SeChat_App_Store.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
       - name: Build Android AAB
         run: flutter build appbundle --release
 
-      - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign
+      - name: Build iOS IPA
+        run: flutter build ipa --release
 
       - name: Upload Android AAB
         uses: actions/upload-artifact@v4
         with:
           name: app-release.aab
           path: build/app/outputs/bundle/release/app-release.aab
-
-      - name: Upload iOS build
+        
+      - name: Upload iOS IPA
         uses: actions/upload-artifact@v4
         with:
           name: ios-release
-          path: build/ios/iphoneos/Runner.app
+          path: build/ios/ipa/SeChat.ipa
 
   deploy-android:
     needs: build
@@ -62,7 +84,7 @@ jobs:
           track: internal
           status: completed
           inAppUpdatePriority: 2
-          userFraction: 1.0
+          userFraction: 0.1
           whatsNewDirectory: distribution/whatsnew
           mappingFile: build/app/outputs/mapping/release/mapping.txt
 
@@ -73,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Download iOS build
+      - name: Download iOS IPA
         uses: actions/download-artifact@v4
         with:
           name: ios-release
@@ -82,7 +104,8 @@ jobs:
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: ./Runner.app
+          app-path: ./SeChat.ipa
           issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
           api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
           api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+          platform: ios
