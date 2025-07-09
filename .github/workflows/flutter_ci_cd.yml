@@ -41,20 +41,32 @@ jobs:
           # Create certificates directory
           mkdir -p ~/certificates
           
-          # Decode and save distribution certificate
-          echo "$APPLE_CERTIFICATE_P12" | base64 -d > ~/certificates/distribution_certificate.p12
+          # Decode and save distribution certificate (handle potential line breaks and whitespace)
+          echo "$APPLE_CERTIFICATE_P12" | tr -d '\n\r\t ' | base64 -d > ~/certificates/distribution_certificate.p12
           
-          # Decode and save provisioning profile
-          echo "$APPLE_PROVISIONING_PROFILE" | base64 -d > ~/certificates/SeChat_App_Store.mobileprovision
+          # Verify certificate decoding was successful
+          if [ ! -s ~/certificates/distribution_certificate.p12 ]; then
+            echo "Certificate decoding failed. Trying alternative method..."
+            # Try alternative decoding method
+            printf '%s' "$APPLE_CERTIFICATE_P12" | base64 -d > ~/certificates/distribution_certificate.p12
+          fi
+          
+          # Decode and save provisioning profile (handle potential line breaks and whitespace)
+          echo "$APPLE_PROVISIONING_PROFILE" | tr -d '\n\r\t ' | base64 -d > ~/certificates/SeChat_App_Store.mobileprovision
           
           # Verify certificate file
           echo "Verifying certificate file..."
           ls -la ~/certificates/distribution_certificate.p12
           file ~/certificates/distribution_certificate.p12
           
-          # Test certificate without password first
+          # Test certificate format and password
           echo "Testing certificate format..."
-          openssl pkcs12 -info -in ~/certificates/distribution_certificate.p12 -noout -passin pass:"$APPLE_CERTIFICATE_PASSWORD" || echo "Certificate validation failed"
+          if openssl pkcs12 -info -in ~/certificates/distribution_certificate.p12 -noout -passin pass:"$APPLE_CERTIFICATE_PASSWORD"; then
+            echo "✅ Certificate format is valid"
+          else
+            echo "❌ Certificate validation failed - checking if file is valid P12"
+            openssl pkcs12 -info -in ~/certificates/distribution_certificate.p12 -noout -passin pass: || echo "Certificate file appears to be corrupted"
+          fi
           
           # Create and configure keychain
           security create-keychain -p "build" build.keychain
