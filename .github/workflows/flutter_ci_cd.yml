@@ -57,12 +57,19 @@ jobs:
           security import ~/certificates/distribution_certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -A
           security set-key-partition-list -S apple-tool:,apple: -s -k "build" build.keychain
           
-          # Install provisioning profile
+          # Install provisioning profile with correct UUID
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp ~/certificates/SeChat_App_Store.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
           
-          # List available certificates
+          # Also copy with specific UUID (extract UUID from profile)
+          UUID=$(security cms -D -i ~/certificates/SeChat_App_Store.mobileprovision 2>/dev/null | grep -A 1 "<key>UUID</key>" | grep "<string>" | sed 's/.*<string>\(.*\)<\/string>.*/\1/')
+          cp ~/certificates/SeChat_App_Store.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          
+          # List available certificates and profiles
+          echo "Available certificates:"
           security find-identity -v -p codesigning build.keychain
+          echo "Installed provisioning profiles:"
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
 
       - name: Build Android AAB
         run: flutter build appbundle --release
@@ -80,7 +87,12 @@ jobs:
           fi
           
           echo "🔐 Building iOS IPA with certificates..."
-          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          # Enable automatic provisioning updates for CI
+          flutter build ipa --release \
+            --export-options-plist=ios/ExportOptions.plist \
+            --build-name=1.0.1 \
+            --build-number=2 \
+            -- --allowProvisioningUpdates
 
       - name: Upload Android AAB
         uses: actions/upload-artifact@v4
