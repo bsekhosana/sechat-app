@@ -138,14 +138,20 @@ jobs:
           ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
         run: |
           if [ -n "$ANDROID_SIGNING_KEY_BASE64" ]; then
-            echo "Setting up Android signing for CI/CD..."
+            echo "✅ Setting up Android release signing for CI/CD..."
             echo "$ANDROID_SIGNING_KEY_BASE64" | base64 -d > android/app/app-release-key.jks
             echo "✅ Android keystore file created"
+            ls -la android/app/app-release-key.jks
           else
-            echo "⚠️  Android signing not configured. Using debug signing."
-            echo "To enable release signing, add these secrets to your repository:"
+            echo "⚠️  Android signing secrets not configured. Using debug signing for CI/CD."
+            echo "📝 Temporarily switching to debug signing for this build..."
+            
+            # Temporarily modify build.gradle.kts to use debug signing
+            sed -i.bak 's/signingConfig = signingConfigs.getByName("release")/signingConfig = signingConfigs.getByName("debug")/' android/app/build.gradle.kts
+            
+            echo "To enable release signing in CI/CD, add these secrets to your repository:"
             echo "- ANDROID_SIGNING_KEY_BASE64"
-            echo "- ANDROID_SIGNING_KEY_ALIAS"
+            echo "- ANDROID_SIGNING_KEY_ALIAS" 
             echo "- ANDROID_SIGNING_KEY_PASSWORD"
             echo "- ANDROID_SIGNING_STORE_PASSWORD"
           fi
@@ -242,6 +248,10 @@ jobs:
         run: |
           echo "🚨 Android deployment failed. Most likely causes:"
           echo ""
+          echo "🔐 SIGNING ISSUE:"
+          echo "   - CI/CD built with debug signing (Google Play rejects debug-signed apps)"
+          echo "   - Solution: Add Android signing secrets to enable release signing in CI/CD"
+          echo ""
           echo "📦 FIRST-TIME UPLOAD ISSUE:"
           echo "   - Package 'com.strapblaque.sechat' not found in Google Play"
           echo "   - This happens when no APK/AAB has been uploaded yet"
@@ -256,9 +266,10 @@ jobs:
           echo "   - Solution: Complete app setup (store listing, content rating, etc.)"
           echo ""
           echo "🎯 QUICK FIX:"
-          echo "   1. Run: flutter build appbundle --release"
-          echo "   2. Manually upload the AAB to Google Play Console once"
-          echo "   3. Then CI/CD will work for future uploads"
+          echo "   1. Add Android signing secrets to GitHub for CI/CD release signing"
+          echo "   2. OR: Run 'flutter build appbundle --release' locally and upload manually"
+          echo "   3. Upload to Google Play Console to establish package name"
+          echo "   4. Grant service account access to the specific app"
 
   deploy-ios:
     needs: build
