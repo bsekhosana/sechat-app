@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/services/api_service.dart';
-import '../../../core/services/encryption_service.dart';
 import '../../../shared/providers/auth_provider.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';

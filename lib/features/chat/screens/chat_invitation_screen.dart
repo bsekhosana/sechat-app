@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/providers/auth_provider.dart';
-import '../../../core/services/api_service.dart';
 
 class ChatInvitationScreen extends StatefulWidget {
   final User recipient;

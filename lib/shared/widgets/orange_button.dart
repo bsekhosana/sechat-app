@@ -7,12 +7,12 @@ class OrangeButton extends StatelessWidget {
   final bool isDelete;
 
   const OrangeButton({
-    Key? key,
+    super.key,
     required this.label,
     required this.onPressed,
     this.primary = true,
     this.isDelete = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
