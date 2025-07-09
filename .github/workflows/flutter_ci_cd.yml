@@ -151,6 +151,11 @@ jobs:
             --build-name=1.0.1 \
             --build-number=2 \
             --verbose
+          
+          # Check if IPA was created
+          echo "Checking for created IPA files..."
+          ls -la build/ios/ipa/ || echo "No IPA directory found"
+          find build/ios -name "*.ipa" || echo "No IPA files found"
 
       - name: Upload Android AAB
         uses: actions/upload-artifact@v4
@@ -162,7 +167,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-release
-          path: build/ios/ipa/SeChat.ipa
+          path: build/ios/ipa/
+          if-no-files-found: warn
 
   deploy-android:
     needs: build
@@ -184,11 +190,8 @@ jobs:
           packageName: com.strapblaque.sechat
           releaseFiles: app-release.aab
           track: internal
-          status: completed
+          status: draft
           inAppUpdatePriority: 2
-          userFraction: 0.1
-          whatsNewDirectory: distribution/whatsnew
-          mappingFile: build/app/outputs/mapping/release/mapping.txt
 
   deploy-ios:
     needs: build
@@ -201,16 +204,33 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ios-release
-          path: ./
+          path: ./ios-artifacts/
       
       - name: Check if iOS build is available
         run: |
-          if [ ! -f "./SeChat.ipa" ] || [ "$(cat ./SeChat.ipa 2>/dev/null || echo '')" = "iOS build skipped - no certificates" ]; then
+          echo "Contents of iOS artifacts:"
+          ls -la ./ios-artifacts/ || echo "No iOS artifacts found"
+          
+          # Find the IPA file
+          IPA_FILE=$(find ./ios-artifacts -name "*.ipa" -type f | head -n 1)
+          
+          if [ -z "$IPA_FILE" ]; then
+            echo "⚠️  No IPA file found in artifacts. iOS build may have failed."
+            echo "Available files:"
+            find ./ios-artifacts -type f || echo "No files found"
+            exit 0
+          fi
+          
+          # Check if it's the skip message
+          if [ "$(cat "$IPA_FILE" 2>/dev/null || echo '')" = "iOS build skipped - no certificates" ]; then
             echo "⚠️  iOS build was skipped due to missing certificates."
             echo "To enable iOS deployment, add the required secrets to your repository."
             exit 0
           fi
-          echo "✅ iOS build found, proceeding with TestFlight upload..."
+          
+          echo "✅ iOS build found: $IPA_FILE"
+          echo "Moving IPA to expected location..."
+          cp "$IPA_FILE" ./SeChat.ipa
       
       - name: Upload to TestFlight
         env:
