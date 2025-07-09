@@ -21,31 +21,27 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
-        working-directory: ./sechat_app
 
       - name: Run tests
         run: flutter test
-        working-directory: ./sechat_app
 
       - name: Build Android AAB
         run: flutter build appbundle --release
-        working-directory: ./sechat_app
 
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign
-        working-directory: ./sechat_app
 
       - name: Upload Android AAB
         uses: actions/upload-artifact@v4
         with:
           name: app-release.aab
-          path: sechat_app/build/app/outputs/bundle/release/app-release.aab
+          path: build/app/outputs/bundle/release/app-release.aab
 
       - name: Upload iOS build
         uses: actions/upload-artifact@v4
         with:
           name: ios-release
-          path: sechat_app/build/ios/iphoneos/Runner.app
+          path: build/ios/iphoneos/Runner.app
 
   deploy-android:
     needs: build
@@ -71,7 +67,7 @@ jobs:
           inAppUpdatePriority: 2
           userFraction: 1.0
           whatsNewDirectory: distribution/whatsnew
-          mappingFile: sechat_app/build/app/outputs/mapping/release/mapping.txt
+          mappingFile: build/app/outputs/mapping/release/mapping.txt
 
   deploy-ios:
     needs: build
