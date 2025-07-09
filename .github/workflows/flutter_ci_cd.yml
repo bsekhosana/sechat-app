@@ -130,7 +130,32 @@ jobs:
             security cms -D -i "$profile" 2>/dev/null | grep -A 1 "<key>Name</key>" | grep "<string>" || echo "Could not read profile"
           done
 
+      - name: Setup Android signing
+        env:
+          ANDROID_SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY_BASE64 }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_SIGNING_KEY_BASE64" ]; then
+            echo "Setting up Android signing for CI/CD..."
+            echo "$ANDROID_SIGNING_KEY_BASE64" | base64 -d > android/app/app-release-key.jks
+            echo "✅ Android keystore file created"
+          else
+            echo "⚠️  Android signing not configured. Using debug signing."
+            echo "To enable release signing, add these secrets to your repository:"
+            echo "- ANDROID_SIGNING_KEY_BASE64"
+            echo "- ANDROID_SIGNING_KEY_ALIAS"
+            echo "- ANDROID_SIGNING_KEY_PASSWORD"
+            echo "- ANDROID_SIGNING_STORE_PASSWORD"
+          fi
+
       - name: Build Android AAB
+        env:
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_STORE_FILE: app-release-key.jks
         run: flutter build appbundle --release
 
       - name: Build iOS IPA
@@ -163,6 +188,9 @@ jobs:
           echo "Checking for created IPA files..."
           ls -la build/ios/ipa/ || echo "No IPA directory found"
           find build/ios -name "*.ipa" || echo "No IPA files found"
+          
+          # Ensure ipa directory exists for artifact upload
+          mkdir -p build/ios/ipa
 
       - name: Upload Android AAB
         uses: actions/upload-artifact@v4
@@ -176,6 +204,7 @@ jobs:
           name: ios-release
           path: build/ios/ipa/
           if-no-files-found: warn
+        if: always()
 
   deploy-android:
     needs: build
@@ -206,6 +235,30 @@ jobs:
           track: internal
           status: draft
           inAppUpdatePriority: 2
+        continue-on-error: true
+        
+      - name: Debug Android deployment issue
+        if: failure()
+        run: |
+          echo "🚨 Android deployment failed. Most likely causes:"
+          echo ""
+          echo "📦 FIRST-TIME UPLOAD ISSUE:"
+          echo "   - Package 'com.strapblaque.sechat' not found in Google Play"
+          echo "   - This happens when no APK/AAB has been uploaded yet"
+          echo "   - Solution: Do one manual upload to establish the package name"
+          echo ""
+          echo "🔑 PERMISSIONS ISSUE:"
+          echo "   - Service account doesn't have access to this specific app"
+          echo "   - Solution: Go to SeChat app → Users and permissions → Grant access"
+          echo ""
+          echo "⚠️  SETUP ISSUE:"
+          echo "   - App not in correct state for uploads"
+          echo "   - Solution: Complete app setup (store listing, content rating, etc.)"
+          echo ""
+          echo "🎯 QUICK FIX:"
+          echo "   1. Run: flutter build appbundle --release"
+          echo "   2. Manually upload the AAB to Google Play Console once"
+          echo "   3. Then CI/CD will work for future uploads"
 
   deploy-ios:
     needs: build
