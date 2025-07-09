@@ -6,11 +6,12 @@ import '../../../shared/models/message.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/websocket_service.dart';
 import '../../../core/services/encryption_service.dart';
+import 'dart:async';
 
 class ChatProvider extends ChangeNotifier {
   List<Chat> _chats = [];
-  Map<String, List<Message>> _messages = {};
-  Map<String, User> _chatUsers = {};
+  final Map<String, List<Message>> _messages = {};
+  final Map<String, User> _chatUsers = {};
   bool _isLoading = false;
   String? _error;
 
@@ -29,6 +30,7 @@ class ChatProvider extends ChangeNotifier {
   ChatProvider() {
     _setupWebSocket();
     _loadChatsFromLocal();
+    _startOnlineStatusRefreshTimer();
   }
 
   void _setupWebSocket() {
@@ -45,6 +47,14 @@ class ChatProvider extends ChangeNotifier {
 
   void _handleWebSocketMessage(Map<String, dynamic> data) {
     // General message handling
+    if (data['type'] == 'user_online_status') {
+      final userId = data['user_id'] as String;
+      final isOnline = data['is_online'] as bool;
+      final lastSeen =
+          data['last_seen'] != null ? DateTime.parse(data['last_seen']) : null;
+
+      _updateUserOnlineStatus(userId, isOnline, lastSeen);
+    }
   }
 
   void _handleChatMessageReceived(Map<String, dynamic> data) {
@@ -120,16 +130,18 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void _handleWebSocketConnected() {
-    // WebSocket connected
+    print('🔌 ChatProvider: WebSocket connected');
   }
 
   void _handleWebSocketDisconnected() {
-    // WebSocket disconnected
+    print('🔌 ChatProvider: WebSocket disconnected');
   }
 
   void _handleWebSocketError(String error) {
-    _error = 'WebSocket error: $error';
-    notifyListeners();
+    print('🔌 ChatProvider: WebSocket error: $error');
+    // Don't set this as a blocking error - WebSocket is optional
+    // _error = 'WebSocket error: $error';
+    // notifyListeners();
   }
 
   void _updateMessageStatus(String chatId, String messageId, String status) {
@@ -147,10 +159,9 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> _loadChatsFromLocal() async {
     final box = Hive.box('chats');
-    final localChats =
-        box.values
-            .map((e) => Chat.fromJson(Map<String, dynamic>.from(e)))
-            .toList();
+    final localChats = box.values
+        .map((e) => Chat.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
     _chats = localChats;
     notifyListeners();
   }
@@ -172,7 +183,10 @@ class ChatProvider extends ChangeNotifier {
     await _loadChatsFromLocal();
 
     try {
+      print('📱 ChatProvider: Loading chats from API...');
       final response = await ApiService.getChats();
+      print('📱 ChatProvider: API response: $response');
+
       if (response['success'] == true) {
         final chatsData = response['chats'] as List;
         _chats = chatsData.map((chatData) => Chat.fromJson(chatData)).toList();
@@ -181,17 +195,71 @@ class ChatProvider extends ChangeNotifier {
         for (int i = 0; i < chatsData.length; i++) {
           final chatData = chatsData[i] as Map<String, dynamic>;
           final chat = _chats[i];
-          final otherUserData = chatData['other_user'] as Map<String, dynamic>;
-          final otherUser = User.fromJson(otherUserData);
-          _chatUsers[otherUser.id] = otherUser;
+
+          print('📱 ChatProvider: Processing chat ${chat.id}');
+          print('📱 ChatProvider: Chat data keys: ${chatData.keys.toList()}');
+
+          bool userStored = false;
+
+          // Check for other_user field
+          if (chatData.containsKey('other_user') &&
+              chatData['other_user'] != null) {
+            final otherUserData =
+                chatData['other_user'] as Map<String, dynamic>;
+            final otherUser = User.fromJson(otherUserData);
+            // Set default online status to true until WebSocket provides real data
+            final onlineUser = otherUser.copyWith(isOnline: true);
+            _chatUsers[onlineUser.id] = onlineUser;
+            userStored = true;
+            print(
+                '📱 ChatProvider: Stored user ${onlineUser.username} with ID ${onlineUser.id} (online: true)');
+          }
+
+          // Also check for participants field (alternative structure)
+          if (chatData.containsKey('participants') &&
+              chatData['participants'] != null) {
+            final participants = chatData['participants'] as List;
+            for (final participantData in participants) {
+              final participant =
+                  User.fromJson(participantData as Map<String, dynamic>);
+              // Set default online status to true until WebSocket provides real data
+              final onlineParticipant = participant.copyWith(isOnline: true);
+              _chatUsers[onlineParticipant.id] = onlineParticipant;
+              userStored = true;
+              print(
+                  '📱 ChatProvider: Stored participant ${onlineParticipant.username} with ID ${onlineParticipant.id} (online: true)');
+            }
+          }
+
+          // If no user data found, create a temporary user for now
+          if (!userStored) {
+            final otherUserId = chat.getOtherUserId('current_user_placeholder');
+            if (otherUserId.isNotEmpty &&
+                otherUserId != 'current_user_placeholder') {
+              final tempUser = User(
+                id: otherUserId,
+                deviceId: 'unknown',
+                username: 'Chat User ${otherUserId.substring(0, 8)}',
+                isOnline: true,
+                createdAt: DateTime.now(),
+              );
+              _chatUsers[tempUser.id] = tempUser;
+              print(
+                  '📱 ChatProvider: Created temporary user ${tempUser.username} for ID ${tempUser.id}');
+            }
+          }
         }
 
+        print('📱 ChatProvider: Total users stored: ${_chatUsers.length}');
+        print('📱 ChatProvider: User IDs: ${_chatUsers.keys.toList()}');
+        print('📱 ChatProvider: Loaded ${_chats.length} chats');
         await _saveChatsToLocal(_chats);
       } else {
         throw Exception(response['message'] ?? 'Failed to load chats');
       }
     } catch (e) {
-      _error = e.toString();
+      print('📱 ChatProvider: Error loading chats: $e');
+      _error = 'Failed to load chats: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -202,10 +270,9 @@ class ChatProvider extends ChangeNotifier {
     final box = Hive.box('messages');
     final localMessages = box.get(chatId);
     if (localMessages != null) {
-      _messages[chatId] =
-          (localMessages as List)
-              .map((e) => Message.fromJson(Map<String, dynamic>.from(e)))
-              .toList();
+      _messages[chatId] = (localMessages as List)
+          .map((e) => Message.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
       notifyListeners();
     }
   }
@@ -226,10 +293,9 @@ class ChatProvider extends ChangeNotifier {
       final response = await ApiService.getMessages(chatId);
       if (response['success'] == true) {
         final messagesData = response['messages'] as List;
-        _messages[chatId] =
-            messagesData
-                .map((messageData) => Message.fromJson(messageData))
-                .toList();
+        _messages[chatId] = messagesData
+            .map((messageData) => Message.fromJson(messageData))
+            .toList();
         await _saveMessagesToLocal(chatId, _messages[chatId]!);
         notifyListeners();
       } else {
@@ -359,5 +425,59 @@ class ChatProvider extends ChangeNotifier {
       _chats[index] = _chats[index].copyWith(lastMessageAt: timestamp);
       notifyListeners();
     }
+  }
+
+  void _updateUserOnlineStatus(
+      String userId, bool isOnline, DateTime? lastSeen) {
+    if (_chatUsers.containsKey(userId)) {
+      _chatUsers[userId] = _chatUsers[userId]!.copyWith(
+        isOnline: isOnline,
+        lastSeen: lastSeen,
+      );
+      print(
+          '📱 ChatProvider: Updated online status for user $userId - Online: $isOnline');
+      notifyListeners();
+    }
+  }
+
+  void updateUserOnlineStatus(String userId, bool isOnline) {
+    _updateUserOnlineStatus(userId, isOnline, isOnline ? null : DateTime.now());
+  }
+
+  Future<void> refreshOnlineStatus() async {
+    try {
+      // TODO: Implement getUsersOnlineStatus API endpoint
+      // final response = await ApiService.getUsersOnlineStatus();
+      // For now, we'll just mark all users as online if they have recent activity
+      // This can be improved when the backend API is ready
+
+      print(
+          '📱 ChatProvider: Online status refresh - using WebSocket data only');
+      // Online status will be updated via WebSocket events
+    } catch (e) {
+      print('📱 ChatProvider: Error refreshing online status: $e');
+      // Don't throw error - online status is not critical
+    }
+  }
+
+  void _startOnlineStatusRefreshTimer() {
+    _refreshOnlineStatusTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (timer) async {
+        await refreshOnlineStatus();
+      },
+    );
+  }
+
+  void _disposeOnlineStatusTimer() {
+    _refreshOnlineStatusTimer?.cancel();
+  }
+
+  Timer? _refreshOnlineStatusTimer;
+
+  @override
+  void dispose() {
+    _disposeOnlineStatusTimer();
+    super.dispose();
   }
 }

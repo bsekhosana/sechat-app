@@ -8,6 +8,8 @@ class Invitation {
   final DateTime? declinedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool isReceived;
+  final String? otherUserId;
 
   Invitation({
     required this.id,
@@ -19,6 +21,8 @@ class Invitation {
     this.declinedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.isReceived = false,
+    this.otherUserId,
   });
 
   factory Invitation.fromJson(Map<String, dynamic> json) {
@@ -28,16 +32,16 @@ class Invitation {
       recipientId: json['recipient_id'].toString(),
       message: json['message'],
       status: json['status'] ?? 'pending',
-      acceptedAt:
-          json['accepted_at'] != null
-              ? DateTime.parse(json['accepted_at'])
-              : null,
-      declinedAt:
-          json['declined_at'] != null
-              ? DateTime.parse(json['declined_at'])
-              : null,
+      acceptedAt: json['accepted_at'] != null
+          ? DateTime.parse(json['accepted_at'])
+          : null,
+      declinedAt: json['declined_at'] != null
+          ? DateTime.parse(json['declined_at'])
+          : null,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
+      isReceived: json['is_received'] ?? false,
+      otherUserId: json['other_user']?['id']?.toString(),
     );
   }
 
@@ -52,6 +56,8 @@ class Invitation {
       'declined_at': declinedAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'is_received': isReceived,
+      'other_user_id': otherUserId,
     };
   }
 
@@ -77,6 +83,8 @@ class Invitation {
     DateTime? declinedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? isReceived,
+    String? otherUserId,
   }) {
     return Invitation(
       id: id ?? this.id,
@@ -88,6 +96,8 @@ class Invitation {
       declinedAt: declinedAt ?? this.declinedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      isReceived: isReceived ?? this.isReceived,
+      otherUserId: otherUserId ?? this.otherUserId,
     );
   }
 }

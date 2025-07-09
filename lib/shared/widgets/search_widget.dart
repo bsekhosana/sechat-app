@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../features/search/providers/search_provider.dart';
 import '../models/user.dart';
+import '../../features/auth/screens/main_nav_screen.dart';
 
 class SearchWidget extends StatefulWidget {
   const SearchWidget({super.key});
@@ -48,16 +49,23 @@ class _SearchWidgetState extends State<SearchWidget>
   void _onSearchChanged() {
     final searchProvider = context.read<SearchProvider>();
     searchProvider.searchUsers(_searchController.text);
+    if (_searchController.text.isNotEmpty) {
+      MainNavScreen.of(context)?.showSearchOverlay(_searchController);
+    } else {
+      MainNavScreen.of(context)?.hideSearchOverlay();
+    }
   }
 
   void _clearSearch() {
     _searchController.clear();
     _focusNode.unfocus();
     context.read<SearchProvider>().clearSearch();
+    MainNavScreen.of(context)?.hideSearchOverlay();
   }
 
   @override
   void dispose() {
+    MainNavScreen.of(context)?.hideSearchOverlay();
     _searchController.dispose();
     _focusNode.dispose();
     _loadingController.dispose();
@@ -67,134 +75,79 @@ class _SearchWidgetState extends State<SearchWidget>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SearchProvider>(
-      builder: (context, searchProvider, child) {
-        // Control animations based on search state
-        if (searchProvider.isLoading) {
-          _loadingController.repeat();
-        } else {
-          _loadingController.stop();
-        }
-
-        // Show dropdown when we have something to display
-        final shouldShowDropdown = searchProvider.showResults;
-
-        if (shouldShowDropdown) {
-          _dropdownController.forward();
-        } else {
-          _dropdownController.reverse();
-        }
-
-        return Stack(
-          clipBehavior: Clip.none, // Allow overflow for dropdown
-          children: [
-            // Search Bar Container
-            Container(
-              height: 50,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2C2C2C),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Stack(
-                children: [
-                  // Search Input
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _searchController,
-                    builder: (context, value, child) {
-                      return TextField(
-                        controller: _searchController,
-                        focusNode: _focusNode,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Search users...',
-                          hintStyle: const TextStyle(
-                            color: Color(0xFF666666),
-                            fontSize: 16,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.search,
-                            color: Color(0xFF666666),
-                          ),
-                          suffixIcon: value.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(
-                                    Icons.clear,
-                                    color: Color(0xFF666666),
-                                  ),
-                                  onPressed: _clearSearch,
-                                )
-                              : null,
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                        ),
-                      );
-                    },
+    final searchProvider = context.watch<SearchProvider>();
+    return Stack(
+      children: [
+        Container(
+          height: 50,
+          decoration: BoxDecoration(
+            color: const Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, value, child) {
+              return TextField(
+                controller: _searchController,
+                focusNode: _focusNode,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search users...',
+                  hintStyle: const TextStyle(
+                    color: Color(0xFF666666),
+                    fontSize: 16,
                   ),
-
-                  // Loading Animation Bar
-                  if (searchProvider.isLoading)
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        height: 2,
-                        decoration: BoxDecoration(
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(12),
-                            bottomRight: Radius.circular(12),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: Color(0xFF666666),
+                  ),
+                  suffixIcon: value.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.clear,
+                            color: Color(0xFF666666),
                           ),
-                        ),
-                        child: AnimatedBuilder(
-                          animation: _loadingAnimation,
-                          builder: (context, child) {
-                            return LinearProgressIndicator(
-                              value: _loadingAnimation.value,
-                              backgroundColor: Colors.transparent,
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                Color(0xFFFF6B35),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-
-            // Results Dropdown - high z-index to show in front of everything
-            if (shouldShowDropdown && !searchProvider.isLoading)
-              Positioned(
-                top: 58, // Just below the search bar
-                left: 0,
-                right: 0,
-                child: Material(
-                  elevation: 8, // High elevation to show above other content
-                  color: Colors.transparent,
-                  child: AnimatedBuilder(
-                    animation: _slideAnimation,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(0, -20 + (20 * _slideAnimation.value)),
-                        child: Opacity(
-                          opacity: _slideAnimation.value,
-                          child: _buildResultsDropdown(searchProvider),
-                        ),
-                      );
-                    },
+                          onPressed: _clearSearch,
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
                   ),
                 ),
-              ),
-          ],
-        );
-      },
+                onTap: () {
+                  if (_searchController.text.isNotEmpty) {
+                    MainNavScreen.of(context)
+                        ?.showSearchOverlay(_searchController);
+                  }
+                },
+                onEditingComplete: () {
+                  MainNavScreen.of(context)?.hideSearchOverlay();
+                },
+                onSubmitted: (_) {
+                  MainNavScreen.of(context)?.hideSearchOverlay();
+                },
+              );
+            },
+          ),
+        ),
+        if (searchProvider.isLoading)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: LinearProgressIndicator(
+              backgroundColor: Colors.transparent,
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(Color(0xFFFF6B35)),
+              minHeight: 2,
+            ),
+          ),
+      ],
     );
   }
 

@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../shared/providers/auth_provider.dart';
 import '../../search/screens/search_screen.dart';
 import '../../chat/screens/chat_list_screen.dart';
 import '../../chat/screens/invitations_screen.dart';

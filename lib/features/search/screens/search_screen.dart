@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../providers/search_provider.dart';
 import '../../../shared/models/user.dart';
-import '../../chat/screens/chat_invitation_screen.dart';
+import '../../invitations/providers/invitation_provider.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -17,9 +16,11 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
   final _debouncer = Debouncer(milliseconds: 500);
+  OverlayEntry? _overlayEntry;
 
   @override
   void dispose() {
+    _removeOverlay();
     _searchController.dispose();
     super.dispose();
   }
@@ -27,13 +28,160 @@ class _SearchScreenState extends State<SearchScreen> {
   void _onSearchChanged(String query) {
     _debouncer.run(() {
       context.read<SearchProvider>().searchUsers(query);
+      _updateOverlay();
     });
   }
 
-  void _inviteUser(User user) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ChatInvitationScreen(recipient: user)),
+  void _inviteUser(User user) async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        title: Text(
+          'Send Invitation',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to send an invitation to ${user.username}?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6B35),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
     );
+
+    if (confirmed == true) {
+      final invitationProvider = context.read<InvitationProvider>();
+      final success = await invitationProvider.sendInvitation(
+        recipientId: user.id,
+        message: 'Hi! I\'d like to chat with you on SeChat.',
+      );
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Invitation sent to ${user.username}!'),
+            backgroundColor: const Color(0xFF4CAF50),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text(invitationProvider.error ?? 'Failed to send invitation'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      _clearSearchAndOverlay();
+    }
+  }
+
+  void _showOverlay() {
+    if (_overlayEntry != null) return;
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        final searchProvider = context.read<SearchProvider>();
+        return Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              // Background overlay that can be tapped to dismiss
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: _clearSearchAndOverlay,
+                  child: Container(color: Colors.transparent),
+                ),
+              ),
+              // Search results container (not tappable to dismiss)
+              Align(
+                alignment: Alignment.topCenter,
+                child: GestureDetector(
+                  onTap: () {}, // Prevents taps from propagating to background
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 90),
+                    width: MediaQuery.of(context).size.width * 0.8,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF232323),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 8),
+                      itemCount: searchProvider.searchResults.length,
+                      itemBuilder: (context, index) {
+                        final user = searchProvider.searchResults[index];
+                        final currentUser =
+                            context.read<AuthProvider>().currentUser;
+                        if (currentUser?.id == user.id) {
+                          return const SizedBox.shrink();
+                        }
+                        return _UserCard(
+                          user: user,
+                          onInvite: () => _inviteUser(user),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    Overlay.of(context, rootOverlay: true).insert(_overlayEntry!);
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  void _updateOverlay() {
+    final searchProvider = context.read<SearchProvider>();
+    final showResults = _searchController.text.isNotEmpty &&
+        searchProvider.searchResults.isNotEmpty;
+    if (showResults) {
+      if (_overlayEntry == null) {
+        _showOverlay();
+      } else {
+        _overlayEntry!.markNeedsBuild();
+      }
+    } else {
+      _removeOverlay();
+    }
+  }
+
+  void _clearSearchAndOverlay() {
+    _searchController.clear();
+    context.read<SearchProvider>().clearSearch();
+    FocusScope.of(context).unfocus();
+    _removeOverlay();
   }
 
   @override
@@ -46,7 +194,6 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       body: Column(
         children: [
-          // Search Bar
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
@@ -55,165 +202,24 @@ class _SearchScreenState extends State<SearchScreen> {
               decoration: InputDecoration(
                 hintText: 'Search by username...',
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon:
-                    _searchController.text.isNotEmpty
-                        ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            context.read<SearchProvider>().clearSearch();
-                          },
-                        )
-                        : null,
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: _clearSearchAndOverlay,
+                      )
+                    : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
                 filled: true,
-                fillColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceVariant.withValues(alpha: 0.3),
+                fillColor: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest
+                    .withValues(alpha: 0.3),
               ),
             ),
           ),
-          // Search Results
-          Expanded(
-            child: Consumer<SearchProvider>(
-              builder: (context, searchProvider, child) {
-                if (searchProvider.isLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (searchProvider.error != null) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Search Error',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          searchProvider.error!,
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            searchProvider.clearError();
-                            if (_searchController.text.isNotEmpty) {
-                              searchProvider.searchUsers(
-                                _searchController.text,
-                              );
-                            }
-                          },
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (searchProvider.searchResults.isEmpty) {
-                  if (_searchController.text.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.search,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Search for Users',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Enter a username to find other users',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.bodyMedium?.copyWith(
-                              color:
-                                  Theme.of(context).textTheme.bodySmall?.color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  } else {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.person_off,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No Users Found',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Try searching with a different username',
-                            style: Theme.of(
-                              context,
-                            ).textTheme.bodyMedium?.copyWith(
-                              color:
-                                  Theme.of(context).textTheme.bodySmall?.color,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-                }
-
-                return AnimationLimiter(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: searchProvider.searchResults.length,
-                    itemBuilder: (context, index) {
-                      final user = searchProvider.searchResults[index];
-                      final currentUser =
-                          context.read<AuthProvider>().currentUser;
-
-                      // Don't show current user in search results
-                      if (currentUser?.id == user.id) {
-                        return const SizedBox.shrink();
-                      }
-
-                      return AnimationConfiguration.staggeredList(
-                        position: index,
-                        duration: const Duration(milliseconds: 375),
-                        child: SlideAnimation(
-                          verticalOffset: 50.0,
-                          child: FadeInAnimation(
-                            child: _UserCard(
-                              user: user,
-                              onInvite: () => _inviteUser(user),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
+          // You can add more main content here if needed
         ],
       ),
     );
@@ -248,18 +254,28 @@ class _UserCard extends StatelessWidget {
         subtitle: Text(
           user.isOnline ? 'Online' : 'Offline',
           style: TextStyle(
-            color:
-                user.isOnline
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.outline,
+            color: user.isOnline
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.outline,
           ),
         ),
-        trailing: ElevatedButton.icon(
-          onPressed: onInvite,
-          icon: const Icon(Icons.chat_bubble_outline, size: 18),
-          label: const Text('Invite'),
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        trailing: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF6B35),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: IconButton(
+            onPressed: onInvite,
+            icon: const Icon(
+              Icons.add,
+              color: Colors.white,
+              size: 20,
+            ),
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.zero,
+            ),
           ),
         ),
       ),

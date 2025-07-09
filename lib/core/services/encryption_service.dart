@@ -7,6 +7,7 @@ import 'package:pointycastle/export.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 class EncryptionService {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
@@ -120,14 +121,32 @@ class EncryptionService {
 
   // Generate device ID
   static Future<String> getDeviceId() async {
-    final deviceInfo = DeviceInfoPlugin();
-    if (Platform.isAndroid) {
-      final androidInfo = await deviceInfo.androidInfo;
-      return androidInfo.id ?? const Uuid().v4();
-    } else if (Platform.isIOS) {
-      final iosInfo = await deviceInfo.iosInfo;
-      return iosInfo.identifierForVendor ?? const Uuid().v4();
-    } else {
+    // Always check storage first
+    final storedId = await _storage.read(key: 'device_id');
+    if (storedId != null && storedId.isNotEmpty) {
+      return storedId;
+    }
+    // For web platform, use a simple UUID
+    final newId =
+        kIsWeb ? const Uuid().v4() : await _generatePlatformDeviceId();
+    await _storage.write(key: 'device_id', value: newId);
+    return newId;
+  }
+
+  static Future<String> _generatePlatformDeviceId() async {
+    try {
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        return androidInfo.id ?? const Uuid().v4();
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        return iosInfo.identifierForVendor ?? const Uuid().v4();
+      } else {
+        return const Uuid().v4();
+      }
+    } catch (e) {
+      // Fallback to UUID if device info fails
       return const Uuid().v4();
     }
   }

@@ -113,16 +113,17 @@ class _ChatInvitationScreenState extends State<ChatInvitationScreen> {
                         children: [
                           Text(
                             widget.recipient.username,
-                            style: Theme.of(context).textTheme.titleMedium
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                           Text(
                             widget.recipient.isOnline ? 'Online' : 'Offline',
                             style: TextStyle(
-                              color:
-                                  widget.recipient.isOnline
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.outline,
+                              color: widget.recipient.isOnline
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.outline,
                             ),
                           ),
                         ],
@@ -144,8 +145,8 @@ class _ChatInvitationScreenState extends State<ChatInvitationScreen> {
             Text(
               'Send a custom message to invite ${widget.recipient.username} to chat with you.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).textTheme.bodySmall?.color,
-              ),
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -159,7 +160,7 @@ class _ChatInvitationScreenState extends State<ChatInvitationScreen> {
                 filled: true,
                 fillColor: Theme.of(
                   context,
-                ).colorScheme.surfaceVariant.withValues(alpha: 0.3),
+                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               ),
             ),
             const SizedBox(height: 24),
@@ -187,20 +188,19 @@ class _ChatInvitationScreenState extends State<ChatInvitationScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child:
-                    _isLoading
-                        ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                        : const Text(
-                          'Send Invitation',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text(
+                        'Send Invitation',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
+                      ),
               ),
             ),
           ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../providers/auth_provider.dart';
 import '../../core/services/api_service.dart';
 import '../../features/auth/screens/welcome_screen.dart';
@@ -35,11 +36,26 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
     _checkOnlineStatus();
   }
 
-  void _checkOnlineStatus() {
-    // Simple internet connectivity check
-    // In a real app, you'd use connectivity_plus package
+  void _checkOnlineStatus() async {
+    // Check internet connectivity
+    final connectivityResult = await Connectivity().checkConnectivity();
     setState(() {
-      _isOnline = true; // For now, assume online
+      _isOnline = connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi) ||
+          connectivityResult.contains(ConnectivityResult.ethernet);
+    });
+
+    // Listen to connectivity changes
+    Connectivity()
+        .onConnectivityChanged
+        .listen((List<ConnectivityResult> result) {
+      if (mounted) {
+        setState(() {
+          _isOnline = result.contains(ConnectivityResult.mobile) ||
+              result.contains(ConnectivityResult.wifi) ||
+              result.contains(ConnectivityResult.ethernet);
+        });
+      }
     });
   }
 
@@ -80,12 +96,12 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
             Row(
               children: [
                 Container(
-                  width: 60,
-                  height: 60,
+                  width: 100,
+                  height: 100,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     image: const DecorationImage(
-                      image: AssetImage('assets/logo/seChat_Logo.png'),
+                      image: AssetImage('assets/logo/seChat_cleanLogo.png'),
                       fit: BoxFit.cover,
                     ),
                   ),
@@ -108,7 +124,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                         _isOnline ? 'Online' : 'Offline',
                         style: TextStyle(
                           color:
-                              _isOnline ? const Color(0xFFFF6B35) : Colors.red,
+                              _isOnline ? const Color(0xFF4CAF50) : Colors.red,
                           fontSize: 14,
                         ),
                       ),
@@ -357,7 +373,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: (_isOnline ? const Color(0xFFFF6B35) : Colors.red)
+                  color: (_isOnline ? const Color(0xFF4CAF50) : Colors.red)
                       .withOpacity(_glowAnimation.value * 0.6),
                   blurRadius: 12,
                   spreadRadius: 2,
@@ -368,7 +384,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: (_isOnline ? const Color(0xFFFF6B35) : Colors.red)
+                  color: (_isOnline ? const Color(0xFF4CAF50) : Colors.red)
                       .withOpacity(_glowAnimation.value),
                   width: 2,
                 ),

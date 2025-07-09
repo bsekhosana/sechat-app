@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/foundation.dart';
 
 class WebSocketService {
   static WebSocketService? _instance;
@@ -9,6 +11,11 @@ class WebSocketService {
   WebSocketChannel? _channel;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   bool _isAuthenticated = false;
+  bool _isConnecting = false;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 3;
+  bool _shouldReconnect = true;
 
   Function(Map<String, dynamic>)? onMessageReceived;
   Function()? onConnected;
@@ -21,47 +28,110 @@ class WebSocketService {
   WebSocketService._();
 
   Future<void> connect() async {
+    if (_isConnecting || !_shouldReconnect) return;
+
+    // Skip WebSocket connection on web platform during development
+    if (kIsWeb) {
+      print('🔌 WebSocket: Skipping connection on web platform');
+      _isConnecting = false;
+      return;
+    }
+
+    _isConnecting = true;
+    print(
+        '🔌 WebSocket: Attempting to connect... (attempt ${_reconnectAttempts + 1})');
+
     try {
       final deviceId = await _storage.read(key: 'device_id');
-      if (deviceId == null) throw Exception('Device ID not found');
+      if (deviceId == null) {
+        print('🔌 WebSocket: Device ID not found, skipping connection');
+        _isConnecting = false;
+        return;
+      }
 
       final uri = Uri.parse('ws://sechat.strapblaque.com:6001');
-      _channel = WebSocketChannel.connect(uri);
+      print('🔌 WebSocket: Connecting to $uri');
+
+      try {
+        _channel = WebSocketChannel.connect(uri);
+      } catch (e) {
+        print('🔌 WebSocket: Failed to create WebSocket connection: $e');
+        _isConnecting = false;
+        _scheduleReconnect();
+        return;
+      }
 
       _channel!.stream.listen(
         (data) {
-          final message = json.decode(data);
-          _handleMessage(message);
+          try {
+            final message = json.decode(data);
+            _handleMessage(message);
+          } catch (e) {
+            print('🔌 WebSocket: Error parsing message: $e');
+          }
         },
         onDone: () {
+          print('🔌 WebSocket: Connection closed');
           _isAuthenticated = false;
+          _isConnecting = false;
           onDisconnected?.call();
+          _scheduleReconnect();
         },
         onError: (error) {
+          print('🔌 WebSocket: Connection error: $error');
           _isAuthenticated = false;
-          onError?.call(error.toString());
+          _isConnecting = false;
+          // Don't call onError for connection failures - they're expected
+          _scheduleReconnect();
         },
       );
 
+      print('🔌 WebSocket: Connection established');
       onConnected?.call();
 
       // Authenticate with device ID
       await _authenticate(deviceId);
     } catch (e) {
-      onError?.call(e.toString());
+      print('🔌 WebSocket: Connection failed: $e');
+      _isConnecting = false;
+      // Don't call onError for connection failures - they're expected
+      _scheduleReconnect();
+    }
+  }
+
+  void _scheduleReconnect() {
+    if (_reconnectAttempts < _maxReconnectAttempts && _shouldReconnect) {
+      _reconnectTimer?.cancel();
+      final delay = Duration(seconds: 2 * (_reconnectAttempts + 1));
+      print('🔌 WebSocket: Scheduling reconnect in ${delay.inSeconds} seconds');
+      _reconnectTimer = Timer(delay, () {
+        _reconnectAttempts++;
+        connect();
+      });
+    } else if (_reconnectAttempts >= _maxReconnectAttempts) {
+      print(
+          '🔌 WebSocket: Max reconnection attempts reached. Stopping reconnection.');
+      _shouldReconnect = false;
+      // Don't show error to user - WebSocket is optional
+      // onError?.call('WebSocket connection failed after $_maxReconnectAttempts attempts. Please check your connection and try again.');
     }
   }
 
   Future<void> _authenticate(String deviceId) async {
+    print('🔌 WebSocket: Authenticating with device ID: $deviceId');
     sendMessage({'type': 'auth', 'device_id': deviceId});
   }
 
   void _handleMessage(Map<String, dynamic> message) {
+    print('🔌 WebSocket: Received message: ${message['type']}');
     onMessageReceived?.call(message);
 
     switch (message['type']) {
       case 'auth_success':
         _isAuthenticated = true;
+        _reconnectAttempts = 0; // Reset reconnect attempts on successful auth
+        _shouldReconnect = true; // Re-enable reconnection
+        print('🔌 WebSocket: Authentication successful');
         break;
       case 'chat_message':
         onChatMessageReceived?.call(message);
@@ -76,20 +146,49 @@ class WebSocketService {
         // Handle message sent confirmation
         break;
       case 'error':
+        print('🔌 WebSocket: Server error: ${message['error']}');
         onError?.call(message['error'] ?? 'Unknown error');
         break;
     }
   }
 
   void disconnect() {
+    print('🔌 WebSocket: Disconnecting...');
+    _shouldReconnect = false;
+    _reconnectTimer?.cancel();
     _channel?.sink.close();
     _channel = null;
     _isAuthenticated = false;
+    _isConnecting = false;
+  }
+
+  void retryConnection() {
+    if (kIsWeb) {
+      print('🔌 WebSocket: Retry skipped on web platform');
+      return;
+    }
+    print('🔌 WebSocket: Manual retry requested');
+    _shouldReconnect = true;
+    _reconnectAttempts = 0;
+    _reconnectTimer?.cancel();
+    connect();
   }
 
   void sendMessage(Map<String, dynamic> message) {
+    if (kIsWeb) {
+      print('🔌 WebSocket: Send message skipped on web platform');
+      return;
+    }
+
     if (_channel != null) {
-      _channel!.sink.add(json.encode(message));
+      try {
+        _channel!.sink.add(json.encode(message));
+      } catch (e) {
+        print('🔌 WebSocket: Failed to send message: $e');
+        // Don't call onError for send failures - they're expected when not connected
+      }
+    } else {
+      print('🔌 WebSocket: Cannot send message - not connected');
     }
   }
 
@@ -99,7 +198,7 @@ class WebSocketService {
     String type = 'text',
   }) {
     if (!_isAuthenticated) {
-      onError?.call('Not authenticated');
+      print('🔌 WebSocket: Not authenticated, skipping message send');
       return;
     }
 
@@ -155,4 +254,5 @@ class WebSocketService {
 
   bool get isConnected => _channel != null;
   bool get isAuthenticated => _isAuthenticated;
+  bool get isConnecting => _isConnecting;
 }

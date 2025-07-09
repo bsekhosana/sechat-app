@@ -1,8 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter/foundation.dart';
 
 class ApiService {
   static String get baseUrl {
@@ -13,6 +11,7 @@ class ApiService {
 
   static Future<Map<String, String>> get _headers async {
     final deviceId = await _storage.read(key: 'device_id');
+    print('🔍 API Service - Device ID from storage: $deviceId');
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -39,13 +38,20 @@ class ApiService {
 
   static Future<Map<String, dynamic>> get(String endpoint) async {
     try {
+      final headers = await _headers;
+      print('🔍 API Service - GET $endpoint with headers: $headers');
+
       final response = await http.get(
         Uri.parse('$baseUrl/api$endpoint'),
-        headers: await _headers,
+        headers: headers,
       );
+
+      print('🔍 API Service - Response status: ${response.statusCode}');
+      print('🔍 API Service - Response body: ${response.body}');
 
       return _handleResponse(response);
     } catch (e) {
+      print('🔍 API Service - GET Error: $e');
       throw Exception('Network error: $e');
     }
   }
@@ -70,6 +76,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> searchUsers(String query) {
+    print('🔍 API Service - Search request for: $query');
     return get('/search?query=$query');
   }
 
@@ -196,5 +203,40 @@ class ApiService {
       headers: await _headers,
     );
     return _handleResponse(response);
+  }
+
+  // Profile management endpoints
+  static Future<Map<String, dynamic>> clearAllChats() async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/chats/clear-all'),
+      headers: await _headers,
+    );
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> deleteAccount() async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/api/profile/delete'),
+      headers: await _headers,
+    );
+    return _handleResponse(response);
+  }
+
+  // Security Questions & Password Reset endpoints
+  static Future<Map<String, dynamic>> getSecurityQuestions() {
+    return get('/security-questions');
+  }
+
+  static Future<Map<String, dynamic>> getUserSecurityQuestion() {
+    print('🔍 API Service - Getting user security question');
+    return get('/security-question');
+  }
+
+  static Future<Map<String, dynamic>> verifySecurityAnswer(String answer) {
+    return post('/verify-security-answer', {'answer': answer});
+  }
+
+  static Future<Map<String, dynamic>> resetPassword(String newPassword) {
+    return post('/reset-password', {'new_password': newPassword});
   }
 }
