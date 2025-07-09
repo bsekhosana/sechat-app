@@ -47,14 +47,33 @@ jobs:
           # Decode and save provisioning profile
           echo "$APPLE_PROVISIONING_PROFILE" | base64 -d > ~/certificates/SeChat_App_Store.mobileprovision
           
+          # Verify certificate file
+          echo "Verifying certificate file..."
+          ls -la ~/certificates/distribution_certificate.p12
+          file ~/certificates/distribution_certificate.p12
+          
+          # Test certificate without password first
+          echo "Testing certificate format..."
+          openssl pkcs12 -info -in ~/certificates/distribution_certificate.p12 -noout -passin pass:"$APPLE_CERTIFICATE_PASSWORD" || echo "Certificate validation failed"
+          
           # Create and configure keychain
           security create-keychain -p "build" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "build" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
           
-          # Import certificate to keychain
-          security import ~/certificates/distribution_certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -A
+          # Import certificate to keychain with detailed error handling
+          echo "Importing certificate to keychain..."
+          if ! security import ~/certificates/distribution_certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert; then
+            echo "Certificate import failed. Trying alternative method..."
+            # Try importing without specifying type
+            security import ~/certificates/distribution_certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -A
+          fi
+          
+          # Verify import was successful
+          echo "Verifying certificate import..."
+          security find-identity -v -p codesigning build.keychain
+          
           security set-key-partition-list -S apple-tool:,apple: -s -k "build" build.keychain
           
           # Install provisioning profile with correct UUID
