@@ -23,32 +23,64 @@ jobs:
         run: flutter pub get
 
       - name: Setup iOS certificates
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
         run: |
+          # Skip certificate setup if secrets are not available
+          if [ -z "$APPLE_CERTIFICATE_P12" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ] || [ -z "$APPLE_PROVISIONING_PROFILE" ]; then
+            echo "⚠️  iOS certificates not configured. Skipping certificate setup."
+            echo "To enable iOS deployment, add the following secrets to your repository:"
+            echo "- APPLE_DISTRIBUTION_CERTIFICATE_P12"
+            echo "- APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD"
+            echo "- APPLE_PROVISIONING_PROFILE"
+            exit 0
+          fi
+          
           # Create certificates directory
           mkdir -p ~/certificates
           
           # Decode and save distribution certificate
-          echo "${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_P12 }}" | base64 --decode > ~/certificates/distribution_certificate.p12
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > ~/certificates/distribution_certificate.p12
           
           # Decode and save provisioning profile
-          echo "${{ secrets.APPLE_PROVISIONING_PROFILE }}" | base64 --decode > ~/certificates/SeChat_App_Store.mobileprovision
+          echo "$APPLE_PROVISIONING_PROFILE" | base64 --decode > ~/certificates/SeChat_App_Store.mobileprovision
+          
+          # Create and configure keychain
+          security create-keychain -p "build" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "build" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
           
           # Import certificate to keychain
-          security create-keychain -p "" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
-          security import ~/certificates/distribution_certificate.p12 -k build.keychain -P "${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}" -A
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          security import ~/certificates/distribution_certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -A
+          security set-key-partition-list -S apple-tool:,apple: -s -k "build" build.keychain
           
           # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp ~/certificates/SeChat_App_Store.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+          
+          # List available certificates
+          security find-identity -v -p codesigning build.keychain
 
       - name: Build Android AAB
         run: flutter build appbundle --release
 
       - name: Build iOS IPA
-        run: flutter build ipa --release
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_P12 }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE_P12" ]; then
+            echo "⚠️  iOS certificates not configured. Skipping iOS build."
+            echo "Creating empty iOS artifact to prevent deployment job failure."
+            mkdir -p build/ios/ipa
+            echo "iOS build skipped - no certificates" > build/ios/ipa/SeChat.ipa
+            exit 0
+          fi
+          
+          echo "🔐 Building iOS IPA with certificates..."
+          flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
 
       - name: Upload Android AAB
         uses: actions/upload-artifact@v4
@@ -101,11 +133,39 @@ jobs:
           name: ios-release
           path: ./
       
+      - name: Check if iOS build is available
+        run: |
+          if [ ! -f "./SeChat.ipa" ] || [ "$(cat ./SeChat.ipa 2>/dev/null || echo '')" = "iOS build skipped - no certificates" ]; then
+            echo "⚠️  iOS build was skipped due to missing certificates."
+            echo "To enable iOS deployment, add the required secrets to your repository."
+            exit 0
+          fi
+          echo "✅ iOS build found, proceeding with TestFlight upload..."
+      
       - name: Upload to TestFlight
-        uses: apple-actions/upload-testflight-build@v1
-        with:
-          app-path: ./SeChat.ipa
-          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
-          api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
-          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
-          platform: ios
+        env:
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+        run: |
+          # Skip if iOS build was skipped or secrets are missing
+          if [ ! -f "./SeChat.ipa" ] || [ "$(cat ./SeChat.ipa 2>/dev/null || echo '')" = "iOS build skipped - no certificates" ]; then
+            echo "⚠️  Skipping TestFlight upload - iOS build not available"
+            exit 0
+          fi
+          
+          if [ -z "$APPSTORE_ISSUER_ID" ] || [ -z "$APPSTORE_API_KEY_ID" ] || [ -z "$APPSTORE_API_PRIVATE_KEY" ]; then
+            echo "⚠️  App Store Connect API credentials not configured. Skipping TestFlight upload."
+            echo "To enable TestFlight deployment, add the following secrets:"
+            echo "- APPSTORE_ISSUER_ID"
+            echo "- APPSTORE_API_KEY_ID"
+            echo "- APPSTORE_API_PRIVATE_KEY"
+            exit 0
+          fi
+          
+          # Use xcrun altool for TestFlight upload
+          echo "🚀 Uploading to TestFlight..."
+          xcrun altool --upload-app --type ios --file "./SeChat.ipa" \
+            --apiKey "$APPSTORE_API_KEY_ID" \
+            --apiIssuer "$APPSTORE_ISSUER_ID" \
+            --verbose

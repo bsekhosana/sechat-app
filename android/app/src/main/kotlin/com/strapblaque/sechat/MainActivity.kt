@@ -1,4 +1,4 @@
-package com.strablaque.sechat
+package com.strapblaque.sechat
 
 import io.flutter.embedding.android.FlutterActivity
 
