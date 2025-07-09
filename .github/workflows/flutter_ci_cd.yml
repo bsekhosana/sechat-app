@@ -87,12 +87,10 @@ jobs:
           fi
           
           echo "🔐 Building iOS IPA with certificates..."
-          # Enable automatic provisioning updates for CI
           flutter build ipa --release \
             --export-options-plist=ios/ExportOptions.plist \
             --build-name=1.0.1 \
-            --build-number=2 \
-            -- --allowProvisioningUpdates
+            --build-number=2
 
       - name: Upload Android AAB
         uses: actions/upload-artifact@v4
