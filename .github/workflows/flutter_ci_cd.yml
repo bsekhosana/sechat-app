@@ -28,15 +28,33 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD }}
           APPLE_PROVISIONING_PROFILE: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
         run: |
-          # Skip certificate setup if secrets are not available
-          if [ -z "$APPLE_CERTIFICATE_P12" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ] || [ -z "$APPLE_PROVISIONING_PROFILE" ]; then
-            echo "⚠️  iOS certificates not configured. Skipping certificate setup."
+          # Check if secrets are available and not empty
+          if [ -z "$APPLE_CERTIFICATE_P12" ] || [ "$APPLE_CERTIFICATE_P12" = "null" ]; then
+            echo "❌ APPLE_CERTIFICATE_P12 secret is not set or empty"
             echo "To enable iOS deployment, add the following secrets to your repository:"
             echo "- APPLE_DISTRIBUTION_CERTIFICATE_P12"
             echo "- APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD"
             echo "- APPLE_PROVISIONING_PROFILE"
             exit 0
           fi
+          
+          if [ -z "$APPLE_CERTIFICATE_PASSWORD" ] || [ "$APPLE_CERTIFICATE_PASSWORD" = "null" ]; then
+            echo "❌ APPLE_CERTIFICATE_PASSWORD secret is not set or empty"
+            exit 0
+          fi
+          
+          if [ -z "$APPLE_PROVISIONING_PROFILE" ] || [ "$APPLE_PROVISIONING_PROFILE" = "null" ]; then
+            echo "❌ APPLE_PROVISIONING_PROFILE secret is not set or empty"
+            exit 0
+          fi
+          
+          echo "✅ All required iOS secrets are present"
+          
+          # Debug secret lengths (without exposing actual values)
+          echo "Secret status:"
+          echo "- APPLE_CERTIFICATE_P12 length: ${#APPLE_CERTIFICATE_P12}"
+          echo "- APPLE_CERTIFICATE_PASSWORD length: ${#APPLE_CERTIFICATE_PASSWORD}"
+          echo "- APPLE_PROVISIONING_PROFILE length: ${#APPLE_PROVISIONING_PROFILE}"
           
           # Create certificates directory
           mkdir -p ~/certificates
