@@ -31,10 +31,10 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = "sechat-release"
-            keyPassword = "Password@123"
+            keyAlias = System.getenv("ANDROID_SIGNING_KEY_ALIAS") ?: "sechat-release"
+            keyPassword = System.getenv("ANDROID_SIGNING_KEY_PASSWORD") ?: "Password@123"
             storeFile = file("app-release-key.jks")
-            storePassword = "Password@123"
+            storePassword = System.getenv("ANDROID_SIGNING_STORE_PASSWORD") ?: "Password@123"
         }
     }
 

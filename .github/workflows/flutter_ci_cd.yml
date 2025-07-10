@@ -143,17 +143,16 @@ jobs:
             echo "✅ Android keystore file created"
             ls -la android/app/app-release-key.jks
           else
-            echo "⚠️  Android signing secrets not configured. Using debug signing for CI/CD."
-            echo "📝 Temporarily switching to debug signing for this build..."
+            echo "⚠️  Android signing secrets not configured. Creating dummy keystore for CI/CD."
+            echo "📝 This will use debug signing which Google Play will reject..."
             
-            # Use a simple sed replacement to switch to debug signing
-            cp android/app/build.gradle.kts android/app/build.gradle.kts.backup
-            sed 's/signingConfig = signingConfigs.getByName("release")/signingConfig = signingConfigs.getByName("debug")/' android/app/build.gradle.kts.backup > android/app/build.gradle.kts
+            # Create a dummy keystore file with debug keys to prevent build failure
+            keytool -genkey -v -keystore android/app/app-release-key.jks -keyalg RSA -keysize 2048 -validity 1 -alias dummy -dname "CN=CI, OU=CI, O=CI, L=CI, ST=CI, C=US" -storepass dummy123 -keypass dummy123
             
-            echo "✅ Configured build to use debug signing"
-            echo "⚠️  Note: This will create a debug-signed AAB that Google Play will reject"
+            echo "✅ Created dummy keystore (debug equivalent)"
+            echo "⚠️  Note: This will create a debug-level signed AAB that Google Play will reject"
             echo ""
-            echo "To enable release signing in CI/CD, add these secrets to your repository:"
+            echo "To enable proper release signing in CI/CD, add these secrets to your repository:"
             echo "- ANDROID_SIGNING_KEY_BASE64"
             echo "- ANDROID_SIGNING_KEY_ALIAS" 
             echo "- ANDROID_SIGNING_KEY_PASSWORD"
@@ -162,9 +161,9 @@ jobs:
 
       - name: Build Android AAB
         env:
-          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
-          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
-          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS || 'dummy' }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD || 'dummy123' }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD || 'dummy123' }}
           ANDROID_SIGNING_STORE_FILE: app-release-key.jks
         run: flutter build appbundle --release
 
