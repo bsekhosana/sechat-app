@@ -146,9 +146,13 @@ jobs:
             echo "⚠️  Android signing secrets not configured. Using debug signing for CI/CD."
             echo "📝 Temporarily switching to debug signing for this build..."
             
-            # Temporarily modify build.gradle.kts to use debug signing
-            sed -i.bak 's/signingConfig = signingConfigs.getByName("release")/signingConfig = signingConfigs.getByName("debug")/' android/app/build.gradle.kts
+            # Use a simple sed replacement to switch to debug signing
+            cp android/app/build.gradle.kts android/app/build.gradle.kts.backup
+            sed 's/signingConfig = signingConfigs.getByName("release")/signingConfig = signingConfigs.getByName("debug")/' android/app/build.gradle.kts.backup > android/app/build.gradle.kts
             
+            echo "✅ Configured build to use debug signing"
+            echo "⚠️  Note: This will create a debug-signed AAB that Google Play will reject"
+            echo ""
             echo "To enable release signing in CI/CD, add these secrets to your repository:"
             echo "- ANDROID_SIGNING_KEY_BASE64"
             echo "- ANDROID_SIGNING_KEY_ALIAS" 
