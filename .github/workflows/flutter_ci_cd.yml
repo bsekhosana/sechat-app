@@ -147,7 +147,13 @@ jobs:
             echo "📝 This will use debug signing which Google Play will reject..."
             
             # Create a dummy keystore file with debug keys to prevent build failure
+            echo "Creating dummy keystore..."
             keytool -genkey -v -keystore android/app/app-release-key.jks -keyalg RSA -keysize 2048 -validity 1 -alias dummy -dname "CN=CI, OU=CI, O=CI, L=CI, ST=CI, C=US" -storepass dummy123 -keypass dummy123
+            
+            # Verify keystore was created
+            echo "Verifying dummy keystore..."
+            ls -la android/app/app-release-key.jks
+            keytool -list -v -keystore android/app/app-release-key.jks -storepass dummy123
             
             echo "✅ Created dummy keystore (debug equivalent)"
             echo "⚠️  Note: This will create a debug-level signed AAB that Google Play will reject"
@@ -161,11 +167,21 @@ jobs:
 
       - name: Build Android AAB
         env:
-          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS || 'dummy' }}
-          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD || 'dummy123' }}
-          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD || 'dummy123' }}
+          ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
+          ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
+          ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
           ANDROID_SIGNING_STORE_FILE: app-release-key.jks
-        run: flutter build appbundle --release
+        run: |
+          if [ -z "$ANDROID_SIGNING_KEY_ALIAS" ]; then
+            echo "🔧 Using dummy credentials for CI build"
+            export ANDROID_SIGNING_KEY_ALIAS="dummy"
+            export ANDROID_SIGNING_KEY_PASSWORD="dummy123" 
+            export ANDROID_SIGNING_STORE_PASSWORD="dummy123"
+          else
+            echo "🔐 Using production credentials for release build"
+          fi
+          
+          flutter build appbundle --release
 
       - name: Build iOS IPA
         env:
