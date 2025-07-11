@@ -194,20 +194,20 @@ workflows:
       - build-android:
           filters:
             branches:
-              only: main
+              only: master
       - build-ios:
           filters:
             branches:
-              only: main
+              only: master
       - deploy-android:
           requires:
             - build-android
           filters:
             branches:
-              only: main
+              only: master
       - deploy-ios:
           requires:
             - build-ios
           filters:
             branches:
-              only: main 
+              only: master 
