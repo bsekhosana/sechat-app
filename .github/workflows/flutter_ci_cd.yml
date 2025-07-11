@@ -139,22 +139,23 @@ jobs:
         run: |
           if [ -n "$ANDROID_SIGNING_KEY_BASE64" ]; then
             echo "✅ Setting up Android release signing for CI/CD..."
+            echo "First 40 chars of base64: ${ANDROID_SIGNING_KEY_BASE64:0:40}"
+            echo "Last 40 chars of base64: ${ANDROID_SIGNING_KEY_BASE64: -40}"
             echo "$ANDROID_SIGNING_KEY_BASE64" | base64 -d > android/app/app-release-key.jks
             echo "✅ Android keystore file created"
-            ls -la android/app/app-release-key.jks
+            ls -lh android/app/app-release-key.jks
+            file android/app/app-release-key.jks
+            keytool -list -v -keystore android/app/app-release-key.jks -storepass $ANDROID_SIGNING_STORE_PASSWORD || echo "Keytool failed"
           else
             echo "⚠️  Android signing secrets not configured. Creating dummy keystore for CI/CD."
             echo "📝 This will use debug signing which Google Play will reject..."
-            
             # Create a dummy keystore file with debug keys to prevent build failure
             echo "Creating dummy keystore..."
             keytool -genkey -v -keystore android/app/app-release-key.jks -keyalg RSA -keysize 2048 -validity 1 -alias dummy -dname "CN=CI, OU=CI, O=CI, L=CI, ST=CI, C=US" -storepass dummy123 -keypass dummy123
-            
             # Verify keystore was created
             echo "Verifying dummy keystore..."
             ls -la android/app/app-release-key.jks
             keytool -list -v -keystore android/app/app-release-key.jks -storepass dummy123
-            
             echo "✅ Created dummy keystore (debug equivalent)"
             echo "⚠️  Note: This will create a debug-level signed AAB that Google Play will reject"
             echo ""
