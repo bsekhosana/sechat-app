@@ -356,13 +356,19 @@ jobs:
           echo "Moving IPA to expected location..."
           cp "$IPA_FILE" ./SeChat.ipa
       
-      - name: Create App Store Connect API key file
+      - name: Create App Store Connect API key file in all expected locations
         env:
           APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
           APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
         run: |
+          mkdir -p private_keys
+          mkdir -p ~/.private_keys
           echo "$APPSTORE_API_PRIVATE_KEY" > AuthKey_${APPSTORE_API_KEY_ID}.p8
+          echo "$APPSTORE_API_PRIVATE_KEY" > private_keys/AuthKey_${APPSTORE_API_KEY_ID}.p8
+          echo "$APPSTORE_API_PRIVATE_KEY" > ~/.private_keys/AuthKey_${APPSTORE_API_KEY_ID}.p8
           ls -l AuthKey_*.p8
+          ls -l private_keys/
+          ls -l ~/.private_keys/
 
       - name: Upload to TestFlight
         env:
