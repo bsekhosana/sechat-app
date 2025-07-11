@@ -172,8 +172,10 @@ jobs:
       - name: Bump Android versionCode
         run: |
           VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))
-          sed -i "s/versionCode\s*=\s*[0-9]\+/versionCode = $VERSION_CODE/" android/app/build.gradle.kts
+          echo "Before:" && cat android/app/build.gradle.kts
+          sed -i "s/^\s*versionCode\s*=\s*[0-9]\+/versionCode = $VERSION_CODE/" android/app/build.gradle.kts
           echo "Set versionCode to $VERSION_CODE"
+          echo "After:" && cat android/app/build.gradle.kts
 
       - name: Debug versionCode after bump
         run: grep -E 'versionCode\s*=\s*[0-9]+' android/app/build.gradle.kts
