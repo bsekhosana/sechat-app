@@ -166,11 +166,17 @@ jobs:
             echo "- ANDROID_SIGNING_STORE_PASSWORD"
           fi
 
+      - name: Debug versionCode before bump
+        run: grep -E 'versionCode\s*=\s*[0-9]+' android/app/build.gradle.kts
+
       - name: Bump Android versionCode
         run: |
           VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))
-          sed -i "s/versionCode = [0-9]\+/versionCode = $VERSION_CODE/" android/app/build.gradle.kts
+          sed -i "s/versionCode\s*=\s*[0-9]\+/versionCode = $VERSION_CODE/" android/app/build.gradle.kts
           echo "Set versionCode to $VERSION_CODE"
+
+      - name: Debug versionCode after bump
+        run: grep -E 'versionCode\s*=\s*[0-9]+' android/app/build.gradle.kts
 
       - name: Build Android AAB
         env:
