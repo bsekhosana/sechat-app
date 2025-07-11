@@ -166,6 +166,12 @@ jobs:
             echo "- ANDROID_SIGNING_STORE_PASSWORD"
           fi
 
+      - name: Bump Android versionCode
+        run: |
+          VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))
+          sed -i "s/versionCode = [0-9]\+/versionCode = $VERSION_CODE/" android/app/build.gradle.kts
+          echo "Set versionCode to $VERSION_CODE"
+
       - name: Build Android AAB
         env:
           ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
