@@ -10,7 +10,7 @@ jobs:
     steps:
       - checkout
       - flutter/install_sdk:
-          version: 3.24.5
+          version: 3.32.6
       - run:
           name: Install dependencies
           command: flutter pub get
@@ -27,7 +27,7 @@ jobs:
     steps:
       - checkout
       - flutter/install_sdk:
-          version: 3.24.5
+          version: 3.32.6
       - run:
           name: Install dependencies
           command: flutter pub get
@@ -86,7 +86,7 @@ jobs:
     steps:
       - checkout
       - flutter/install_sdk:
-          version: 3.24.5
+          version: 3.32.6
       - run:
           name: Install dependencies
           command: flutter pub get
