@@ -11,8 +11,6 @@ jobs:
       - checkout
       - flutter/install_sdk:
           version: 3.24.5
-      - flutter/install_android_sdk:
-          version: "34"
       - run:
           name: Install dependencies
           command: flutter pub get
@@ -30,8 +28,6 @@ jobs:
       - checkout
       - flutter/install_sdk:
           version: 3.24.5
-      - flutter/install_android_sdk:
-          version: "34"
       - run:
           name: Install dependencies
           command: flutter pub get
