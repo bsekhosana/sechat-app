@@ -111,7 +111,7 @@ jobs:
       - run:
           name: Build iOS
           command: |
-            if [ -n "$IOS_DISTRIBUTION_CERT_BASE64" ]; then
+            if [ -n "$IOS_DISTRIBUTION_CERT_BASE64" ] && [ -n "$IOS_PROVISIONING_PROFILE_BASE64" ]; then
               flutter build ios --release --no-codesign
               cd ios
               xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -archivePath Runner.xcarchive archive

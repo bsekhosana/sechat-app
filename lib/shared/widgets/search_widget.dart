@@ -275,7 +275,6 @@ class _SearchWidgetState extends State<SearchWidget>
                     ],
                   ),
                 ),
-
                 // Invite Button (Right)
                 Container(
                   width: 40,
