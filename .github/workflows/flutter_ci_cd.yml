@@ -356,6 +356,14 @@ jobs:
           echo "Moving IPA to expected location..."
           cp "$IPA_FILE" ./SeChat.ipa
       
+      - name: Create App Store Connect API key file
+        env:
+          APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+          APPSTORE_API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+        run: |
+          echo "$APPSTORE_API_PRIVATE_KEY" > AuthKey_${APPSTORE_API_KEY_ID}.p8
+          ls -l AuthKey_*.p8
+
       - name: Upload to TestFlight
         env:
           APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
@@ -367,7 +375,6 @@ jobs:
             echo "⚠️  Skipping TestFlight upload - iOS build not available"
             exit 0
           fi
-          
           if [ -z "$APPSTORE_ISSUER_ID" ] || [ -z "$APPSTORE_API_KEY_ID" ] || [ -z "$APPSTORE_API_PRIVATE_KEY" ]; then
             echo "⚠️  App Store Connect API credentials not configured. Skipping TestFlight upload."
             echo "To enable TestFlight deployment, add the following secrets:"
@@ -376,10 +383,10 @@ jobs:
             echo "- APPSTORE_API_PRIVATE_KEY"
             exit 0
           fi
-          
           # Use xcrun altool for TestFlight upload
           echo "🚀 Uploading to TestFlight..."
           xcrun altool --upload-app --type ios --file "./SeChat.ipa" \
             --apiKey "$APPSTORE_API_KEY_ID" \
             --apiIssuer "$APPSTORE_ISSUER_ID" \
+            --private-key-path "AuthKey_${APPSTORE_API_KEY_ID}.p8" \
             --verbose
