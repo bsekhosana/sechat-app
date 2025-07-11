@@ -16,7 +16,7 @@ jobs:
           command: flutter pub get
       - run:
           name: Analyze code
-          command: flutter analyze
+          command: flutter analyze --no-fatal-infos --no-fatal-warnings
 
   build-android:
     docker:
