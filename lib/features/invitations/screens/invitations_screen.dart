@@ -16,15 +16,39 @@ class InvitationsScreen extends StatefulWidget {
   State<InvitationsScreen> createState() => _InvitationsScreenState();
 }
 
-class _InvitationsScreenState extends State<InvitationsScreen> {
+class _InvitationsScreenState extends State<InvitationsScreen>
+    with WidgetsBindingObserver {
   int _tabIndex = 0; // 0 = Received, 1 = Sent
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<InvitationProvider>().loadInvitations();
+      // Mark as on invitations screen
+      context.read<InvitationProvider>().setOnInvitationsScreen(true);
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Mark as not on invitations screen
+    context.read<InvitationProvider>().setOnInvitationsScreen(false);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused) {
+      // Mark as not on invitations screen when app is paused
+      context.read<InvitationProvider>().setOnInvitationsScreen(false);
+    } else if (state == AppLifecycleState.resumed) {
+      // Mark as on invitations screen when app is resumed
+      context.read<InvitationProvider>().setOnInvitationsScreen(true);
+    }
   }
 
   void _shareApp() {

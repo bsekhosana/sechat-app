@@ -89,6 +89,16 @@ class _MainNavScreenState extends State<MainNavScreen> {
     setState(() {
       _selectedIndex = index;
     });
+
+    // Track when user enters/exits invitations screen
+    final invitationProvider = context.read<InvitationProvider>();
+    if (index == 1) {
+      // User entered invitations tab
+      invitationProvider.setOnInvitationsScreen(true);
+    } else {
+      // User left invitations tab
+      invitationProvider.setOnInvitationsScreen(false);
+    }
   }
 
   void showSearchOverlay(TextEditingController controller) {
@@ -159,7 +169,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
                                   color: Colors.white.withOpacity(0.7),
                                   fontSize: 13),
                             ),
-                            trailing: user.alreadyInvited
+                            trailing: user.hasPendingInvitation
                                 ? Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 8),
@@ -176,87 +186,157 @@ class _MainNavScreenState extends State<MainNavScreen> {
                                       ),
                                     ),
                                   )
-                                : Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFF6B35),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(Icons.person_add,
-                                          color: Colors.white, size: 20),
-                                      onPressed: () async {
-                                        final confirmed =
-                                            await showDialog<bool>(
-                                          context: context,
-                                          builder: (context) => AlertDialog(
-                                            backgroundColor:
-                                                const Color(0xFF2C2C2C),
-                                            title: Text('Send Invitation',
-                                                style: TextStyle(
-                                                    color: Colors.white)),
-                                            content: Text(
-                                                'Are you sure you want to send an invitation to ${user.username}?',
-                                                style: TextStyle(
-                                                    color: Colors.white70)),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () =>
-                                                    Navigator.of(context)
-                                                        .pop(false),
-                                                child: Text('Cancel',
+                                : user.canReinvite
+                                    ? Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: user.hasDeclinedInvitation ||
+                                                  user.hasDeletedInvitation
+                                              ? const Color(
+                                                  0xFF2196F3) // Blue for reinvite
+                                              : const Color(
+                                                  0xFFFF6B35), // Orange for new invite
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: IconButton(
+                                          icon: Icon(
+                                            user.hasDeclinedInvitation ||
+                                                    user.hasDeletedInvitation
+                                                ? Icons
+                                                    .refresh // Refresh icon for reinvite
+                                                : Icons
+                                                    .person_add, // Person add for new invite
+                                            color: Colors.white,
+                                            size: 20,
+                                          ),
+                                          onPressed: () async {
+                                            final actionText =
+                                                user.hasDeclinedInvitation ||
+                                                        user.hasDeletedInvitation
+                                                    ? 'Reinvite'
+                                                    : 'Send Invitation';
+
+                                            final confirmed =
+                                                await showDialog<bool>(
+                                              context: context,
+                                              builder: (context) => AlertDialog(
+                                                backgroundColor:
+                                                    const Color(0xFF2C2C2C),
+                                                title: Text(actionText,
+                                                    style: TextStyle(
+                                                        color: Colors.white)),
+                                                content: Text(
+                                                    user.hasDeclinedInvitation ||
+                                                            user
+                                                                .hasDeletedInvitation
+                                                        ? 'Are you sure you want to send a new invitation to ${user.username}?'
+                                                        : 'Are you sure you want to send an invitation to ${user.username}?',
                                                     style: TextStyle(
                                                         color: Colors.white70)),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(context)
+                                                            .pop(false),
+                                                    child: Text('Cancel',
+                                                        style: TextStyle(
+                                                            color: Colors
+                                                                .white70)),
+                                                  ),
+                                                  ElevatedButton(
+                                                    onPressed: () =>
+                                                        Navigator.of(context)
+                                                            .pop(true),
+                                                    style: ElevatedButton
+                                                        .styleFrom(
+                                                      backgroundColor:
+                                                          user.hasDeclinedInvitation ||
+                                                                  user
+                                                                      .hasDeletedInvitation
+                                                              ? const Color(
+                                                                  0xFF2196F3)
+                                                              : const Color(
+                                                                  0xFFFF6B35),
+                                                      foregroundColor:
+                                                          Colors.white,
+                                                    ),
+                                                    child: Text(
+                                                        user.hasDeclinedInvitation ||
+                                                                user.hasDeletedInvitation
+                                                            ? 'Reinvite'
+                                                            : 'Send'),
+                                                  ),
+                                                ],
                                               ),
-                                              ElevatedButton(
-                                                onPressed: () =>
-                                                    Navigator.of(context)
-                                                        .pop(true),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor:
-                                                      const Color(0xFFFF6B35),
-                                                  foregroundColor: Colors.white,
-                                                ),
-                                                child: const Text('Send'),
-                                              ),
-                                            ],
+                                            );
+                                            if (confirmed == true) {
+                                              final success =
+                                                  await invitationProvider
+                                                      .sendInvitation(
+                                                recipientId: user.id,
+                                                message:
+                                                    'Hi! I\'d like to chat with you on SeChat.',
+                                              );
+                                              if (success) {
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(user
+                                                                  .hasDeclinedInvitation ||
+                                                              user.hasDeletedInvitation
+                                                          ? 'Reinvitation sent to ${user.username}!'
+                                                          : 'Invitation sent to ${user.username}!'),
+                                                      backgroundColor:
+                                                          const Color(
+                                                              0xFF4CAF50),
+                                                    ),
+                                                  );
+                                                }
+                                              } else {
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                          invitationProvider
+                                                                  .error ??
+                                                              'Failed to send invitation'),
+                                                      backgroundColor:
+                                                          Colors.red,
+                                                    ),
+                                                  );
+                                                }
+                                              }
+                                              hideSearchOverlay();
+                                            }
+                                          },
+                                        ),
+                                      )
+                                    : Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          user.invitationStatusText,
+                                          style: TextStyle(
+                                            color: user.invitationStatus ==
+                                                    'accepted'
+                                                ? const Color(
+                                                    0xFF4CAF50) // Green for accepted
+                                                : const Color(
+                                                    0xFFFF5555), // Red for declined/deleted
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
                                           ),
-                                        );
-                                        if (confirmed == true) {
-                                          final success =
-                                              await invitationProvider
-                                                  .sendInvitation(
-                                            recipientId: user.id,
-                                            message:
-                                                'Hi! I\'d like to chat with you on SeChat.',
-                                          );
-                                          if (success) {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                    'Invitation sent to ${user.username}!'),
-                                                backgroundColor:
-                                                    const Color(0xFF4CAF50),
-                                              ),
-                                            );
-                                          } else {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              SnackBar(
-                                                content: Text(invitationProvider
-                                                        .error ??
-                                                    'Failed to send invitation'),
-                                                backgroundColor: Colors.red,
-                                              ),
-                                            );
-                                          }
-                                          hideSearchOverlay();
-                                        }
-                                      },
-                                    ),
-                                  ),
+                                        ),
+                                      ),
                           ),
                         );
                       },
@@ -318,7 +398,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
 
     return Consumer<InvitationProvider>(
       builder: (context, invitationProvider, child) {
-        final showBadge = index == 1 && invitationProvider.totalBadgeCount > 0;
+        final showBadge = index == 1 && invitationProvider.hasUnreadInvitations;
 
         return GestureDetector(
           onTap: () => _onItemTapped(index),
@@ -358,28 +438,20 @@ class _MainNavScreenState extends State<MainNavScreen> {
                     top: -2,
                     right: 4,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                      width: 12,
+                      height: 12,
                       decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(12),
+                        color: const Color(0xFF2196F3), // Blue color
+                        borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                            color: const Color(0xFF1E1E1E), width: 1),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 20,
-                        minHeight: 20,
-                      ),
-                      child: Text(
-                        invitationProvider.totalBadgeCount > 99
-                            ? '99+'
-                            : invitationProvider.totalBadgeCount.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
+                            color: const Color(0xFF1E1E1E), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF2196F3).withOpacity(0.6),
+                            blurRadius: 4,
+                            spreadRadius: 1,
+                          ),
+                        ],
                       ),
                     ),
                   ),

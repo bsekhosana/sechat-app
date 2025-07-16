@@ -8,6 +8,7 @@ import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
+import '../../../core/services/socket_service.dart';
 import 'chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -89,6 +90,47 @@ Download now and let's chat securely!
                     child: SearchWidget(),
                   ),
                   const SizedBox(width: 12),
+                  // Connection status indicator
+                  Consumer<ChatProvider>(
+                    builder: (context, chatProvider, child) {
+                      final socketService = SocketService.instance;
+                      Color statusColor;
+                      IconData statusIcon;
+                      String statusText;
+
+                      if (socketService.isConnected &&
+                          socketService.isAuthenticated) {
+                        statusColor = Colors.green;
+                        statusIcon = Icons.wifi;
+                        statusText = 'Connected';
+                      } else if (socketService.isConnecting) {
+                        statusColor = Colors.orange;
+                        statusIcon = Icons.wifi_find;
+                        statusText = 'Connecting...';
+                      } else {
+                        statusColor = Colors.red;
+                        statusIcon = Icons.wifi_off;
+                        statusText = 'Offline';
+                      }
+
+                      return Tooltip(
+                        message: statusText,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            statusIcon,
+                            color: statusColor,
+                            size: 16,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   const ProfileIconWidget(),
                 ],
               ),

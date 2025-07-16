@@ -3,7 +3,7 @@ import 'package:hive/hive.dart';
 import '../../../shared/models/invitation.dart';
 import '../../../shared/models/user.dart';
 import '../../../core/services/api_service.dart';
-import '../../../core/services/websocket_service.dart';
+import '../../../core/services/socket_service.dart';
 import '../../../core/services/notification_service.dart';
 
 class InvitationProvider extends ChangeNotifier {
@@ -14,6 +14,7 @@ class InvitationProvider extends ChangeNotifier {
   int _pendingReceivedCount = 0;
   int _responsesSentCount = 0;
   bool _hasUnreadInvitations = false;
+  bool _isOnInvitationsScreen = false; // Track if user is on invitations screen
 
   List<Invitation> get invitations => _invitations;
   bool get isLoading => _isLoading;
@@ -22,83 +23,115 @@ class InvitationProvider extends ChangeNotifier {
   int get responsesSentCount => _responsesSentCount;
   int get totalBadgeCount => _pendingReceivedCount + _responsesSentCount;
   bool get hasUnreadInvitations => _hasUnreadInvitations;
+  bool get isOnInvitationsScreen => _isOnInvitationsScreen;
 
   User? getInvitationUser(String userId) {
     return _invitationUsers[userId];
   }
 
   InvitationProvider() {
-    _setupWebSocket();
+    _setupSocket();
     _loadInvitationsFromLocal();
   }
 
-  void _setupWebSocket() {
-    WebSocketService.instance.onMessageReceived = _handleWebSocketMessage;
-    WebSocketService.instance.onConnected = _handleWebSocketConnected;
-    WebSocketService.instance.onDisconnected = _handleWebSocketDisconnected;
-    WebSocketService.instance.onError = _handleWebSocketError;
+  void _setupSocket() {
+    SocketService.instance.onInvitationReceived = _handleInvitationReceived;
+    SocketService.instance.onInvitationResponse = _handleInvitationResponse;
+    SocketService.instance.onUserOnline = _handleUserOnline;
+    SocketService.instance.onUserOffline = _handleUserOffline;
   }
 
-  void _handleWebSocketMessage(Map<String, dynamic> data) {
-    if (data['type'] == 'invitation_received') {
-      final invitationData = data['invitation'] as Map<String, dynamic>;
-      final invitation = Invitation.fromJson(invitationData);
+  void _handleInvitationReceived(Map<String, dynamic> data) {
+    final invitationData = data;
+    final invitation = Invitation.fromJson(invitationData);
 
-      // Store user data if available
-      if (data['sender'] != null) {
-        final senderData = data['sender'] as Map<String, dynamic>;
-        final sender = User.fromJson(senderData);
-        // Set default online status to true until WebSocket provides real data
-        _invitationUsers[sender.id] = sender.copyWith(isOnline: true);
-      }
+    // Store user data if available
+    if (data['sender'] != null) {
+      final senderData = data['sender'] as Map<String, dynamic>;
+      final sender = User.fromJson(senderData);
+      _invitationUsers[sender.id] = sender.copyWith(isOnline: true);
+    }
 
-      _addInvitation(invitation);
+    _addInvitation(invitation);
 
-      // Trigger local notification
+    // Trigger local notification only if user is not on invitations screen
+    if (!_isOnInvitationsScreen) {
       _triggerInvitationReceivedNotification(invitation);
-    } else if (data['type'] == 'invitation_response') {
-      final invitationData = data['invitation'] as Map<String, dynamic>;
-      final status = invitationData['status'] as String;
-      final invitationId = invitationData['id'] as String;
-
-      // Update local invitation status
-      final index = _invitations.indexWhere((i) => i.id == invitationId);
-      if (index != -1) {
-        _invitations[index] = _invitations[index].copyWith(
-          status: status,
-          acceptedAt: status == 'accepted' ? DateTime.now() : null,
-          declinedAt: status == 'declined' ? DateTime.now() : null,
-        );
-        _saveInvitationsToLocal();
-        _updateBadgeCounts();
-        notifyListeners();
-      }
-
-      // Trigger local notification for response
-      _triggerInvitationResponseNotification(invitationId, status);
-    } else if (data['type'] == 'user_online_status') {
-      final userId = data['user_id'] as String;
-      final isOnline = data['is_online'] as bool;
-      final lastSeen =
-          data['last_seen'] != null ? DateTime.parse(data['last_seen']) : null;
-
-      _updateUserOnlineStatus(userId, isOnline, lastSeen);
     }
   }
 
-  void _handleWebSocketConnected() {
-    print('🔌 InvitationProvider: WebSocket connected');
+  void _handleInvitationResponse(Map<String, dynamic> data) {
+    final invitationData = data;
+    final status = invitationData['status'] as String;
+    final invitationId =
+        invitationData['id'].toString(); // Ensure it's a string
+
+    print(
+        '📱 InvitationProvider: Handling invitation response - ID: $invitationId, Status: $status');
+    print(
+        '📱 InvitationProvider: Local invitations count: ${_invitations.length}');
+    print(
+        '📱 InvitationProvider: Local invitation IDs: ${_invitations.map((i) => i.id).toList()}');
+
+    // Store user data if available in the response
+    if (invitationData['sender'] != null) {
+      final senderData = invitationData['sender'] as Map<String, dynamic>;
+      final sender = User.fromJson(senderData);
+      _invitationUsers[sender.id] = sender.copyWith(isOnline: true);
+      print('📱 InvitationProvider: Stored sender user: ${sender.username}');
+    }
+
+    if (invitationData['recipient'] != null) {
+      final recipientData = invitationData['recipient'] as Map<String, dynamic>;
+      final recipient = User.fromJson(recipientData);
+      _invitationUsers[recipient.id] = recipient.copyWith(isOnline: true);
+      print(
+          '📱 InvitationProvider: Stored recipient user: ${recipient.username}');
+    }
+
+    // Update local invitation status
+    final index = _invitations.indexWhere((i) => i.id == invitationId);
+    if (index != -1) {
+      print(
+          '📱 InvitationProvider: Found invitation at index $index, updating status');
+      _invitations[index] = _invitations[index].copyWith(
+        status: status,
+        acceptedAt: status == 'accepted' ? DateTime.now() : null,
+        declinedAt: status == 'declined' ? DateTime.now() : null,
+      );
+      _saveInvitationsToLocal();
+      _updateBadgeCounts();
+      notifyListeners();
+    } else {
+      print(
+          '📱 InvitationProvider: Invitation not found in local list, adding it');
+      // If invitation not found locally, add it from the response data
+      try {
+        final invitation = Invitation.fromJson(invitationData);
+        _invitations.insert(0, invitation);
+        _saveInvitationsToLocal();
+        _updateBadgeCounts();
+        notifyListeners();
+      } catch (e) {
+        print(
+            '📱 InvitationProvider: Error creating invitation from response data: $e');
+      }
+    }
+
+    // Trigger local notification for response only if user is not on invitations screen
+    if (!_isOnInvitationsScreen) {
+      _triggerInvitationResponseNotification(invitationId, status);
+    }
   }
 
-  void _handleWebSocketDisconnected() {
-    print('🔌 InvitationProvider: WebSocket disconnected');
+  void _handleUserOnline(Map<String, dynamic> data) {
+    final userId = data['userId'].toString();
+    _updateUserOnlineStatus(userId, true, null);
   }
 
-  void _handleWebSocketError(String error) {
-    print('🔌 InvitationProvider: WebSocket error: $error');
-    // Don't set this as a blocking error - WebSocket is optional
-    // _error = 'WebSocket error: $error';
-    // notifyListeners();
+  void _handleUserOffline(Map<String, dynamic> data) {
+    final userId = data['userId'].toString();
+    _updateUserOnlineStatus(userId, false, DateTime.now());
   }
 
   void _addInvitation(Invitation invitation) {
@@ -106,6 +139,15 @@ class InvitationProvider extends ChangeNotifier {
     _saveInvitationsToLocal();
     _updateBadgeCounts();
     notifyListeners();
+  }
+
+  // Method to track when user enters/exits invitations screen
+  void setOnInvitationsScreen(bool isOnScreen) {
+    _isOnInvitationsScreen = isOnScreen;
+    if (isOnScreen) {
+      // Mark invitations as read when user enters the screen
+      markAllInvitationsAsRead();
+    }
   }
 
   Future<void> loadInvitations() async {
@@ -201,16 +243,78 @@ class InvitationProvider extends ChangeNotifier {
   }) async {
     try {
       print('📱 InvitationProvider: Sending invitation to $recipientId');
+
+      // Check Socket.IO connection and authentication status
+      final isSocketConnected = SocketService.instance.isConnected;
+      final isSocketAuthenticated = SocketService.instance.isAuthenticated;
+
+      print(
+          '📱 InvitationProvider: Socket.IO connected: $isSocketConnected, authenticated: $isSocketAuthenticated');
+
+      // Try Socket.IO first for real-time invitation
+      if (isSocketConnected && isSocketAuthenticated) {
+        print(
+            '📱 InvitationProvider: Using Socket.IO for real-time invitation');
+
+        SocketService.instance.sendInvitation(
+          recipientId: recipientId,
+          message: message,
+        );
+
+        // Create temporary invitation for immediate UI feedback
+        final tempInvitation = Invitation(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          senderId: SocketService.instance.currentUserId ?? '',
+          recipientId: recipientId,
+          message: message,
+          status: 'pending',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        // Add to local invitations immediately
+        _invitations.insert(0, tempInvitation);
+        await _saveInvitationsToLocal();
+        _updateBadgeCounts();
+        notifyListeners();
+
+        return true;
+      } else {
+        print(
+            '📱 InvitationProvider: Socket.IO not available, using API fallback');
+
+        // Try to reconnect Socket.IO for future invitations
+        if (!isSocketConnected) {
+          print('📱 InvitationProvider: Attempting to reconnect Socket.IO');
+          await SocketService.instance.manualConnect();
+        }
+      }
+
+      // Fallback to API if Socket.IO is not available
+      print('📱 InvitationProvider: Sending invitation via API');
       final response = await ApiService.sendInvitation({
         'recipient_id': recipientId,
         'message': message,
       });
 
       if (response['success'] == true) {
-        print('📱 InvitationProvider: Invitation sent successfully');
+        print('📱 InvitationProvider: Invitation sent successfully via API');
 
         // Reload invitations to update the sent section
         await loadInvitations();
+
+        // Try to trigger a Socket.IO event for real-time updates if possible
+        if (SocketService.instance.isAuthenticated) {
+          print(
+              '📱 InvitationProvider: Triggering Socket.IO event for real-time update');
+          // Emit a custom event to notify other clients about the new invitation
+          SocketService.instance.emitCustomEvent('invitation_created', {
+            'invitationId': response['invitation_id'],
+            'senderId': SocketService.instance.currentUserId,
+            'recipientId': recipientId,
+            'message': message,
+          });
+        }
 
         return true;
       } else {
@@ -226,6 +330,29 @@ class InvitationProvider extends ChangeNotifier {
 
   Future<bool> acceptInvitation(String invitationId) async {
     try {
+      // Try Socket.IO first for real-time response
+      if (SocketService.instance.isAuthenticated) {
+        SocketService.instance.respondToInvitation(
+          invitationId: invitationId,
+          response: 'accept',
+        );
+
+        // Update local invitation status immediately
+        final index = _invitations.indexWhere((i) => i.id == invitationId);
+        if (index != -1) {
+          _invitations[index] = _invitations[index].copyWith(
+            status: 'accepted',
+            acceptedAt: DateTime.now(),
+          );
+          await _saveInvitationsToLocal();
+          _updateBadgeCounts();
+          notifyListeners();
+        }
+
+        return true;
+      }
+
+      // Fallback to API if Socket.IO is not available
       final response = await ApiService.acceptInvitation(invitationId);
 
       if (response['success'] == true) {
@@ -254,6 +381,29 @@ class InvitationProvider extends ChangeNotifier {
 
   Future<bool> declineInvitation(String invitationId) async {
     try {
+      // Try Socket.IO first for real-time response
+      if (SocketService.instance.isAuthenticated) {
+        SocketService.instance.respondToInvitation(
+          invitationId: invitationId,
+          response: 'decline',
+        );
+
+        // Update local invitation status immediately
+        final index = _invitations.indexWhere((i) => i.id == invitationId);
+        if (index != -1) {
+          _invitations[index] = _invitations[index].copyWith(
+            status: 'declined',
+            declinedAt: DateTime.now(),
+          );
+          await _saveInvitationsToLocal();
+          _updateBadgeCounts();
+          notifyListeners();
+        }
+
+        return true;
+      }
+
+      // Fallback to API if Socket.IO is not available
       final response = await ApiService.declineInvitation(invitationId);
 
       if (response['success'] == true) {
@@ -313,25 +463,31 @@ class InvitationProvider extends ChangeNotifier {
   }
 
   void _updateBadgeCounts() {
+    // Count pending received invitations (new invitations from others)
     _pendingReceivedCount =
         _invitations.where((inv) => inv.isReceived && inv.isPending()).length;
+
+    // Count responses to sent invitations (accepted/declined by others)
     _responsesSentCount =
         _invitations.where((inv) => !inv.isReceived && !inv.isPending()).length;
+
+    // Show badge if there are any unread invitations
     _hasUnreadInvitations =
         _pendingReceivedCount > 0 || _responsesSentCount > 0;
+
     print(
-        '📱 InvitationProvider: Badge counts updated - Pending received: $_pendingReceivedCount, Responses sent: $_responsesSentCount');
+        '📱 InvitationProvider: Badge counts updated - Pending received: $_pendingReceivedCount, Responses sent: $_responsesSentCount, Has unread: $_hasUnreadInvitations');
   }
 
   void markReceivedInvitationsAsRead() {
     _pendingReceivedCount = 0;
-    _updateBadgeCounts();
+    _hasUnreadInvitations = _responsesSentCount > 0;
     notifyListeners();
   }
 
   void markSentInvitationsAsRead() {
     _responsesSentCount = 0;
-    _updateBadgeCounts();
+    _hasUnreadInvitations = _pendingReceivedCount > 0;
     notifyListeners();
   }
 
@@ -355,14 +511,24 @@ class InvitationProvider extends ChangeNotifier {
 
   void _triggerInvitationResponseNotification(
       String invitationId, String status) {
-    final invitation = _invitations.firstWhere((i) => i.id == invitationId);
-    final otherUser = getInvitationUser(invitation.recipientId);
-    if (otherUser != null) {
-      NotificationService.instance.showInvitationResponseNotification(
-        username: otherUser.username,
-        status: status,
-        invitationId: invitationId,
+    try {
+      final invitation = _invitations.firstWhere(
+        (i) => i.id == invitationId,
+        orElse: () => throw Exception('Invitation not found'),
       );
+
+      final otherUser = getInvitationUser(invitation.recipientId);
+      if (otherUser != null) {
+        NotificationService.instance.showInvitationResponseNotification(
+          username: otherUser.username,
+          status: status,
+          invitationId: invitationId,
+        );
+      }
+    } catch (e) {
+      print(
+          '📱 InvitationProvider: Error triggering notification for invitation $invitationId: $e');
+      // Don't throw the error - just log it and continue
     }
   }
 

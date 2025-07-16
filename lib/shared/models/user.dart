@@ -7,6 +7,9 @@ class User {
   final String? publicKey;
   final DateTime createdAt;
   final bool alreadyInvited;
+  final String?
+      invitationStatus; // 'pending', 'accepted', 'declined', 'deleted', null
+  final String? invitationId; // ID of the invitation if exists
 
   User({
     required this.id,
@@ -17,6 +20,8 @@ class User {
     this.publicKey,
     DateTime? createdAt,
     this.alreadyInvited = false,
+    this.invitationStatus,
+    this.invitationId,
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -32,6 +37,8 @@ class User {
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
       alreadyInvited: json['already_invited'] ?? false,
+      invitationStatus: json['invitation_status'],
+      invitationId: json['invitation_id']?.toString(),
     );
   }
 
@@ -45,6 +52,8 @@ class User {
       'public_key': publicKey,
       'created_at': createdAt.toIso8601String(),
       'already_invited': alreadyInvited,
+      'invitation_status': invitationStatus,
+      'invitation_id': invitationId,
     };
   }
 
@@ -57,6 +66,8 @@ class User {
     String? publicKey,
     DateTime? createdAt,
     bool? alreadyInvited,
+    String? invitationStatus,
+    String? invitationId,
   }) {
     return User(
       id: id ?? this.id,
@@ -67,6 +78,35 @@ class User {
       publicKey: publicKey ?? this.publicKey,
       createdAt: createdAt ?? this.createdAt,
       alreadyInvited: alreadyInvited ?? this.alreadyInvited,
+      invitationStatus: invitationStatus ?? this.invitationStatus,
+      invitationId: invitationId ?? this.invitationId,
     );
+  }
+
+  // Helper methods for invitation status
+  bool get canReinvite =>
+      invitationStatus == 'declined' ||
+      invitationStatus == 'deleted' ||
+      (!alreadyInvited && invitationStatus == null);
+
+  bool get hasPendingInvitation => invitationStatus == 'pending';
+
+  bool get hasDeclinedInvitation => invitationStatus == 'declined';
+
+  bool get hasDeletedInvitation => invitationStatus == 'deleted';
+
+  String get invitationStatusText {
+    switch (invitationStatus) {
+      case 'pending':
+        return 'Invited';
+      case 'accepted':
+        return 'Accepted';
+      case 'declined':
+        return 'Declined';
+      case 'deleted':
+        return 'Deleted';
+      default:
+        return 'Invite';
+    }
   }
 }

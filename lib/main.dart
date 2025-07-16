@@ -11,6 +11,7 @@ import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/socket_service.dart';
 
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,9 @@ Future<void> main() async {
 
   // Initialize notification service
   await NotificationService.instance.initialize();
+
+  // Initialize Socket.IO service
+  await SocketService.instance.connect();
 
   runApp(
     MultiProvider(

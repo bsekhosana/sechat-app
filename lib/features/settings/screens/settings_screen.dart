@@ -5,6 +5,7 @@ import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../chat/screens/socket_test_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -207,6 +208,16 @@ Download now and let's chat securely!
                     _buildSettingsItem(
                       title: 'Security',
                       onTap: () => _showPasswordResetSheet(context),
+                    ),
+                    _buildSettingsItem(
+                      title: 'Socket.IO Test',
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const SocketTestScreen(),
+                          ),
+                        );
+                      },
                     ),
                     _buildSettingsItem(
                       title: 'Logout',

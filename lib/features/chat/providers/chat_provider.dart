@@ -4,8 +4,7 @@ import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/models/message.dart';
 import '../../../core/services/api_service.dart';
-import '../../../core/services/websocket_service.dart';
-import '../../../core/services/encryption_service.dart';
+import '../../../core/services/socket_service.dart';
 import 'dart:async';
 
 class ChatProvider extends ChangeNotifier {
@@ -28,64 +27,90 @@ class ChatProvider extends ChangeNotifier {
   }
 
   ChatProvider() {
-    _setupWebSocket();
+    _setupSocket();
     _loadChatsFromLocal();
     _startOnlineStatusRefreshTimer();
   }
 
-  void _setupWebSocket() {
-    WebSocketService.instance.onMessageReceived = _handleWebSocketMessage;
-    WebSocketService.instance.onChatMessageReceived =
-        _handleChatMessageReceived;
-    WebSocketService.instance.onTypingReceived = _handleTypingReceived;
-    WebSocketService.instance.onReadReceiptReceived =
-        _handleReadReceiptReceived;
-    WebSocketService.instance.onConnected = _handleWebSocketConnected;
-    WebSocketService.instance.onDisconnected = _handleWebSocketDisconnected;
-    WebSocketService.instance.onError = _handleWebSocketError;
+  void _setupSocket() {
+    SocketService.instance.onMessageReceived = _handleSocketMessage;
+    SocketService.instance.onChatMessageReceived = _handleChatMessageReceived;
+    SocketService.instance.onTypingReceived = _handleTypingReceived;
+    SocketService.instance.onUserOnline = _handleUserOnline;
+    SocketService.instance.onUserOffline = _handleUserOffline;
+    SocketService.instance.onUserStatusUpdated = _handleUserStatusUpdated;
+    SocketService.instance.onConnected = _handleSocketConnected;
+    SocketService.instance.onDisconnected = _handleSocketDisconnected;
+    SocketService.instance.onError = _handleSocketError;
   }
 
-  void _handleWebSocketMessage(Map<String, dynamic> data) {
+  void _handleSocketMessage(Map<String, dynamic> data) {
     // General message handling
-    if (data['type'] == 'user_online_status') {
-      final userId = data['user_id'] as String;
-      final isOnline = data['is_online'] as bool;
-      final lastSeen =
-          data['last_seen'] != null ? DateTime.parse(data['last_seen']) : null;
+    print('📱 ChatProvider: Socket message received: $data');
+  }
 
-      _updateUserOnlineStatus(userId, isOnline, lastSeen);
-    }
+  void _handleUserOnline(Map<String, dynamic> data) {
+    final userId = data['userId'].toString();
+    _updateUserOnlineStatus(userId, true, null);
+  }
+
+  void _handleUserOffline(Map<String, dynamic> data) {
+    final userId = data['userId'].toString();
+    _updateUserOnlineStatus(userId, false, DateTime.now());
+  }
+
+  void _handleUserStatusUpdated(Map<String, dynamic> data) {
+    final userId = data['userId'].toString();
+    final status = data['status'] as String;
+    // Update user status if needed
+    print('📱 ChatProvider: User status updated: $userId - $status');
   }
 
   void _handleChatMessageReceived(Map<String, dynamic> data) {
-    final messageData = data['message'] as Map<String, dynamic>;
-    final encryptedContent = messageData['content'] as String;
+    // Handle Socket.IO message format
+    final messageData = data;
+    final content = messageData['message'] as String;
 
-    // Decrypt the message
-    String decryptedContent;
-    try {
-      decryptedContent =
-          EncryptionService.decryptMessage(encryptedContent) as String;
-    } catch (e) {
-      decryptedContent = '[Encrypted message]'; // Fallback if decryption fails
-    }
-
-    // Create message with decrypted content
+    // Create message with content
     final newMessage = Message(
       id: messageData['id'].toString(),
-      chatId: messageData['chat_id'].toString(),
+      chatId: messageData['receiver_id']
+          .toString(), // Use receiver_id as chat_id for now
       senderId: messageData['sender_id'].toString(),
-      content: decryptedContent,
+      content: content,
       type: MessageType.values.firstWhere(
-        (e) => e.toString().split('.').last == messageData['type'],
+        (e) =>
+            e.toString().split('.').last ==
+            (messageData['message_type'] ?? 'text'),
         orElse: () => MessageType.text,
       ),
-      status: messageData['status'] ?? 'sent',
+      status: 'received',
       createdAt: DateTime.parse(messageData['created_at']),
-      updatedAt: DateTime.parse(messageData['updated_at']),
+      updatedAt: DateTime.parse(
+          messageData['updated_at'] ?? messageData['created_at']),
     );
 
-    final chatId = newMessage.chatId;
+    // Determine the correct chat ID
+    String chatId;
+    final currentUserId = SocketService.instance.currentUserId;
+    if (currentUserId != null && newMessage.senderId == currentUserId) {
+      // Message sent by current user, use receiver_id as chat_id
+      chatId = newMessage.chatId;
+    } else {
+      // Message received by current user, find the chat with this sender
+      final chat = _chats.firstWhere(
+        (c) => c.getOtherUserId(currentUserId ?? '') == newMessage.senderId,
+        orElse: () => Chat(
+          id: newMessage.senderId, // Use sender_id as temporary chat_id
+          user1Id: currentUserId ?? '',
+          user2Id: newMessage.senderId,
+          lastMessageAt: newMessage.createdAt,
+          createdAt: newMessage.createdAt,
+          updatedAt: newMessage.updatedAt,
+        ),
+      );
+      chatId = chat.id;
+    }
 
     // Add message to local storage
     if (!_messages.containsKey(chatId)) {
@@ -108,39 +133,18 @@ class ChatProvider extends ChangeNotifier {
     // This can be used to show "typing..." indicator in UI
   }
 
-  void _handleReadReceiptReceived(Map<String, dynamic> data) {
-    final chatId = data['chat_id'] as String;
-    final userId = data['user_id'] as String;
-
-    // Update message status to read for messages sent by current user
-    final messages = _messages[chatId];
-    if (messages != null) {
-      bool updated = false;
-      for (int i = 0; i < messages.length; i++) {
-        if (messages[i].senderId == userId && messages[i].status != 'read') {
-          messages[i] = messages[i].copyWith(status: 'read');
-          updated = true;
-        }
-      }
-      if (updated) {
-        _saveMessagesToLocal(chatId, messages);
-        notifyListeners();
-      }
-    }
+  void _handleSocketConnected() {
+    print('🔌 ChatProvider: Socket.IO connected');
   }
 
-  void _handleWebSocketConnected() {
-    print('🔌 ChatProvider: WebSocket connected');
+  void _handleSocketDisconnected() {
+    print('🔌 ChatProvider: Socket.IO disconnected');
   }
 
-  void _handleWebSocketDisconnected() {
-    print('🔌 ChatProvider: WebSocket disconnected');
-  }
-
-  void _handleWebSocketError(String error) {
-    print('🔌 ChatProvider: WebSocket error: $error');
-    // Don't set this as a blocking error - WebSocket is optional
-    // _error = 'WebSocket error: $error';
+  void _handleSocketError(String error) {
+    print('🔌 ChatProvider: Socket.IO error: $error');
+    // Don't set this as a blocking error - Socket.IO is optional
+    // _error = 'Socket.IO error: $error';
     // notifyListeners();
   }
 
@@ -330,23 +334,18 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> sendMessage(String chatId, String content) async {
     try {
-      // Try WebSocket first for real-time messaging
-      if (WebSocketService.instance.isAuthenticated) {
-        // Get recipient's public key for encryption
-        final recipientUser = _chatUsers[_getOtherUserId(chatId)];
-        if (recipientUser == null) {
+      // Try Socket.IO first for real-time messaging
+      if (SocketService.instance.isAuthenticated) {
+        // Get recipient's user ID
+        final otherUserId = _getOtherUserId(chatId);
+        if (otherUserId.isEmpty) {
           throw Exception('Recipient not found');
         }
 
-        // Encrypt the message
-        final encryptedContent = EncryptionService.encryptMessage(
-          content,
-          recipientUser.publicKey ?? '', // This should be stored in user model
-        );
-
-        WebSocketService.instance.sendChatMessage(
-          chatId: chatId,
-          content: encryptedContent, // Send encrypted content
+        // Send message via Socket.IO
+        SocketService.instance.sendMessage(
+          receiverId: otherUserId,
+          message: content,
         );
 
         // Create temporary message for immediate UI feedback
