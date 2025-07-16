@@ -59,8 +59,9 @@ workflows:
           ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
       - name: Set up Android keystore
         script: |
-          echo "$android_signing_key" | base64 -d > /tmp/keystore.jks
-          keytool -list -v -keystore /tmp/keystore.jks -alias "$android_signing_key_alias" -storepass "$android_signing_store_password"
+          echo "$android_signing_key" | base64 -d > android/app/app-release-key.jks
+          keytool -list -v -keystore android/app/app-release-key.jks -alias "$android_signing_key_alias" -storepass "$android_signing_store_password"
+          echo "✅ Android keystore set up successfully"
       - name: Configure Gradle memory settings
         script: |
           # Create gradle.properties with optimized memory settings
@@ -99,18 +100,28 @@ workflows:
           fi
       - name: Build Android APK/AAB
         script: |
-          if [ "$DEBUG_BUILD" = "true" ]; then
-            echo "Building debug APK for testing..."
-            flutter build apk --debug
-          else
-            echo "Building release AAB for Play Store..."
-            flutter build appbundle --release --dart-define=FLUTTER_WEB_USE_SKIA=true
-          fi
+          echo "🔍 DEBUG_BUILD environment variable: '$DEBUG_BUILD'"
+          echo "🔍 Building for Google Play Store (release mode)"
+          
+          # Force release build for Google Play
+          flutter build appbundle --release --dart-define=FLUTTER_WEB_USE_SKIA=true
           
           # Verify build artifacts
           echo "=== Build Artifacts ==="
           find build/ -name "*.aab" -o -name "*.apk" | head -10
           echo "=== End Build Artifacts ==="
+          
+          # Verify it's a release build
+          echo "=== Checking AAB file ==="
+          if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
+            echo "✅ Release AAB found: app-release.aab"
+          elif [ -f "build/app/outputs/bundle/debug/app-debug.aab" ]; then
+            echo "❌ Debug AAB found instead of release AAB"
+            exit 1
+          else
+            echo "❌ No AAB file found"
+            exit 1
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
       - build/**/outputs/**/*.apk
@@ -118,8 +129,8 @@ workflows:
       - build/**/outputs/**/mapping.txt
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
-      - "*.aab"
-      - "*.apk"
+      - build/app/outputs/bundle/release/*.aab
+      - build/app/outputs/bundle/debug/*.aab
     publishing:
       app_store_connect:
         api_key: $app_store_connect_api_key
