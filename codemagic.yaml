@@ -81,6 +81,12 @@ workflows:
           flutter pub get
           # Cache dependencies for faster builds
           flutter pub deps
+      - name: Update build number
+        script: |
+          # Update build number to prevent conflicts
+          echo "Current build number: $FLUTTER_BUILD_NUMBER"
+          flutter build-name 1.0.1
+          flutter build-number $FLUTTER_BUILD_NUMBER
       - name: Build iOS IPA
         script: |
           if [ "$DEBUG_BUILD" = "true" ]; then
