@@ -43,7 +43,17 @@ class InvitationProvider extends ChangeNotifier {
 
   void _handleInvitationReceived(Map<String, dynamic> data) {
     final invitationData = data;
-    final invitation = Invitation.fromJson(invitationData);
+
+    // Create invitation with isReceived set to true for received invitations
+    final invitation = Invitation.fromJson({
+      ...invitationData,
+      'is_received': true, // Mark as received invitation
+    });
+
+    print(
+        '📱 InvitationProvider: Received invitation - ID: ${invitation.id}, Sender: ${invitation.senderId}, Recipient: ${invitation.recipientId}');
+    print(
+        '📱 InvitationProvider: Invitation isReceived: ${invitation.isReceived}, Status: ${invitation.status}');
 
     // Store user data if available
     if (data['sender'] != null) {
@@ -463,13 +473,32 @@ class InvitationProvider extends ChangeNotifier {
   }
 
   void _updateBadgeCounts() {
+    print('📱 InvitationProvider: Updating badge counts...');
+    print('📱 InvitationProvider: Total invitations: ${_invitations.length}');
+
+    // Debug: Show all invitations and their properties
+    for (int i = 0; i < _invitations.length; i++) {
+      final inv = _invitations[i];
+      print(
+          '📱 InvitationProvider: Invitation $i - ID: ${inv.id}, isReceived: ${inv.isReceived}, status: ${inv.status}, isPending: ${inv.isPending()}');
+    }
+
     // Count pending received invitations (new invitations from others)
-    _pendingReceivedCount =
-        _invitations.where((inv) => inv.isReceived && inv.isPending()).length;
+    final pendingReceived =
+        _invitations.where((inv) => inv.isReceived && inv.isPending()).toList();
+    _pendingReceivedCount = pendingReceived.length;
+
+    print(
+        '📱 InvitationProvider: Pending received invitations: ${pendingReceived.map((inv) => 'ID: ${inv.id}').join(', ')}');
 
     // Count responses to sent invitations (accepted/declined by others)
-    _responsesSentCount =
-        _invitations.where((inv) => !inv.isReceived && !inv.isPending()).length;
+    final responsesSent = _invitations
+        .where((inv) => !inv.isReceived && !inv.isPending())
+        .toList();
+    _responsesSentCount = responsesSent.length;
+
+    print(
+        '📱 InvitationProvider: Responses to sent invitations: ${responsesSent.map((inv) => 'ID: ${inv.id}').join(', ')}');
 
     // Show badge if there are any unread invitations
     _hasUnreadInvitations =
