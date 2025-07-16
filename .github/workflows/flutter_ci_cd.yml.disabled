@@ -1,0 +1,15 @@
+name: Flutter CI/CD (DISABLED - Using Codemagic)
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    if: false  # This disables the workflow completely
+    steps:
+      - name: Workflow Disabled
+        run: echo "This workflow is disabled. Using Codemagic for CI/CD instead."

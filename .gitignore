@@ -53,3 +53,4 @@ certificates/
 android/key.properties
 android/app/app-release-key.jks
 *.jks
+Secrets.base64.env

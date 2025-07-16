@@ -1,0 +1,160 @@
+workflows:
+  # Optimized combined workflow for both platforms
+  sechat-workflow:
+    name: SeChat Build & Deploy
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      android_signing:
+        - keystore_reference
+      groups:
+        - google_play
+        - app_store_credentials
+        - codemagic_ssh
+      vars:
+        XCODE_PROJECT: "ios/Runner.xcworkspace"
+        XCODE_SCHEME: "Runner"
+        BUNDLE_ID: "com.strapblaque.sechat"
+        TEAM_ID: "8A6FXCA4R9"
+        PACKAGE_NAME: "com.strapblaque.sechat"
+        DEBUG_BUILD: false # Set to true for debug builds, false for release
+        BUILD_CACHE_ENABLED: true
+        FLUTTER_BUILD_NUMBER: $CM_BUILD_NUMBER
+        # Build optimization flags
+        FLUTTER_BUILD_ARGS: "--release --dart-define=FLUTTER_WEB_USE_SKIA=true"
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m -XX:+HeapDumpOnOutOfMemoryError"
+    scripts:
+      - name: Set up code signing settings on macOS
+        script: |
+          # Set up code signing settings on macOS
+          keychain_name="codemagic.keychain"
+          app_cert_path="$CM_BUILD_DIR/app_certificate.p12"
+          app_profile_path="$CM_BUILD_DIR/app_profile.mobileprovision"
+          
+          # Create keychain
+          security create-keychain -p "" $keychain_name
+          security list-keychains -s $keychain_name
+          security default-keychain -s $keychain_name
+          security unlock-keychain -p "" $keychain_name
+          security set-keychain-settings -lut 21600 $keychain_name
+          
+          # Import certificate
+          echo "$distribution_certificate" | base64 -d > $app_cert_path
+          security import $app_cert_path -k $keychain_name -P "$certificate_password" -A -t cert
+          security set-key-partition-list -S apple-tool:,apple:,codesigning: -s -k "" $keychain_name
+          
+          # Install provisioning profile
+          echo "$distribution_profile" | base64 -d > $app_profile_path
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $app_profile_path ~/Library/MobileDevice/Provisioning\ Profiles/
+          
+          # Get UUID from provisioning profile
+          UUID=$(grep -a -A 0 "<?xml" $app_profile_path | sed -n 's/.*<key>UUID<\/key>.*<string>\([^<]*\)<\/string>.*/\1/p')
+          cp $app_profile_path ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+          
+          # Verify setup
+          security find-identity -v -p codesigning $keychain_name
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
+      - name: Set up Android keystore
+        script: |
+          echo "$android_signing_key" | base64 -d > /tmp/keystore.jks
+          keytool -list -v -keystore /tmp/keystore.jks -alias "$android_signing_key_alias" -storepass "$android_signing_store_password"
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+          # Cache dependencies for faster builds
+          flutter pub deps
+      - name: Build iOS IPA
+        script: |
+          if [ "$DEBUG_BUILD" = "true" ]; then
+            echo "Building debug IPA for testing..."
+            flutter build ipa --debug --export-options-plist=ios/ExportOptions.plist
+          else
+            echo "Building release IPA for App Store..."
+            flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+          fi
+      - name: Build Android APK/AAB
+        script: |
+          if [ "$DEBUG_BUILD" = "true" ]; then
+            echo "Building debug APK for testing..."
+            flutter build apk --debug
+          else
+            echo "Building release AAB for Play Store..."
+            flutter build appbundle --release
+          fi
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/**/outputs/**/*.apk
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      app_store_connect:
+        api_key: $app_store_connect_api_key
+        key_id: $app_store_connect_api_key_id
+        issuer_id: $app_store_connect_issuer_id
+        submit_to_testflight: true
+        submit_to_app_store: false
+      google_play:
+        track: internal
+        submit_as_draft: true
+        credentials: google_play_service_account
+      email:
+        recipients:
+          - $CM_EMAIL
+        notify:
+          success: true
+          failure: true
+    credentials:
+      - name: app_store_connect_api_key
+        type: api_key
+        secret: $APPSTORE_API_PRIVATE_KEY
+      - name: app_store_connect_issuer_id
+        type: api_key
+        secret: $APPSTORE_ISSUER_ID
+      - name: app_store_connect_api_key_id
+        type: api_key
+        secret: $APPSTORE_API_KEY_ID
+      - name: certificate_password
+        type: api_key
+        secret: $APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD
+      - name: distribution_certificate
+        type: api_key
+        secret: $APPLE_DISTRIBUTION_CERTIFICATE_P12
+      - name: distribution_profile
+        type: api_key
+        secret: $APPLE_PROVISIONING_PROFILE
+      - name: google_play_service_account
+        type: api_key
+        secret: $ANDROID_SERVICE_ACCOUNT_JSON
+      - name: android_signing_key
+        type: api_key
+        secret: $ANDROID_SIGNING_KEY_BASE64
+      - name: android_signing_key_alias
+        type: api_key
+        secret: $ANDROID_SIGNING_KEY_ALIAS
+      - name: android_signing_key_password
+        type: api_key
+        secret: $ANDROID_SIGNING_KEY_PASSWORD
+      - name: android_signing_store_password
+        type: api_key
+        secret: $ANDROID_SIGNING_STORE_PASSWORD
+
+# Trigger configuration
+triggering:
+  events:
+    - push
+    - pull_request
+  branch_patterns:
+    - pattern: master
+      include: true
+      source: true
+    - pattern: main
+      include: true
+      source: true
+  tag_patterns:
+    - pattern: 'v*'
+      include: true
+      source: true 
