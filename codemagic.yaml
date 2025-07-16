@@ -59,8 +59,50 @@ workflows:
           ls -la ~/Library/MobileDevice/Provisioning\ Profiles/
       - name: Set up Android keystore
         script: |
-          echo "$android_signing_key" | base64 -d > android/app/app-release-key.jks
-          keytool -list -v -keystore android/app/app-release-key.jks -alias "$android_signing_key_alias" -storepass "$android_signing_store_password"
+          echo "🔧 Setting up Android keystore..."
+          echo "Current directory: $(pwd)"
+          echo "CM_BUILD_DIR: $CM_BUILD_DIR"
+          
+          # Debug environment variables
+          echo "Available environment variables:"
+          env | grep -i android || echo "No android variables found"
+          env | grep -i signing || echo "No signing variables found"
+          
+          # Check if base64 variable is set
+          if [ -z "$ANDROID_SIGNING_KEY_BASE64" ]; then
+            echo "❌ ERROR: ANDROID_SIGNING_KEY_BASE64 is not set!"
+            echo "Please check your Codemagic environment variables."
+            exit 1
+          fi
+          
+          # Create the keystore file
+          KEYSTORE_PATH="$CM_BUILD_DIR/android/app/app-release-key.jks"
+          echo "Creating keystore at: $KEYSTORE_PATH"
+          
+          # Ensure directory exists
+          mkdir -p "$(dirname "$KEYSTORE_PATH")"
+          
+          # Create the keystore file with error handling
+          if ! echo "$ANDROID_SIGNING_KEY_BASE64" | base64 -d > "$KEYSTORE_PATH"; then
+            echo "❌ ERROR: Failed to decode base64 keystore!"
+            exit 1
+          fi
+          
+          # Verify file was created
+          echo "Verifying keystore file..."
+          ls -la "$KEYSTORE_PATH"
+          
+          if [ ! -f "$KEYSTORE_PATH" ]; then
+            echo "❌ ERROR: Keystore file was not created!"
+            exit 1
+          fi
+          
+          # Test the keystore
+          if ! keytool -list -v -keystore "$KEYSTORE_PATH" -alias "$ANDROID_SIGNING_KEY_ALIAS" -storepass "$ANDROID_SIGNING_STORE_PASSWORD"; then
+            echo "❌ ERROR: Failed to verify keystore!"
+            exit 1
+          fi
+          
           echo "✅ Android keystore set up successfully"
       - name: Configure Gradle memory settings
         script: |
