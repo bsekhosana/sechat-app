@@ -1,8 +1,0 @@
-# Exclude large build artifacts
-*.apk
-*.aab
-*.ipa
-*.dSYM
-
-# Keep whatsnew directory
-!whatsnew/ 
