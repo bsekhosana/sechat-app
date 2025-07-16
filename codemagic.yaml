@@ -182,7 +182,7 @@ workflows:
         submit_to_app_store: false
       google_play:
         track: internal
-        submit_as_draft: false
+        submit_as_draft: true
         credentials: google_play_service_account
       email:
         recipients:
