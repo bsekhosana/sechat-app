@@ -85,6 +85,7 @@ workflows:
         script: |
           # Update build number to prevent conflicts
           echo "Current build number: $FLUTTER_BUILD_NUMBER"
+          echo "DEBUG_BUILD setting: $DEBUG_BUILD"
           flutter build-name 1.0.1
           flutter build-number $FLUTTER_BUILD_NUMBER
       - name: Build iOS IPA
@@ -103,8 +104,13 @@ workflows:
             flutter build apk --debug
           else
             echo "Building release AAB for Play Store..."
-            flutter build appbundle --release
+            flutter build appbundle --release --dart-define=FLUTTER_WEB_USE_SKIA=true
           fi
+          
+          # Verify build artifacts
+          echo "=== Build Artifacts ==="
+          find build/ -name "*.aab" -o -name "*.apk" | head -10
+          echo "=== End Build Artifacts ==="
     artifacts:
       - build/ios/ipa/*.ipa
       - build/**/outputs/**/*.apk
@@ -112,6 +118,8 @@ workflows:
       - build/**/outputs/**/mapping.txt
       - /tmp/xcodebuild_logs/*.log
       - flutter_drive.log
+      - "*.aab"
+      - "*.apk"
     publishing:
       app_store_connect:
         api_key: $app_store_connect_api_key
