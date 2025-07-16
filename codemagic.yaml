@@ -23,7 +23,8 @@ workflows:
         FLUTTER_BUILD_NUMBER: $CM_BUILD_NUMBER
         # Build optimization flags
         FLUTTER_BUILD_ARGS: "--release --dart-define=FLUTTER_WEB_USE_SKIA=true"
-        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxPermSize=512m -XX:+HeapDumpOnOutOfMemoryError"
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxPermSize=1024m -XX:+HeapDumpOnOutOfMemoryError -XX:+UseG1GC"
+        JAVA_OPTS: "-Xmx4096m -XX:MaxPermSize=1024m"
     scripts:
       - name: Set up code signing settings on macOS
         script: |
@@ -60,6 +61,21 @@ workflows:
         script: |
           echo "$android_signing_key" | base64 -d > /tmp/keystore.jks
           keytool -list -v -keystore /tmp/keystore.jks -alias "$android_signing_key_alias" -storepass "$android_signing_store_password"
+      - name: Configure Gradle memory settings
+        script: |
+          # Create gradle.properties with optimized memory settings
+          cat > android/gradle.properties << EOF
+          org.gradle.jvmargs=-Xmx4096m -XX:MaxPermSize=1024m -XX:+HeapDumpOnOutOfMemoryError -XX:+UseG1GC
+          org.gradle.daemon=false
+          org.gradle.parallel=true
+          org.gradle.configureondemand=true
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.enableR8.fullMode=true
+          EOF
+          
+          echo "✅ Gradle memory settings configured"
+          cat android/gradle.properties
       - name: Get Flutter packages
         script: |
           flutter pub get
@@ -107,40 +123,6 @@ workflows:
         notify:
           success: true
           failure: true
-    credentials:
-      - name: app_store_connect_api_key
-        type: api_key
-        secret: $APPSTORE_API_PRIVATE_KEY
-      - name: app_store_connect_issuer_id
-        type: api_key
-        secret: $APPSTORE_ISSUER_ID
-      - name: app_store_connect_api_key_id
-        type: api_key
-        secret: $APPSTORE_API_KEY_ID
-      - name: certificate_password
-        type: api_key
-        secret: $APPLE_DISTRIBUTION_CERTIFICATE_PASSWORD
-      - name: distribution_certificate
-        type: api_key
-        secret: $APPLE_DISTRIBUTION_CERTIFICATE_P12
-      - name: distribution_profile
-        type: api_key
-        secret: $APPLE_PROVISIONING_PROFILE
-      - name: google_play_service_account
-        type: api_key
-        secret: $ANDROID_SERVICE_ACCOUNT_JSON
-      - name: android_signing_key
-        type: api_key
-        secret: $ANDROID_SIGNING_KEY_BASE64
-      - name: android_signing_key_alias
-        type: api_key
-        secret: $ANDROID_SIGNING_KEY_ALIAS
-      - name: android_signing_key_password
-        type: api_key
-        secret: $ANDROID_SIGNING_KEY_PASSWORD
-      - name: android_signing_store_password
-        type: api_key
-        secret: $ANDROID_SIGNING_STORE_PASSWORD
 
 # Trigger configuration
 triggering:

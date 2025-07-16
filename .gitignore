@@ -54,3 +54,4 @@ android/key.properties
 android/app/app-release-key.jks
 *.jks
 Secrets.base64.env
+setup_codemagic_secrets.sh
