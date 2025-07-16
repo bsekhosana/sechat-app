@@ -6,6 +6,7 @@ class Chat {
   final DateTime? lastMessageAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final Map<String, dynamic>? otherUser; // Store the other_user data from API
 
   Chat({
     required this.id,
@@ -15,20 +16,42 @@ class Chat {
     this.lastMessageAt,
     required this.createdAt,
     required this.updatedAt,
+    this.otherUser,
   });
 
-  factory Chat.fromJson(Map<String, dynamic> json) {
+  factory Chat.fromJson(dynamic json) {
+    // Convert LinkedMap to Map<String, dynamic> if needed
+    final Map<String, dynamic> data = Map<String, dynamic>.from(json);
+
+    // Handle API response structure with other_user
+    if (data.containsKey('other_user')) {
+      return Chat(
+        id: data['id'].toString(),
+        user1Id: '', // Will be determined later
+        user2Id: '', // Will be determined later
+        status: data['status'] ?? 'active',
+        lastMessageAt: data['last_message_at'] != null
+            ? DateTime.parse(data['last_message_at'])
+            : null,
+        createdAt: DateTime.parse(data['created_at']),
+        updatedAt: DateTime.parse(data['updated_at']),
+        otherUser: data['other_user'] != null
+            ? Map<String, dynamic>.from(data['other_user'])
+            : null,
+      );
+    }
+
+    // Handle legacy structure with user1_id and user2_id
     return Chat(
-      id: json['id'].toString(),
-      user1Id: json['user1_id'].toString(),
-      user2Id: json['user2_id'].toString(),
-      status: json['status'] ?? 'active',
-      lastMessageAt:
-          json['last_message_at'] != null
-              ? DateTime.parse(json['last_message_at'])
-              : null,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      id: data['id'].toString(),
+      user1Id: data['user1_id'].toString(),
+      user2Id: data['user2_id'].toString(),
+      status: data['status'] ?? 'active',
+      lastMessageAt: data['last_message_at'] != null
+          ? DateTime.parse(data['last_message_at'])
+          : null,
+      createdAt: DateTime.parse(data['created_at']),
+      updatedAt: DateTime.parse(data['updated_at']),
     );
   }
 
@@ -41,10 +64,16 @@ class Chat {
       'last_message_at': lastMessageAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      if (otherUser != null) 'other_user': otherUser,
     };
   }
 
   String getOtherUserId(String currentUserId) {
+    // If we have other_user data, use that
+    if (otherUser != null && otherUser!.containsKey('id')) {
+      return otherUser!['id'].toString();
+    }
+    // Fallback to legacy logic
     return user1Id == currentUserId ? user2Id : user1Id;
   }
 
@@ -60,6 +89,7 @@ class Chat {
     DateTime? lastMessageAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Map<String, dynamic>? otherUser,
   }) {
     return Chat(
       id: id ?? this.id,
@@ -69,6 +99,7 @@ class Chat {
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      otherUser: otherUser ?? this.otherUser,
     );
   }
 }

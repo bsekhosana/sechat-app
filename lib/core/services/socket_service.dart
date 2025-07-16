@@ -31,6 +31,7 @@ class SocketService {
   Function(Map<String, dynamic>)? onUserStatusUpdated;
   Function(Map<String, dynamic>)? onInvitationReceived;
   Function(Map<String, dynamic>)? onInvitationResponse;
+  Function(Map<String, dynamic>)? onMessageStatusUpdated;
 
   SocketService._();
 
@@ -177,10 +178,21 @@ class SocketService {
       onInvitationResponse?.call(data);
     });
 
+    // Message status events
+    _socket!.on('message_status_updated', (data) {
+      print('🔌 Socket.IO: Message status updated: $data');
+      onMessageStatusUpdated?.call(data);
+    });
+
     // Error events
     _socket!.on('message_error', (data) {
       print('🔌 Socket.IO: Message error: $data');
       onError?.call('Message error: ${data['message']}');
+    });
+
+    _socket!.on('message_status_error', (data) {
+      print('🔌 Socket.IO: Message status error: $data');
+      onError?.call('Message status error: ${data['message']}');
     });
   }
 
@@ -264,6 +276,24 @@ class SocketService {
     _socket!.emit(event, {
       'senderId': int.parse(_currentUserId!),
       'receiverId': int.parse(receiverId),
+    });
+  }
+
+  // Update message status
+  void updateMessageStatus({
+    required String messageId,
+    required String status, // 'sent', 'delivered', 'read'
+  }) {
+    if (!_isAuthenticated || _currentUserId == null) {
+      print('🔌 Socket.IO: Not authenticated, skipping message status update');
+      return;
+    }
+
+    print('🔌 Socket.IO: Updating message $messageId status to $status');
+    _socket!.emit('update_message_status', {
+      'messageId': messageId,
+      'status': status,
+      'userId': int.parse(_currentUserId!),
     });
   }
 

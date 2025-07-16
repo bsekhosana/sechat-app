@@ -10,6 +10,7 @@ class User {
   final String?
       invitationStatus; // 'pending', 'accepted', 'declined', 'deleted', null
   final String? invitationId; // ID of the invitation if exists
+  final bool isTyping; // For typing indicators
 
   User({
     required this.id,
@@ -22,24 +23,42 @@ class User {
     this.alreadyInvited = false,
     this.invitationStatus,
     this.invitationId,
+    this.isTyping = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  factory User.fromJson(Map<String, dynamic> json) {
-    return User(
-      id: json['id'].toString(),
-      deviceId: json['device_id'] ?? '',
-      username: json['username'],
-      isOnline: json['is_online'] ?? false,
-      lastSeen:
-          json['last_seen'] != null ? DateTime.parse(json['last_seen']) : null,
-      publicKey: json['public_key'],
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
-          : DateTime.now(),
-      alreadyInvited: json['already_invited'] ?? false,
-      invitationStatus: json['invitation_status'],
-      invitationId: json['invitation_id']?.toString(),
-    );
+  factory User.fromJson(dynamic json) {
+    try {
+      // Convert LinkedMap to Map<String, dynamic> if needed
+      final Map<String, dynamic> data = Map<String, dynamic>.from(json);
+
+      return User(
+        id: data['id']?.toString() ?? '',
+        deviceId: data['device_id'] ?? data['deviceId'] ?? '',
+        username: data['username'] ?? 'Unknown User',
+        isOnline: data['is_online'] ?? data['isOnline'] ?? false,
+        lastSeen: data['last_seen'] != null
+            ? DateTime.parse(data['last_seen'])
+            : null,
+        publicKey: data['public_key'],
+        createdAt: data['created_at'] != null
+            ? DateTime.parse(data['created_at'])
+            : DateTime.now(),
+        alreadyInvited: data['already_invited'] ?? false,
+        invitationStatus: data['invitation_status'],
+        invitationId: data['invitation_id']?.toString(),
+        isTyping: data['is_typing'] ?? false,
+      );
+    } catch (e) {
+      print('📱 User.fromJson error: $e for data: $json');
+      // Return a default user with available data
+      return User(
+        id: json['id']?.toString() ?? 'unknown',
+        deviceId: json['device_id'] ?? json['deviceId'] ?? '',
+        username: json['username'] ?? 'Unknown User',
+        isOnline: json['is_online'] ?? json['isOnline'] ?? false,
+        createdAt: DateTime.now(),
+      );
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -54,6 +73,7 @@ class User {
       'already_invited': alreadyInvited,
       'invitation_status': invitationStatus,
       'invitation_id': invitationId,
+      'is_typing': isTyping,
     };
   }
 
@@ -68,6 +88,7 @@ class User {
     bool? alreadyInvited,
     String? invitationStatus,
     String? invitationId,
+    bool? isTyping,
   }) {
     return User(
       id: id ?? this.id,
@@ -80,6 +101,7 @@ class User {
       alreadyInvited: alreadyInvited ?? this.alreadyInvited,
       invitationStatus: invitationStatus ?? this.invitationStatus,
       invitationId: invitationId ?? this.invitationId,
+      isTyping: isTyping ?? this.isTyping,
     );
   }
 

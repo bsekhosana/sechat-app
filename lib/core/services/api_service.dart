@@ -66,6 +66,15 @@ class ApiService {
     }
   }
 
+  // User management endpoints
+  static Future<Map<String, dynamic>> blockUser(String userId) {
+    return post('/users/block', {'user_id': userId});
+  }
+
+  static Future<Map<String, dynamic>> removeUserChats(String userId) {
+    return post('/users/remove-chats', {'user_id': userId});
+  }
+
   // User endpoints
   static Future<Map<String, dynamic>> register(Map<String, dynamic> data) {
     return post('/register', data);

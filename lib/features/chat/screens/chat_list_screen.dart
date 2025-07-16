@@ -9,6 +9,7 @@ import '../../../shared/models/user.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/socket_service.dart';
+import '../../../core/services/api_service.dart';
 import 'chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -55,6 +56,199 @@ Download now and let's chat securely!
       shareText,
       subject: 'Join me on SeChat - Secure Messaging App',
     );
+  }
+
+  void _showChatOptions(BuildContext context, Chat chat, User? otherUser,
+      String displayUsername) {
+    final otherUserId =
+        otherUser?.id ?? chat.getOtherUserId('current_user_placeholder');
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF2C2C2C),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Options for $displayUsername',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.delete_forever, color: Colors.orange),
+              title: const Text(
+                'Remove Chats',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Delete all chats and messages',
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _removeUserChats(otherUserId, displayUsername);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.block, color: Colors.red),
+              title: const Text(
+                'Block User',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Block and remove all communication',
+                style: TextStyle(color: Colors.white70),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _blockUser(otherUserId, displayUsername);
+              },
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _blockUser(String userId, String username) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        title: const Text(
+          'Block User',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to block $username? This will remove all chats and messages between you and prevent future communication.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final response = await ApiService.blockUser(userId);
+        if (response['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response['message'] ?? 'User blocked successfully'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          // Refresh chat list
+          context.read<ChatProvider>().loadChats();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response['message'] ?? 'Failed to block user'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error blocking user: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeUserChats(String userId, String username) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        title: const Text(
+          'Remove Chats',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to remove all chats and messages with $username? This action cannot be undone.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.orange,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final response = await ApiService.removeUserChats(userId);
+        if (response['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text(response['message'] ?? 'Chats removed successfully'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+          // Refresh chat list
+          context.read<ChatProvider>().loadChats();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response['message'] ?? 'Failed to remove chats'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error removing chats: $e'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -288,16 +482,40 @@ Download now and let's chat securely!
                         );
                         final otherUser = chatProvider.getChatUser(otherUserId);
 
+                        // Get username from chat data if user not found
+                        String displayUsername = 'Unknown User';
+                        if (otherUser != null) {
+                          displayUsername = otherUser.username;
+                        } else if (chat.otherUser != null &&
+                            chat.otherUser!.containsKey('username')) {
+                          displayUsername = chat.otherUser!['username'];
+                        }
+
+                        // Get online status
+                        bool isOnline = false;
+                        if (otherUser != null) {
+                          isOnline = otherUser.isOnline;
+                        } else if (chat.otherUser != null &&
+                            chat.otherUser!.containsKey('is_online')) {
+                          isOnline = chat.otherUser!['is_online'] ?? false;
+                        }
+
                         return AnimationConfiguration.staggeredList(
                           position: index,
                           duration: const Duration(milliseconds: 375),
                           child: SlideAnimation(
                             verticalOffset: 50.0,
                             child: FadeInAnimation(
-                              child: _ChatCard(
-                                chat: chat,
-                                otherUser: otherUser,
-                                onTap: () => _openChat(chat),
+                              child: GestureDetector(
+                                onLongPress: () => _showChatOptions(
+                                    context, chat, otherUser, displayUsername),
+                                child: _ChatCard(
+                                  chat: chat,
+                                  otherUser: otherUser,
+                                  displayUsername: displayUsername,
+                                  isOnline: isOnline,
+                                  onTap: () => _openChat(chat),
+                                ),
                               ),
                             ),
                           ),
@@ -318,9 +536,16 @@ Download now and let's chat securely!
 class _ChatCard extends StatelessWidget {
   final Chat chat;
   final User? otherUser;
+  final String displayUsername;
+  final bool isOnline;
   final VoidCallback onTap;
 
-  const _ChatCard({required this.chat, this.otherUser, required this.onTap});
+  const _ChatCard(
+      {required this.chat,
+      this.otherUser,
+      required this.displayUsername,
+      required this.isOnline,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -335,7 +560,7 @@ class _ChatCard extends StatelessWidget {
               radius: 24,
               backgroundColor: const Color(0xFFFF6B35),
               child: Text(
-                otherUser?.username.substring(0, 1).toUpperCase() ?? '?',
+                displayUsername.substring(0, 1).toUpperCase(),
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -343,7 +568,7 @@ class _ChatCard extends StatelessWidget {
                 ),
               ),
             ),
-            if (otherUser?.isOnline == true)
+            if (isOnline)
               Positioned(
                 right: 0,
                 bottom: 0,
@@ -361,21 +586,42 @@ class _ChatCard extends StatelessWidget {
           ],
         ),
         title: Text(
-          otherUser?.username ?? 'Unknown User',
+          displayUsername,
           style: const TextStyle(
             fontWeight: FontWeight.w600,
             color: Colors.white,
             fontSize: 16,
           ),
         ),
-        subtitle: Text(
-          chat.lastMessageAt != null
-              ? _formatLastMessageTime(chat.lastMessageAt!)
-              : 'No messages yet',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
-            fontSize: 14,
-          ),
+        subtitle: Consumer<ChatProvider>(
+          builder: (context, chatProvider, child) {
+            // Check if the other user is typing
+            final otherUserId = chat.getOtherUserId(
+              context.read<AuthProvider>().currentUser?.id ?? '',
+            );
+            final isTyping = chatProvider.isUserTyping(otherUserId);
+
+            if (isTyping) {
+              return Text(
+                'typing...',
+                style: TextStyle(
+                  color: const Color(0xFFFF6B35),
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                ),
+              );
+            } else {
+              return Text(
+                chat.lastMessageAt != null
+                    ? _formatLastMessageTime(chat.lastMessageAt!)
+                    : 'No messages yet',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 14,
+                ),
+              );
+            }
+          },
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -389,7 +635,31 @@ class _ChatCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            // Unread count badge removed since Chat model doesn't have unreadCount property
+            // Unread count badge
+            Consumer<ChatProvider>(
+              builder: (context, chatProvider, child) {
+                final unreadCount = chatProvider.getUnreadCount(chat.id);
+                if (unreadCount > 0) {
+                  return Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2196F3),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      unreadCount > 99 ? '99+' : unreadCount.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
           ],
         ),
       ),

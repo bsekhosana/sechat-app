@@ -8,6 +8,10 @@ import '../../../shared/models/invitation.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
+import '../../chat/screens/chat_screen.dart';
+import '../../chat/providers/chat_provider.dart';
+import '../../../shared/models/chat.dart';
+import '../../../core/services/api_service.dart';
 
 class InvitationsScreen extends StatefulWidget {
   const InvitationsScreen({super.key});
@@ -161,6 +165,74 @@ Download now and let's chat securely!
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(provider.error ?? 'Failed to delete invitation'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _blockUserFromInvitation(Invitation invitation) async {
+    final otherUserId = invitation.senderId;
+    final otherUser =
+        context.read<InvitationProvider>().getInvitationUser(otherUserId);
+    final username = otherUser?.username ?? 'Unknown User';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        title: const Text(
+          'Block User',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Are you sure you want to block $username? This will remove all chats and messages between you and prevent future communication.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final response = await ApiService.blockUser(otherUserId);
+        if (response['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response['message'] ?? 'User blocked successfully'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          // Refresh invitations
+          context.read<InvitationProvider>().loadInvitations();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response['message'] ?? 'Failed to block user'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error blocking user: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -391,26 +463,64 @@ Download now and let's chat securely!
                                 onDecline: _tabIndex == 0
                                     ? () => _declineInvitation(invitation)
                                     : null,
-                                onDelete: () => _deleteInvitation(invitation),
-                                onChatTap: _tabIndex == 0
+                                onDelete: _tabIndex == 0
+                                    ? () => _blockUserFromInvitation(invitation)
+                                    : () => _deleteInvitation(invitation),
+                                onChatTap: invitation.isAccepted()
                                     ? () {
-                                        // Navigate to chat for received invitations
-                                        // You would typically pass the otherUserId to the chat screen
-                                        // For now, we'll just show a snackbar
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                                'Chat not implemented yet'),
-                                            backgroundColor: Color(0xFFFF6B35),
-                                          ),
-                                        );
+                                        // Navigate to chat for accepted invitations
+                                        // Find the chat for this accepted invitation
+                                        final chatProvider =
+                                            context.read<ChatProvider>();
+                                        final currentUser = context
+                                            .read<AuthProvider>()
+                                            .currentUser;
+
+                                        if (currentUser != null) {
+                                          // Find the chat with the other user
+                                          final otherUserId =
+                                              invitation.senderId ==
+                                                      currentUser.id
+                                                  ? invitation.recipientId
+                                                  : invitation.senderId;
+
+                                          final chat =
+                                              chatProvider.chats.firstWhere(
+                                            (c) =>
+                                                c.getOtherUserId(
+                                                    currentUser.id) ==
+                                                otherUserId,
+                                            orElse: () => Chat(
+                                              id: invitation
+                                                  .id, // Use invitation ID as temporary chat ID
+                                              user1Id: currentUser.id,
+                                              user2Id: otherUserId,
+                                              lastMessageAt:
+                                                  invitation.acceptedAt,
+                                              createdAt:
+                                                  invitation.acceptedAt ??
+                                                      DateTime.now(),
+                                              updatedAt:
+                                                  invitation.acceptedAt ??
+                                                      DateTime.now(),
+                                            ),
+                                          );
+
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  ChatScreen(chat: chat),
+                                            ),
+                                          );
+                                        }
                                       }
                                     : null,
                                 formatTime: _formatTime,
                                 getStatusColor: _getStatusColor,
                                 getStatusText: _getStatusText,
                                 isReceived: _tabIndex == 0,
+                                deleteButtonText:
+                                    _tabIndex == 0 ? 'Block' : 'Delete',
                               ),
                             ),
                           ),
@@ -476,6 +586,7 @@ class _InvitationCard extends StatelessWidget {
   final Color Function(String) getStatusColor;
   final String Function(String) getStatusText;
   final bool isReceived;
+  final String deleteButtonText; // Add this field
 
   const _InvitationCard({
     required this.invitation,
@@ -488,6 +599,7 @@ class _InvitationCard extends StatelessWidget {
     required this.getStatusColor,
     required this.getStatusText,
     required this.isReceived,
+    required this.deleteButtonText, // Add this parameter
   });
 
   @override
@@ -651,7 +763,7 @@ class _InvitationCard extends StatelessWidget {
                         : Colors.red.withOpacity(0.2),
                     foregroundColor: isPendingCard ? Colors.black : Colors.red,
                   ),
-                  child: const Text('Delete'),
+                  child: Text(deleteButtonText),
                 ),
               ],
             ),

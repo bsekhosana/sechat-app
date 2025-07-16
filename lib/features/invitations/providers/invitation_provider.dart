@@ -357,6 +357,9 @@ class InvitationProvider extends ChangeNotifier {
           await _saveInvitationsToLocal();
           _updateBadgeCounts();
           notifyListeners();
+
+          // Create chat after accepting invitation
+          await _createChatFromAcceptedInvitation(_invitations[index]);
         }
 
         return true;
@@ -376,6 +379,9 @@ class InvitationProvider extends ChangeNotifier {
           await _saveInvitationsToLocal();
           _updateBadgeCounts();
           notifyListeners();
+
+          // Create chat after accepting invitation
+          await _createChatFromAcceptedInvitation(_invitations[index]);
         }
         return true;
       } else {
@@ -387,6 +393,47 @@ class InvitationProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  // Create chat from accepted invitation
+  Future<void> _createChatFromAcceptedInvitation(Invitation invitation) async {
+    try {
+      final currentUserId = SocketService.instance.currentUserId;
+      if (currentUserId == null) return;
+
+      // Determine the other user ID
+      final otherUserId = invitation.senderId == currentUserId
+          ? invitation.recipientId
+          : invitation.senderId;
+
+      // Create chat via API
+      final response = await ApiService.createChat({
+        'other_user_id': otherUserId,
+      });
+
+      if (response['success'] == true) {
+        print(
+            '📱 InvitationProvider: Chat created successfully for accepted invitation');
+
+        // Notify chat provider to refresh chats
+        // This will be handled by the chat provider listening to invitation responses
+      }
+    } catch (e) {
+      print(
+          '📱 InvitationProvider: Error creating chat from accepted invitation: $e');
+    }
+  }
+
+  // Get chat ID from accepted invitation
+  String? getChatIdFromAcceptedInvitation(String invitationId) {
+    final invitation = _invitations.firstWhere(
+      (i) => i.id == invitationId && i.isAccepted(),
+      orElse: () => throw Exception('Accepted invitation not found'),
+    );
+
+    // For now, we'll use the invitation ID as a temporary chat ID
+    // In a real implementation, you'd store the actual chat ID
+    return invitation.id;
   }
 
   Future<bool> declineInvitation(String invitationId) async {

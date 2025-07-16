@@ -7,6 +7,7 @@ import '../../search/providers/search_provider.dart';
 import 'package:provider/provider.dart';
 import '../../invitations/providers/invitation_provider.dart';
 import '../../../core/services/notification_service.dart';
+import '../../chat/providers/chat_provider.dart';
 
 class MainNavScreen extends StatefulWidget {
   final int initialIndex;
@@ -396,9 +397,11 @@ class _MainNavScreenState extends State<MainNavScreen> {
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _selectedIndex == index;
 
-    return Consumer<InvitationProvider>(
-      builder: (context, invitationProvider, child) {
-        final showBadge = index == 1 && invitationProvider.hasUnreadInvitations;
+    return Consumer2<InvitationProvider, ChatProvider>(
+      builder: (context, invitationProvider, chatProvider, child) {
+        final showInvitationBadge =
+            index == 1 && invitationProvider.hasUnreadInvitations;
+        final showChatBadge = index == 0 && chatProvider.hasUnreadMessages;
 
         return GestureDetector(
           onTap: () => _onItemTapped(index),
@@ -433,7 +436,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
                     ),
                   ],
                 ),
-                if (showBadge)
+                if (showInvitationBadge || showChatBadge)
                   Positioned(
                     top: -2,
                     right: 4,
