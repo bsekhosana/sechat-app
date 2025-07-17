@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'network_service.dart';
 
 class SocketService {
   static SocketService? _instance;
@@ -96,6 +97,10 @@ class SocketService {
       print('🔌 Socket.IO: Connected to server');
       _isConnecting = false;
       _isAuthenticated = false;
+
+      // Clear reconnecting status
+      NetworkService.instance.setReconnecting(false);
+
       onConnected?.call();
 
       // Authenticate immediately after connection
@@ -107,7 +112,14 @@ class SocketService {
       _isAuthenticated = false;
       _isConnecting = false;
       onDisconnected?.call();
-      _scheduleReconnect();
+
+      // Check network connectivity before attempting reconnect
+      if (NetworkService.instance.isConnected) {
+        _scheduleReconnect();
+      } else {
+        print('🔌 Socket.IO: Network not available, waiting for connection');
+        NetworkService.instance.setReconnecting(false);
+      }
     });
 
     _socket!.onConnectError((error) {
@@ -201,6 +213,10 @@ class SocketService {
       _reconnectTimer?.cancel();
       final delay = Duration(seconds: 2 * (_reconnectAttempts + 1));
       print('🔌 Socket.IO: Scheduling reconnect in ${delay.inSeconds} seconds');
+
+      // Set reconnecting status
+      NetworkService.instance.setReconnecting(true);
+
       _reconnectTimer = Timer(delay, () {
         _reconnectAttempts++;
         connect();
@@ -209,6 +225,7 @@ class SocketService {
       print(
           '🔌 Socket.IO: Max reconnection attempts reached. Stopping reconnection.');
       _shouldReconnect = false;
+      NetworkService.instance.setReconnecting(false);
     }
   }
 
@@ -243,6 +260,17 @@ class SocketService {
     _reconnectAttempts = 0;
     _reconnectTimer?.cancel();
     connect();
+  }
+
+  // Handle network reconnection
+  void handleNetworkReconnection() {
+    if (!_isAuthenticated && _shouldReconnect) {
+      print(
+          '🔌 Socket.IO: Network reconnected, attempting socket reconnection');
+      _reconnectAttempts = 0;
+      _reconnectTimer?.cancel();
+      connect();
+    }
   }
 
   // Send message to a specific user

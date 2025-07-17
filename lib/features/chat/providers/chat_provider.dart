@@ -5,6 +5,7 @@ import '../../../shared/models/user.dart';
 import '../../../shared/models/message.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/socket_service.dart';
+import '../../../core/services/network_service.dart';
 import 'dart:async';
 
 class ChatProvider extends ChangeNotifier {
@@ -12,6 +13,10 @@ class ChatProvider extends ChangeNotifier {
   final Map<String, List<Message>> _messages = {};
   final Map<String, User> _chatUsers = {};
   final Map<String, int> _unreadCounts = {}; // Track unread message counts
+  final Map<String, Timer> _messageStatusTimers =
+      {}; // Track message status update timers
+  final Map<String, String> _activeChatScreens =
+      {}; // Track which users are on which chat screens
   bool _isLoading = false;
   String? _error;
 
@@ -39,6 +44,7 @@ class ChatProvider extends ChangeNotifier {
 
   ChatProvider() {
     _setupSocket();
+    _setupNetworkListener();
     _loadChatsFromLocal();
     _startOnlineStatusRefreshTimer();
   }
@@ -55,6 +61,60 @@ class ChatProvider extends ChangeNotifier {
     SocketService.instance.onError = _handleSocketError;
     SocketService.instance.onInvitationResponse = _handleInvitationResponse;
     SocketService.instance.onMessageStatusUpdated = _handleMessageStatusUpdated;
+  }
+
+  void _setupNetworkListener() {
+    // Listen to network connectivity changes
+    NetworkService.instance.addListener(_handleNetworkChange);
+  }
+
+  void _handleNetworkChange() {
+    final networkService = NetworkService.instance;
+
+    if (networkService.isConnected && !networkService.isReconnecting) {
+      // Network is connected, attempt to reconnect socket and refresh statuses
+      print('📱 ChatProvider: Network reconnected, refreshing services');
+
+      // Attempt socket reconnection
+      SocketService.instance.handleNetworkReconnection();
+
+      // Refresh online statuses
+      _refreshAllStatuses();
+    } else if (!networkService.isConnected) {
+      print('📱 ChatProvider: Network disconnected');
+    }
+  }
+
+  void _refreshAllStatuses() async {
+    try {
+      // Refresh online statuses for all users
+      await refreshOnlineStatus();
+
+      // Restart message status tracking for all tracked messages
+      _restartMessageStatusTracking();
+
+      print(
+          '📱 ChatProvider: All statuses refreshed after network reconnection');
+    } catch (e) {
+      print(
+          '📱 ChatProvider: Error refreshing statuses after network reconnection: $e');
+    }
+  }
+
+  void _restartMessageStatusTracking() {
+    // Restart tracking for all messages that need status updates
+    for (final chatId in _messages.keys) {
+      final messages = _messages[chatId];
+      if (messages != null) {
+        for (final message in messages) {
+          if ((message.status == 'sent' || message.status == 'delivered') &&
+              message.senderId == SocketService.instance.currentUserId) {
+            _startEnhancedMessageStatusTracking(
+                message.id, chatId, message.senderId);
+          }
+        }
+      }
+    }
   }
 
   void _handleSocketMessage(Map<String, dynamic> data) {
@@ -154,8 +214,17 @@ class ChatProvider extends ChangeNotifier {
       _messages[chatId]!.add(newMessage);
       _saveMessagesToLocal(chatId, _messages[chatId]!);
 
-      // Update chat's last message timestamp
-      updateChatLastMessage(chatId, newMessage.createdAt);
+      // Update chat's last message timestamp and content
+      updateChatLastMessage(chatId, newMessage.createdAt, newMessage);
+
+      // Start enhanced tracking message status if it's from current user and still in 'sent' or 'delivered' status
+      final socketCurrentUserId = SocketService.instance.currentUserId;
+      if (newMessage.senderId == socketCurrentUserId &&
+          (newMessage.status == 'sent' || newMessage.status == 'delivered') &&
+          socketCurrentUserId != null) {
+        _startEnhancedMessageStatusTracking(
+            newMessage.id, chatId, socketCurrentUserId);
+      }
 
       // Update message status to delivered and send WebSocket update
       _updateMessageStatus(chatId, newMessage.id, 'delivered');
@@ -214,9 +283,29 @@ class ChatProvider extends ChangeNotifier {
 
       // Update typing status for the user
       if (_chatUsers.containsKey(senderId)) {
-        _chatUsers[senderId] = _chatUsers[senderId]!.copyWith(
-          isTyping: isTyping,
-        );
+        final currentUser = _chatUsers[senderId]!;
+
+        if (isTyping) {
+          // Store current online status as previous status when typing starts
+          _chatUsers[senderId] = currentUser.copyWith(
+            isTyping: true,
+            previousOnlineStatus: currentUser.isOnline,
+          );
+          print(
+              '📱 ChatProvider: Stored previous online status for user $senderId: ${currentUser.isOnline}');
+        } else {
+          // Restore previous online status when typing stops
+          final previousStatus =
+              currentUser.previousOnlineStatus ?? currentUser.isOnline;
+          _chatUsers[senderId] = currentUser.copyWith(
+            isTyping: false,
+            isOnline: previousStatus,
+            previousOnlineStatus: null, // Clear the stored status
+          );
+          print(
+              '📱 ChatProvider: Restored online status for user $senderId: $previousStatus');
+        }
+
         notifyListeners();
       } else {
         print('📱 ChatProvider: User $senderId not found in chat users');
@@ -287,10 +376,195 @@ class ChatProvider extends ChangeNotifier {
     if (messages != null) {
       for (int i = 0; i < messages.length; i++) {
         if (messages[i].id == messageId) {
-          messages[i] = messages[i].copyWith(status: status);
+          final oldMessage = messages[i];
+          final updatedMessage = oldMessage.copyWith(status: status);
+          messages[i] = updatedMessage;
+
+          // Update the last message in chat if this is the last message
+          if (i == messages.length - 1) {
+            updateChatLastMessage(
+                chatId, updatedMessage.createdAt, updatedMessage);
+          }
+
+          // Always update the last message status in chat list if this message is the last message
+          updateLastMessageStatus(chatId, messageId, status);
+
           _saveMessagesToLocal(chatId, messages);
+
+          // Stop tracking if message is delivered or read
+          if (status == 'delivered' || status == 'read') {
+            _stopMessageStatusTracking(messageId);
+          }
+
+          print(
+              '📱 ChatProvider: Updated message $messageId status to $status in chat $chatId');
           break;
         }
+      }
+    }
+  }
+
+  // Start tracking message status for real-time updates
+  void _startMessageStatusTracking(String messageId, String chatId) {
+    // Cancel existing timer if any
+    _messageStatusTimers[messageId]?.cancel();
+
+    // Create a timer to check message status periodically
+    _messageStatusTimers[messageId] = Timer.periodic(
+      const Duration(seconds: 2), // Check every 2 seconds
+      (timer) async {
+        try {
+          // Only track messages that are still in 'sent' status
+          final messages = _messages[chatId];
+          if (messages != null) {
+            final messageIndex = messages.indexWhere((m) => m.id == messageId);
+            if (messageIndex != -1) {
+              final message = messages[messageIndex];
+
+              // Stop tracking if message is already delivered or read
+              if (message.status == 'delivered' || message.status == 'read') {
+                _stopMessageStatusTracking(messageId);
+                return;
+              }
+
+              // Check if message should be marked as delivered
+              if (message.status == 'sent') {
+                // Simulate delivery after a short delay
+                await Future.delayed(const Duration(seconds: 1));
+                _updateMessageStatus(chatId, messageId, 'delivered');
+              }
+            } else {
+              // Message not found, stop tracking
+              _stopMessageStatusTracking(messageId);
+            }
+          } else {
+            // Chat not found, stop tracking
+            _stopMessageStatusTracking(messageId);
+          }
+        } catch (e) {
+          print('📱 ChatProvider: Error in message status tracking: $e');
+          _stopMessageStatusTracking(messageId);
+        }
+      },
+    );
+  }
+
+  // Enhanced message status tracking that checks for active users
+  void _startEnhancedMessageStatusTracking(
+      String messageId, String chatId, String senderId) {
+    // Cancel existing timer if any
+    _messageStatusTimers[messageId]?.cancel();
+
+    // Create a timer to check message status periodically
+    _messageStatusTimers[messageId] = Timer.periodic(
+      const Duration(seconds: 2), // Check every 2 seconds
+      (timer) async {
+        try {
+          final messages = _messages[chatId];
+          if (messages != null) {
+            final messageIndex = messages.indexWhere((m) => m.id == messageId);
+            if (messageIndex != -1) {
+              final message = messages[messageIndex];
+
+              // Stop tracking if message is already read
+              if (message.status == 'read') {
+                _stopMessageStatusTracking(messageId);
+                return;
+              }
+
+              // Get the other user ID (receiver)
+              final otherUserId = _getOtherUserId(chatId);
+
+              if (message.status == 'sent') {
+                // Check if receiver is active in this chat
+                if (isUserActiveInChat(otherUserId, chatId)) {
+                  // Receiver is active, mark as read immediately
+                  _updateMessageStatus(chatId, messageId, 'read');
+                } else {
+                  // Receiver is not active, mark as delivered
+                  _updateMessageStatus(chatId, messageId, 'delivered');
+                }
+              } else if (message.status == 'delivered') {
+                // Check if receiver has become active since last check
+                if (isUserActiveInChat(otherUserId, chatId)) {
+                  // Receiver is now active, mark as read
+                  _updateMessageStatus(chatId, messageId, 'read');
+                }
+              }
+            } else {
+              // Message not found, stop tracking
+              _stopMessageStatusTracking(messageId);
+            }
+          } else {
+            // Chat not found, stop tracking
+            _stopMessageStatusTracking(messageId);
+          }
+        } catch (e) {
+          print(
+              '📱 ChatProvider: Error in enhanced message status tracking: $e');
+          _stopMessageStatusTracking(messageId);
+        }
+      },
+    );
+  }
+
+  // Stop tracking message status
+  void _stopMessageStatusTracking(String messageId) {
+    _messageStatusTimers[messageId]?.cancel();
+    _messageStatusTimers.remove(messageId);
+  }
+
+  // Track when a user enters a chat screen
+  void setUserActiveInChat(String userId, String chatId) {
+    _activeChatScreens[userId] = chatId;
+    print('📱 ChatProvider: User $userId is now active in chat $chatId');
+
+    // Check if there are any unread messages from this user in this chat
+    _checkAndUpdateMessageStatusForActiveUser(userId, chatId);
+  }
+
+  // Track when a user leaves a chat screen
+  void setUserInactiveInChat(String userId) {
+    _activeChatScreens.remove(userId);
+    print('📱 ChatProvider: User $userId is no longer active in any chat');
+  }
+
+  // Check if a user is active in a specific chat
+  bool isUserActiveInChat(String userId, String chatId) {
+    return _activeChatScreens[userId] == chatId;
+  }
+
+  // Check and update message status when user becomes active in chat
+  void _checkAndUpdateMessageStatusForActiveUser(String userId, String chatId) {
+    final messages = _messages[chatId];
+    if (messages != null) {
+      bool hasUnreadMessages = false;
+
+      for (int i = 0; i < messages.length; i++) {
+        final message = messages[i];
+        // Check if this message is from the other user and not read
+        if (message.senderId != userId && message.status != 'read') {
+          hasUnreadMessages = true;
+          // Mark message as read immediately since user is now in the chat
+          final updatedMessage = message.copyWith(status: 'read');
+          messages[i] = updatedMessage;
+
+          // Send WebSocket status update
+          if (SocketService.instance.isAuthenticated) {
+            SocketService.instance.updateMessageStatus(
+              messageId: updatedMessage.id,
+              status: 'read',
+            );
+          }
+
+          print(
+              '📱 ChatProvider: Marked message ${updatedMessage.id} as read for active user $userId');
+        }
+      }
+
+      if (hasUnreadMessages) {
+        _saveMessagesToLocal(chatId, messages);
+        notifyListeners();
       }
     }
   }
@@ -444,6 +718,16 @@ class ChatProvider extends ChangeNotifier {
         _messages[chatId] = newMessages;
         await _saveMessagesToLocal(chatId, _messages[chatId]!);
 
+        // Start enhanced tracking message status for messages that are still in 'sent' or 'delivered' status
+        for (final message in newMessages) {
+          if ((message.status == 'sent' || message.status == 'delivered') &&
+              message.senderId == currentUserId &&
+              currentUserId != null) {
+            _startEnhancedMessageStatusTracking(
+                message.id, chatId, currentUserId);
+          }
+        }
+
         // Send WebSocket status updates for messages that are now read
         if (SocketService.instance.isAuthenticated) {
           for (final message in newMessages) {
@@ -564,7 +848,13 @@ class ChatProvider extends ChangeNotifier {
         // Add to local messages immediately
         _messages[chatId] = [...(_messages[chatId] ?? []), tempMessage];
         await _saveMessagesToLocal(chatId, _messages[chatId]!);
-        updateChatLastMessage(chatId, tempMessage.createdAt);
+
+        // Always update the last message in chat
+        updateChatLastMessage(chatId, tempMessage.createdAt, tempMessage);
+
+        // Start enhanced tracking message status for real-time updates
+        _startEnhancedMessageStatusTracking(tempMessage.id, chatId, userId);
+
         notifyListeners();
 
         return;
@@ -584,8 +874,11 @@ class ChatProvider extends ChangeNotifier {
         _messages[chatId] = [...(_messages[chatId] ?? []), newMessage];
         await _saveMessagesToLocal(chatId, _messages[chatId]!);
 
-        // Update chat's last message timestamp
-        updateChatLastMessage(chatId, newMessage.createdAt);
+        // Always update the last message in chat
+        updateChatLastMessage(chatId, newMessage.createdAt, newMessage);
+
+        // Start enhanced tracking message status for real-time updates
+        _startEnhancedMessageStatusTracking(newMessage.id, chatId, userId);
 
         notifyListeners();
       } else {
@@ -625,6 +918,20 @@ class ChatProvider extends ChangeNotifier {
     return _chatUsers[userId]?.isTyping ?? false;
   }
 
+  // Get effective online status (considers typing state)
+  bool getEffectiveOnlineStatus(String userId) {
+    final user = _chatUsers[userId];
+    if (user == null) return false;
+
+    // If user is typing, show them as online (regardless of actual status)
+    if (user.isTyping) {
+      return true;
+    }
+
+    // Otherwise return the actual online status
+    return user.isOnline;
+  }
+
   String _getOtherUserId(String chatId) {
     try {
       final chat = _chats.firstWhere((c) => c.id == chatId);
@@ -661,11 +968,46 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateChatLastMessage(String chatId, DateTime timestamp) {
+  void updateChatLastMessage(String chatId, DateTime timestamp,
+      [Message? lastMessage]) {
     final index = _chats.indexWhere((c) => c.id == chatId);
     if (index != -1) {
-      _chats[index] = _chats[index].copyWith(lastMessageAt: timestamp);
+      Map<String, dynamic>? lastMessageData;
+      if (lastMessage != null) {
+        lastMessageData = {
+          'id': lastMessage.id,
+          'content': lastMessage.content,
+          'sender_id': lastMessage.senderId,
+          'status': lastMessage.status,
+          'created_at': lastMessage.createdAt.toIso8601String(),
+        };
+      }
+      _chats[index] = _chats[index].copyWith(
+        lastMessageAt: timestamp,
+        lastMessage: lastMessageData,
+      );
       notifyListeners();
+    }
+  }
+
+  // Update last message status in real-time
+  void updateLastMessageStatus(
+      String chatId, String messageId, String newStatus) {
+    final index = _chats.indexWhere((c) => c.id == chatId);
+    if (index != -1) {
+      final chat = _chats[index];
+      if (chat.lastMessage != null && chat.lastMessage!['id'] == messageId) {
+        // Update the last message status
+        final updatedLastMessage = Map<String, dynamic>.from(chat.lastMessage!);
+        updatedLastMessage['status'] = newStatus;
+
+        _chats[index] = chat.copyWith(
+          lastMessage: updatedLastMessage,
+        );
+        notifyListeners();
+        print(
+            '📱 ChatProvider: Updated last message status to $newStatus for chat $chatId');
+      }
     }
   }
 
@@ -678,12 +1020,27 @@ class ChatProvider extends ChangeNotifier {
     print('📱 ChatProvider: Available users: ${_chatUsers.keys.toList()}');
 
     if (_chatUsers.containsKey(userId)) {
-      _chatUsers[userId] = _chatUsers[userId]!.copyWith(
-        isOnline: isOnline,
-        lastSeen: lastSeen,
-      );
-      print(
-          '📱 ChatProvider: Successfully updated online status for user $userId - Online: $isOnline');
+      final currentUser = _chatUsers[userId]!;
+
+      // If user is currently typing, store the new online status as previous status
+      // but don't change the current online status (keep it as is for typing display)
+      if (currentUser.isTyping) {
+        _chatUsers[userId] = currentUser.copyWith(
+          lastSeen: lastSeen,
+          previousOnlineStatus: isOnline, // Store the new status as previous
+        );
+        print(
+            '📱 ChatProvider: User $userId is typing - stored new online status as previous: $isOnline');
+      } else {
+        // Normal case - update online status directly
+        _chatUsers[userId] = currentUser.copyWith(
+          isOnline: isOnline,
+          lastSeen: lastSeen,
+        );
+        print(
+            '📱 ChatProvider: Successfully updated online status for user $userId - Online: $isOnline');
+      }
+
       notifyListeners();
     } else {
       print(
@@ -695,16 +1052,77 @@ class ChatProvider extends ChangeNotifier {
     _updateUserOnlineStatus(userId, isOnline, isOnline ? null : DateTime.now());
   }
 
+  Future<void> refreshUserOnlineStatus(String userId) async {
+    try {
+      print('📱 ChatProvider: Refreshing online status for user $userId');
+
+      final response = await ApiService.getUsersOnlineStatus([userId]);
+
+      if (response['success'] == true) {
+        final usersData = response['users'] as List;
+
+        if (usersData.isNotEmpty) {
+          final userData = usersData.first;
+          final isOnline = userData['is_online'] ?? false;
+          final lastSeen = userData['last_seen'] != null
+              ? DateTime.parse(userData['last_seen'])
+              : null;
+
+          // Use the updated _updateUserOnlineStatus method that handles typing state
+          _updateUserOnlineStatus(userId, isOnline, lastSeen);
+          print(
+              '📱 ChatProvider: Successfully refreshed online status for user $userId - Online: $isOnline');
+        }
+      } else {
+        print(
+            '📱 ChatProvider: Failed to refresh online status for user $userId: ${response['message']}');
+      }
+    } catch (e) {
+      print(
+          '📱 ChatProvider: Error refreshing online status for user $userId: $e');
+    }
+  }
+
+  // Manual refresh method that can be called from UI
+  Future<void> manualRefreshOnlineStatus() async {
+    print('📱 ChatProvider: Manual online status refresh requested');
+    await refreshOnlineStatus();
+  }
+
   Future<void> refreshOnlineStatus() async {
     try {
-      // TODO: Implement getUsersOnlineStatus API endpoint
-      // final response = await ApiService.getUsersOnlineStatus();
-      // For now, we'll just mark all users as online if they have recent activity
-      // This can be improved when the backend API is ready
+      // Get all user IDs from chat users
+      final userIds = _chatUsers.keys.toList();
+
+      if (userIds.isEmpty) {
+        print('📱 ChatProvider: No users to refresh online status for');
+        return;
+      }
 
       print(
-          '📱 ChatProvider: Online status refresh - using WebSocket data only');
-      // Online status will be updated via WebSocket events
+          '📱 ChatProvider: Refreshing online status for ${userIds.length} users: $userIds');
+
+      final response = await ApiService.getUsersOnlineStatus(userIds);
+
+      if (response['success'] == true) {
+        final usersData = response['users'] as List;
+
+        for (final userData in usersData) {
+          final userId = userData['id'].toString();
+          final isOnline = userData['is_online'] ?? false;
+          final lastSeen = userData['last_seen'] != null
+              ? DateTime.parse(userData['last_seen'])
+              : null;
+
+          _updateUserOnlineStatus(userId, isOnline, lastSeen);
+        }
+
+        print(
+            '📱 ChatProvider: Successfully refreshed online status for ${usersData.length} users');
+      } else {
+        print(
+            '📱 ChatProvider: Failed to refresh online status: ${response['message']}');
+      }
     } catch (e) {
       print('📱 ChatProvider: Error refreshing online status: $e');
       // Don't throw error - online status is not critical
@@ -713,7 +1131,8 @@ class ChatProvider extends ChangeNotifier {
 
   void _startOnlineStatusRefreshTimer() {
     _refreshOnlineStatusTimer = Timer.periodic(
-      const Duration(minutes: 2),
+      const Duration(
+          seconds: 30), // Refresh every 30 seconds for more real-time updates
       (timer) async {
         await refreshOnlineStatus();
       },
@@ -729,6 +1148,16 @@ class ChatProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposeOnlineStatusTimer();
+
+    // Cancel all message status tracking timers
+    for (final timer in _messageStatusTimers.values) {
+      timer.cancel();
+    }
+    _messageStatusTimers.clear();
+
+    // Remove network listener
+    NetworkService.instance.removeListener(_handleNetworkChange);
+
     super.dispose();
   }
 }

@@ -11,6 +11,7 @@ class User {
       invitationStatus; // 'pending', 'accepted', 'declined', 'deleted', null
   final String? invitationId; // ID of the invitation if exists
   final bool isTyping; // For typing indicators
+  final bool? previousOnlineStatus; // Store previous online status when typing
 
   User({
     required this.id,
@@ -24,6 +25,7 @@ class User {
     this.invitationStatus,
     this.invitationId,
     this.isTyping = false,
+    this.previousOnlineStatus,
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory User.fromJson(dynamic json) {
@@ -47,6 +49,7 @@ class User {
         invitationStatus: data['invitation_status'],
         invitationId: data['invitation_id']?.toString(),
         isTyping: data['is_typing'] ?? false,
+        previousOnlineStatus: data['previous_online_status'],
       );
     } catch (e) {
       print('📱 User.fromJson error: $e for data: $json');
@@ -74,6 +77,7 @@ class User {
       'invitation_status': invitationStatus,
       'invitation_id': invitationId,
       'is_typing': isTyping,
+      'previous_online_status': previousOnlineStatus,
     };
   }
 
@@ -89,6 +93,7 @@ class User {
     String? invitationStatus,
     String? invitationId,
     bool? isTyping,
+    bool? previousOnlineStatus,
   }) {
     return User(
       id: id ?? this.id,
@@ -102,6 +107,7 @@ class User {
       invitationStatus: invitationStatus ?? this.invitationStatus,
       invitationId: invitationId ?? this.invitationId,
       isTyping: isTyping ?? this.isTyping,
+      previousOnlineStatus: previousOnlineStatus ?? this.previousOnlineStatus,
     );
   }
 

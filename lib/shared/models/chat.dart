@@ -7,6 +7,8 @@ class Chat {
   final DateTime createdAt;
   final DateTime updatedAt;
   final Map<String, dynamic>? otherUser; // Store the other_user data from API
+  final Map<String, dynamic>?
+      lastMessage; // Store the last message data from API
 
   Chat({
     required this.id,
@@ -17,6 +19,7 @@ class Chat {
     required this.createdAt,
     required this.updatedAt,
     this.otherUser,
+    this.lastMessage,
   });
 
   factory Chat.fromJson(dynamic json) {
@@ -37,6 +40,9 @@ class Chat {
         updatedAt: DateTime.parse(data['updated_at']),
         otherUser: data['other_user'] != null
             ? Map<String, dynamic>.from(data['other_user'])
+            : null,
+        lastMessage: data['last_message'] != null
+            ? Map<String, dynamic>.from(data['last_message'])
             : null,
       );
     }
@@ -65,6 +71,7 @@ class Chat {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       if (otherUser != null) 'other_user': otherUser,
+      if (lastMessage != null) 'last_message': lastMessage,
     };
   }
 
@@ -90,6 +97,7 @@ class Chat {
     DateTime? createdAt,
     DateTime? updatedAt,
     Map<String, dynamic>? otherUser,
+    Map<String, dynamic>? lastMessage,
   }) {
     return Chat(
       id: id ?? this.id,
@@ -100,6 +108,7 @@ class Chat {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       otherUser: otherUser ?? this.otherUser,
+      lastMessage: lastMessage ?? this.lastMessage,
     );
   }
 }

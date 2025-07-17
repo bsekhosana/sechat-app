@@ -12,6 +12,7 @@ import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/socket_service.dart';
+import 'core/services/network_service.dart';
 
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => InvitationProvider()),
+        ChangeNotifierProvider(create: (_) => NetworkService.instance),
       ],
       child: const SeChatApp(),
     ),

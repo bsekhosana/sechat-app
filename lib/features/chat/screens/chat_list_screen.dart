@@ -10,6 +10,7 @@ import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/socket_service.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/network_service.dart';
 import 'chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -285,26 +286,39 @@ Download now and let's chat securely!
                   ),
                   const SizedBox(width: 12),
                   // Connection status indicator
-                  Consumer<ChatProvider>(
-                    builder: (context, chatProvider, child) {
-                      final socketService = SocketService.instance;
+                  Consumer2<ChatProvider, NetworkService>(
+                    builder: (context, chatProvider, networkService, child) {
                       Color statusColor;
                       IconData statusIcon;
                       String statusText;
 
-                      if (socketService.isConnected &&
-                          socketService.isAuthenticated) {
-                        statusColor = Colors.green;
-                        statusIcon = Icons.wifi;
-                        statusText = 'Connected';
-                      } else if (socketService.isConnecting) {
-                        statusColor = Colors.orange;
-                        statusIcon = Icons.wifi_find;
-                        statusText = 'Connecting...';
-                      } else {
+                      if (!networkService.isConnected) {
+                        // Network is disconnected
                         statusColor = Colors.red;
                         statusIcon = Icons.wifi_off;
-                        statusText = 'Offline';
+                        statusText = 'No internet connection';
+                      } else if (networkService.isReconnecting) {
+                        // Network is reconnecting
+                        statusColor = Colors.orange;
+                        statusIcon = Icons.wifi_find;
+                        statusText = 'Reconnecting...';
+                      } else {
+                        // Network is connected, check socket status
+                        final socketService = SocketService.instance;
+                        if (socketService.isConnected &&
+                            socketService.isAuthenticated) {
+                          statusColor = Colors.green;
+                          statusIcon = Icons.wifi;
+                          statusText = 'Connected';
+                        } else if (socketService.isConnecting) {
+                          statusColor = Colors.orange;
+                          statusIcon = Icons.wifi_find;
+                          statusText = 'Connecting...';
+                        } else {
+                          statusColor = Colors.orange;
+                          statusIcon = Icons.wifi_off;
+                          statusText = 'Socket disconnected';
+                        }
                       }
 
                       return Tooltip(
@@ -403,7 +417,8 @@ Download now and let's chat securely!
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            chatProvider.error!,
+                            NetworkService.instance.getUserFriendlyErrorMessage(
+                                chatProvider.error),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.7),
@@ -471,56 +486,65 @@ Download now and let's chat securely!
                     );
                   }
 
-                  return AnimationLimiter(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: chatProvider.chats.length,
-                      itemBuilder: (context, index) {
-                        final chat = chatProvider.chats[index];
-                        final otherUserId = chat.getOtherUserId(
-                          context.read<AuthProvider>().currentUser?.id ?? '',
-                        );
-                        final otherUser = chatProvider.getChatUser(otherUserId);
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      await chatProvider.manualRefreshOnlineStatus();
+                    },
+                    color: const Color(0xFFFF6B35),
+                    child: AnimationLimiter(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: chatProvider.chats.length,
+                        itemBuilder: (context, index) {
+                          final chat = chatProvider.chats[index];
+                          final otherUserId = chat.getOtherUserId(
+                            context.read<AuthProvider>().currentUser?.id ?? '',
+                          );
+                          final otherUser =
+                              chatProvider.getChatUser(otherUserId);
 
-                        // Get username from chat data if user not found
-                        String displayUsername = 'Unknown User';
-                        if (otherUser != null) {
-                          displayUsername = otherUser.username;
-                        } else if (chat.otherUser != null &&
-                            chat.otherUser!.containsKey('username')) {
-                          displayUsername = chat.otherUser!['username'];
-                        }
+                          // Get username from chat data if user not found
+                          String displayUsername = 'Unknown User';
+                          if (otherUser != null) {
+                            displayUsername = otherUser.username;
+                          } else if (chat.otherUser != null &&
+                              chat.otherUser!.containsKey('username')) {
+                            displayUsername = chat.otherUser!['username'];
+                          }
 
-                        // Get online status
-                        bool isOnline = false;
-                        if (otherUser != null) {
-                          isOnline = otherUser.isOnline;
-                        } else if (chat.otherUser != null &&
-                            chat.otherUser!.containsKey('is_online')) {
-                          isOnline = chat.otherUser!['is_online'] ?? false;
-                        }
+                          // Get online status
+                          bool isOnline = false;
+                          if (otherUser != null) {
+                            // Use effective online status that considers typing state
+                            isOnline = chatProvider
+                                .getEffectiveOnlineStatus(otherUserId);
+                          } else if (chat.otherUser != null &&
+                              chat.otherUser!.containsKey('is_online')) {
+                            isOnline = chat.otherUser!['is_online'] ?? false;
+                          }
 
-                        return AnimationConfiguration.staggeredList(
-                          position: index,
-                          duration: const Duration(milliseconds: 375),
-                          child: SlideAnimation(
-                            verticalOffset: 50.0,
-                            child: FadeInAnimation(
-                              child: GestureDetector(
-                                onLongPress: () => _showChatOptions(
-                                    context, chat, otherUser, displayUsername),
-                                child: _ChatCard(
-                                  chat: chat,
-                                  otherUser: otherUser,
-                                  displayUsername: displayUsername,
-                                  isOnline: isOnline,
-                                  onTap: () => _openChat(chat),
+                          return AnimationConfiguration.staggeredList(
+                            position: index,
+                            duration: const Duration(milliseconds: 375),
+                            child: SlideAnimation(
+                              verticalOffset: 50.0,
+                              child: FadeInAnimation(
+                                child: GestureDetector(
+                                  onLongPress: () => _showChatOptions(context,
+                                      chat, otherUser, displayUsername),
+                                  child: _ChatCard(
+                                    chat: chat,
+                                    otherUser: otherUser,
+                                    displayUsername: displayUsername,
+                                    isOnline: isOnline,
+                                    onTap: () => _openChat(chat),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   );
                 },
@@ -611,14 +635,34 @@ class _ChatCard extends StatelessWidget {
                 ),
               );
             } else {
-              return Text(
-                chat.lastMessageAt != null
-                    ? _formatLastMessageTime(chat.lastMessageAt!)
-                    : 'No messages yet',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 14,
-                ),
+              // Get last message content
+              final lastMessageContent = _getLastMessageContent(chat);
+              final currentUserId =
+                  context.read<AuthProvider>().currentUser?.id ?? '';
+              final lastMessageSenderId =
+                  chat.lastMessage?['sender_id']?.toString();
+              final isLastMessageFromMe = lastMessageSenderId == currentUserId;
+
+              return Row(
+                children: [
+                  // Show tick status only for messages from other users
+                  if (!isLastMessageFromMe && lastMessageContent.isNotEmpty)
+                    _buildMessageStatus(
+                        chat.lastMessage?['status']?.toString() ?? 'sent'),
+                  Expanded(
+                    child: Text(
+                      lastMessageContent.isNotEmpty
+                          ? lastMessageContent
+                          : 'No messages yet',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 14,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               );
             }
           },
@@ -666,21 +710,6 @@ class _ChatCard extends StatelessWidget {
     );
   }
 
-  String _formatLastMessageTime(DateTime time) {
-    final now = DateTime.now();
-    final difference = now.difference(time);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
-
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -693,5 +722,44 @@ class _ChatCard extends StatelessWidget {
     } else {
       return '${time.day}/${time.month}/${time.year}';
     }
+  }
+
+  String _getLastMessageContent(Chat chat) {
+    if (chat.lastMessage != null && chat.lastMessage!.containsKey('content')) {
+      return chat.lastMessage!['content'] as String;
+    }
+    return '';
+  }
+
+  Widget _buildMessageStatus(String status) {
+    IconData icon;
+    Color color;
+
+    switch (status) {
+      case 'sent':
+        icon = Icons.check;
+        color = Colors.grey;
+        break;
+      case 'delivered':
+        icon = Icons.done_all;
+        color = Colors.grey;
+        break;
+      case 'read':
+        icon = Icons.done_all;
+        color = const Color(0xFF2196F3);
+        break;
+      default:
+        icon = Icons.check;
+        color = Colors.grey;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Icon(
+        icon,
+        size: 14,
+        color: color,
+      ),
+    );
   }
 }

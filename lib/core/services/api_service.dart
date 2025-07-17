@@ -97,6 +97,11 @@ class ApiService {
     return get('/profile');
   }
 
+  static Future<Map<String, dynamic>> getUsersOnlineStatus(
+      List<String> userIds) {
+    return post('/users/online-status', {'user_ids': userIds});
+  }
+
   // Chat endpoints
   static Future<Map<String, dynamic>> getChats() {
     return get('/chats');

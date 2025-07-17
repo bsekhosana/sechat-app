@@ -25,11 +25,18 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+    // Add scroll listener to track position
+    _scrollController.addListener(_onScroll);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final chatProvider = context.read<ChatProvider>();
       final currentUser = context.read<AuthProvider>().currentUser;
 
       if (currentUser != null) {
+        // Set current user as active in this chat
+        chatProvider.setUserActiveInChat(currentUser.id, widget.chat.id);
+
         chatProvider.loadMessages(widget.chat.id, currentUser.id);
         chatProvider.markMessagesAsRead(widget.chat.id, currentUser.id);
 
@@ -38,12 +45,54 @@ class _ChatScreenState extends State<ChatScreen> {
         if (otherUserId.isNotEmpty) {
           print(
               '📱 ChatScreen: Refreshing online status for user $otherUserId');
-          // The online status will be updated via WebSocket events
+          // Refresh online status via API
+          await chatProvider.refreshUserOnlineStatus(otherUserId);
         }
+
+        // Add listener to scroll to bottom when new messages arrive
+        chatProvider.addListener(_onMessagesChanged);
+
+        // No need to scroll to bottom initially since ListView is reversed
+        // Messages will appear at the bottom by default
       } else {
         print('📱 ChatScreen: Current user not found');
       }
     });
+  }
+
+  void _onScroll() {
+    // Trigger rebuild to update floating action button visibility
+    setState(() {});
+  }
+
+  void _onMessagesChanged() {
+    final chatProvider = context.read<ChatProvider>();
+    final messages = chatProvider.getMessagesForChat(widget.chat.id);
+
+    // Scroll to bottom if there are messages
+    if (messages.isNotEmpty && _scrollController.hasClients) {
+      try {
+        // Check if this is the initial load (no previous scroll position)
+        final isInitialLoad = _scrollController.position.pixels == 0;
+
+        if (isInitialLoad) {
+          // Always scroll to bottom on initial load
+          _scrollToBottom();
+        } else {
+          // For subsequent updates, only scroll if user is near bottom (top of reversed list)
+          final isAtBottom =
+              _scrollController.position.pixels <= 100; // 100px threshold
+
+          if (isAtBottom) {
+            _scrollToBottom();
+          }
+        }
+      } catch (e) {
+        // Handle case where scroll position is not available yet
+        print(
+            '📱 ChatScreen: Scroll position not available in _onMessagesChanged: $e');
+      }
+    }
   }
 
   @override
@@ -51,6 +100,16 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _typingTimer?.cancel();
+
+    // Remove listener to prevent memory leaks
+    context.read<ChatProvider>().removeListener(_onMessagesChanged);
+
+    // Set current user as inactive when leaving chat
+    final currentUser = context.read<AuthProvider>().currentUser;
+    if (currentUser != null) {
+      context.read<ChatProvider>().setUserInactiveInChat(currentUser.id);
+    }
+
     // Stop typing indicator when leaving chat
     if (_isTyping) {
       context.read<ChatProvider>().sendTypingIndicator(widget.chat.id, false);
@@ -80,11 +139,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _messageController.clear();
 
-    // Scroll to bottom
+    // Scroll to bottom after sending message
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
+        // Since ListView is reversed, scroll to 0 to show newest messages
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
@@ -100,10 +164,10 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       // Reset typing timer
-      _typingTimer?.cancel();
-      _typingTimer = Timer(const Duration(milliseconds: 1000), () {
-        _stopTypingIndicator();
-      });
+      // _typingTimer?.cancel();
+      // _typingTimer = Timer(const Duration(milliseconds: 1000), () {
+      //   _stopTypingIndicator();
+      // });
     } else {
       // If text is empty or only spaces, stop typing indicator
       if (_isTyping) {
@@ -321,16 +385,9 @@ class _ChatScreenState extends State<ChatScreen> {
                     builder: (context, chatProvider, child) {
                       final isTyping = chatProvider.isUserTyping(otherUserId);
 
-                      // Get real-time online status from ChatProvider
-                      final updatedOtherUser =
-                          chatProvider.getChatUser(otherUserId);
-                      bool isOnline = false;
-                      if (updatedOtherUser != null) {
-                        isOnline = updatedOtherUser.isOnline;
-                      } else if (widget.chat.otherUser != null &&
-                          widget.chat.otherUser!.containsKey('is_online')) {
-                        isOnline = widget.chat.otherUser!['is_online'] ?? false;
-                      }
+                      // Get effective online status that considers typing state
+                      final effectiveOnlineStatus =
+                          chatProvider.getEffectiveOnlineStatus(otherUserId);
 
                       if (isTyping) {
                         return Text(
@@ -343,10 +400,10 @@ class _ChatScreenState extends State<ChatScreen> {
                         );
                       } else {
                         return Text(
-                          isOnline ? 'Online' : 'Offline',
+                          effectiveOnlineStatus ? 'Online' : 'Offline',
                           style: TextStyle(
                             fontSize: 14, // Increased font size
-                            color: isOnline
+                            color: effectiveOnlineStatus
                                 ? Theme.of(context).colorScheme.primary
                                 : Theme.of(context).colorScheme.outline,
                           ),
@@ -452,8 +509,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   reverse:
                       true, // Start from bottom, scroll up for older messages
                   itemBuilder: (context, index) {
-                    // Use normal index since we want chronological order (oldest to newest)
-                    final message = messages[index];
+                    // Use reversed index since we want newest messages at bottom
+                    final message = messages[messages.length - 1 - index];
+                    final currentUser =
+                        context.read<AuthProvider>().currentUser;
                     final isOwnMessage = message.senderId == currentUser?.id;
 
                     return _MessageBubble(
@@ -509,6 +568,33 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: Consumer<ChatProvider>(
+        builder: (context, chatProvider, child) {
+          final messages = chatProvider.getMessagesForChat(widget.chat.id);
+
+          // Show scroll to bottom button if there are messages and user is not at bottom
+          if (messages.isNotEmpty && _scrollController.hasClients) {
+            try {
+              // Since ListView is reversed, check if user is near the top (which shows newest messages)
+              final isAtBottom = _scrollController.position.pixels <= 100;
+
+              if (!isAtBottom) {
+                return FloatingActionButton(
+                  onPressed: _scrollToBottom,
+                  mini: true,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  child: const Icon(Icons.keyboard_arrow_down,
+                      color: Colors.white),
+                );
+              }
+            } catch (e) {
+              // Handle case where scroll position is not available yet
+              print('📱 ChatScreen: Scroll position not available yet: $e');
+            }
+          }
+          return const SizedBox.shrink();
+        },
       ),
     );
   }
