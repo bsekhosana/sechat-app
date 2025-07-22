@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/message.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/local_storage_service.dart';
+import '../../../core/services/session_service.dart';
+import '../../../core/services/network_service.dart';
 import 'dart:async';
 
 class ChatScreen extends StatefulWidget {
@@ -19,6 +25,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  final _imagePicker = ImagePicker();
   Timer? _typingTimer;
   bool _isTyping = false;
 
@@ -35,10 +42,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (currentUser != null) {
         // Set current user as active in this chat
-        chatProvider.setUserActiveInChat(currentUser.id, widget.chat.id);
+        chatProvider.setUserActiveInChat(widget.chat.id);
 
-        chatProvider.loadMessages(widget.chat.id, currentUser.id);
-        chatProvider.markMessagesAsRead(widget.chat.id, currentUser.id);
+        chatProvider.loadMessages(widget.chat.id);
+        // Mark all messages as read when entering chat
+        chatProvider.markAllMessagesAsRead(widget.chat.id);
 
         // Refresh online status for the other user
         final otherUserId = widget.chat.getOtherUserId(currentUser.id);
@@ -46,7 +54,7 @@ class _ChatScreenState extends State<ChatScreen> {
           print(
               '📱 ChatScreen: Refreshing online status for user $otherUserId');
           // Refresh online status via API
-          await chatProvider.refreshUserOnlineStatus(otherUserId);
+          await chatProvider.refreshUserOnlineStatus();
         }
 
         // Add listener to scroll to bottom when new messages arrive
@@ -127,8 +135,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final currentUser = context.read<AuthProvider>().currentUser;
 
     if (currentUser != null) {
-      chatProvider.sendMessage(
-          widget.chat.id, _messageController.text.trim(), currentUser.id);
+      chatProvider.sendMessage(widget.chat.id, _messageController.text.trim());
     } else {
       print('📱 ChatScreen: Current user not found, cannot send message');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -164,10 +171,10 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       // Reset typing timer
-      // _typingTimer?.cancel();
-      // _typingTimer = Timer(const Duration(milliseconds: 1000), () {
-      //   _stopTypingIndicator();
-      // });
+      _typingTimer?.cancel();
+      _typingTimer = Timer(const Duration(milliseconds: 1500), () {
+        _stopTypingIndicator();
+      });
     } else {
       // If text is empty or only spaces, stop typing indicator
       if (_isTyping) {
@@ -181,9 +188,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _isTyping = true;
       final currentUser = context.read<AuthProvider>().currentUser;
       if (currentUser != null) {
-        context
-            .read<ChatProvider>()
-            .sendTypingIndicator(widget.chat.id, true, currentUser.id);
+        context.read<ChatProvider>().sendTypingIndicator(widget.chat.id, true);
       }
     }
   }
@@ -193,44 +198,239 @@ class _ChatScreenState extends State<ChatScreen> {
       _isTyping = false;
       final currentUser = context.read<AuthProvider>().currentUser;
       if (currentUser != null) {
-        context
-            .read<ChatProvider>()
-            .sendTypingIndicator(widget.chat.id, false, currentUser.id);
+        context.read<ChatProvider>().sendTypingIndicator(widget.chat.id, false);
       }
     }
   }
 
-  Future<void> _blockUser(String userId) async {
-    final confirmed = await showDialog<bool>(
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        await _sendImage(image);
+      }
+    } catch (e) {
+      print('📱 ChatScreen: Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendImage(XFile imageFile) async {
+    try {
+      final currentUser = context.read<AuthProvider>().currentUser;
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Read image data
+      final Uint8List imageData = await imageFile.readAsBytes();
+      final fileName =
+          '${LocalStorageService.instance.generateMessageId()}.jpg';
+
+      // Save image to local storage
+      final localPath =
+          await LocalStorageService.instance.saveImage(imageData, fileName);
+
+      // Create message
+      final messageId = LocalStorageService.instance.generateMessageId();
+      final message = Message(
+        id: messageId,
+        chatId: widget.chat.id,
+        senderId: currentUser.id,
+        content: '📷 Image',
+        type: MessageType.image,
+        status: 'sent',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        localFilePath: localPath,
+        fileName: imageFile.name,
+        fileSize: imageData.length,
+      );
+
+      // Save message to local storage
+      await LocalStorageService.instance.saveMessage(message);
+
+      // Add to local messages for UI
+      final chatProvider = context.read<ChatProvider>();
+      chatProvider.addMessageToChat(widget.chat.id, message);
+
+      // Try to send via Session if available
+      if (SessionService.instance.isConnected &&
+          NetworkService.instance.isConnected) {
+        try {
+          final otherUserId = chatProvider.getOtherUserId(widget.chat.id);
+          if (otherUserId.isNotEmpty) {
+            // For now, just send a text message indicating image was sent
+            // In a full implementation, you'd upload the image to a server
+            SessionService.instance.sendMessage(
+              receiverId: otherUserId,
+              content: '📷 Image sent',
+            );
+
+            // Keep status as 'sent' - will be updated when receiver confirms
+          }
+        } catch (e) {
+          print('📱 ChatScreen: Session send failed, image saved locally: $e');
+        }
+      } else {
+        // Add to pending messages for later sync
+        await LocalStorageService.instance.addPendingMessage(message);
+        print('📱 ChatScreen: Image queued for later sync');
+      }
+    } catch (e) {
+      print('📱 ChatScreen: Error sending image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sending image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleDeleteMessage(Message message, String deleteType) async {
+    try {
+      final chatProvider = context.read<ChatProvider>();
+
+      // Use the new ChatProvider method for message deletion
+      chatProvider.deleteMessage(widget.chat.id, message.id,
+          deleteType: deleteType);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(deleteType == 'for_me'
+                ? 'Message deleted for you'
+                : 'Message deleted for everyone'),
+            backgroundColor: const Color(0xFF4CAF50),
+          ),
+        );
+      }
+    } catch (e) {
+      print('📱 ChatScreen: Error deleting message: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting message: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showImagePickerOptions() {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text(
-          'Block User',
-          style: TextStyle(color: Colors.white),
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF2C2C2C),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        content: const Text(
-          'Are you sure you want to block this user? This will remove all chats and messages between you and prevent future communication.',
-          style: TextStyle(color: Colors.white70),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            const Text(
+              'Send Image',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _pickImage(ImageSource.camera);
+                    },
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Camera'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF6B35),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _pickImage(ImageSource.gallery);
+                    },
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('Gallery'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF6B35),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text('Block'),
-          ),
-        ],
       ),
     );
+  }
+
+  Future<void> _blockUser(String userId) async {
+    final confirmed = await _showBlockUserActionSheet(context);
 
     if (confirmed == true) {
       try {
@@ -263,37 +463,109 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _removeUserChats(String userId) async {
-    final confirmed = await showDialog<bool>(
+  Future<bool?> _showBlockUserActionSheet(BuildContext context) async {
+    return showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text(
-          'Remove Chats',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Are you sure you want to remove all chats and messages with this user? This action cannot be undone.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.orange,
-            ),
-            child: const Text('Remove'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Title
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Block User',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Description
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Are you sure you want to block this user? This will remove all chats and messages between you and prevent future communication.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Block'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  Future<void> _removeUserChats(String userId) async {
+    final confirmed = await _showRemoveChatsActionSheet(context);
 
     if (confirmed == true) {
       try {
@@ -325,6 +597,107 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     }
+  }
+
+  Future<bool?> _showRemoveChatsActionSheet(BuildContext context) async {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Title
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Remove Chats',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Description
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Are you sure you want to remove all chats and messages with this user? This action cannot be undone.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Remove'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -518,6 +891,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     return _MessageBubble(
                       message: message,
                       isOwnMessage: isOwnMessage,
+                      onDeleteMessage: _handleDeleteMessage,
                     );
                   },
                 );
@@ -539,6 +913,13 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             child: Row(
               children: [
+                // Image picker button
+                IconButton(
+                  onPressed: _showImagePickerOptions,
+                  icon: const Icon(Icons.image),
+                  color: const Color(0xFFFF6B35),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _messageController,
@@ -603,62 +984,209 @@ class _ChatScreenState extends State<ChatScreen> {
 class _MessageBubble extends StatelessWidget {
   final Message message;
   final bool isOwnMessage;
+  final Function(Message, String) onDeleteMessage;
 
-  const _MessageBubble({required this.message, required this.isOwnMessage});
+  const _MessageBubble({
+    required this.message,
+    required this.isOwnMessage,
+    required this.onDeleteMessage,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Align(
       alignment: isOwnMessage ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isOwnMessage
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16).copyWith(
-            bottomLeft: isOwnMessage
-                ? const Radius.circular(16)
-                : const Radius.circular(4),
-            bottomRight: isOwnMessage
-                ? const Radius.circular(4)
-                : const Radius.circular(16),
+      child: GestureDetector(
+        onLongPress: () => _showDeleteOptions(context),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: isOwnMessage
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16).copyWith(
+              bottomLeft: isOwnMessage
+                  ? const Radius.circular(16)
+                  : const Radius.circular(4),
+              bottomRight: isOwnMessage
+                  ? const Radius.circular(4)
+                  : const Radius.circular(16),
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              message.content,
-              style: TextStyle(
-                color: isOwnMessage
-                    ? Theme.of(context).colorScheme.onPrimary
-                    : Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _formatTime(message.createdAt),
-              style: TextStyle(
-                fontSize: 10,
-                color: isOwnMessage
-                    ? Theme.of(
-                        context,
-                      ).colorScheme.onPrimary.withValues(alpha: 0.7)
-                    : Theme.of(context).colorScheme.outline,
-              ),
-            ),
-            if (isOwnMessage) ...[
-              const SizedBox(width: 4),
-              Icon(
-                message.statusIcon,
-                size: 12,
-                color: message.getStatusColor(
-                  Theme.of(context).colorScheme.onPrimary,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (message.type == MessageType.image) ...[
+                // Image message
+                if (message.localFilePath != null &&
+                    message.localFilePath!.isNotEmpty)
+                  Container(
+                    constraints: const BoxConstraints(
+                      maxWidth: 200,
+                      maxHeight: 200,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(message.localFilePath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 200,
+                            height: 150,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[300],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.broken_image,
+                              size: 50,
+                              color: Colors.grey,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    width: 200,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.image,
+                      size: 50,
+                      color: Colors.grey,
+                    ),
+                  ),
+              ] else ...[
+                // Text message
+                Text(
+                  message.content,
+                  style: TextStyle(
+                    color: isOwnMessage
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 4),
+              Text(
+                _formatTime(message.createdAt),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isOwnMessage
+                      ? Theme.of(
+                          context,
+                        ).colorScheme.onPrimary.withValues(alpha: 0.7)
+                      : Theme.of(context).colorScheme.outline,
                 ),
               ),
+              if (isOwnMessage) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  message.statusIcon,
+                  size: 12,
+                  color: message.getStatusColor(
+                    Theme.of(context).colorScheme.onPrimary,
+                  ),
+                ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF2C2C2C),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+
+            const Text(
+              'Delete Message',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pop();
+                onDeleteMessage(message, 'for_me');
+              },
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Delete for me'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            if (isOwnMessage) ...[
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  onDeleteMessage(message, 'for_everyone');
+                },
+                icon: const Icon(Icons.delete_forever),
+                label: const Text('Delete for everyone'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                ),
+              ),
+            ),
           ],
         ),
       ),

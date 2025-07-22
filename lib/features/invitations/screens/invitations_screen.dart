@@ -1,13 +1,19 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../shared/providers/auth_provider.dart';
-import '../providers/invitation_provider.dart';
-import '../../../shared/models/invitation.dart';
-import '../../../shared/models/user.dart';
-import '../../../shared/widgets/search_widget.dart';
-import '../../../shared/widgets/profile_icon_widget.dart';
+import 'package:sechat_app/features/invitations/providers/invitation_provider.dart';
+import 'package:sechat_app/shared/widgets/qr_scanner_widget.dart';
+import 'package:sechat_app/shared/widgets/qr_generator_widget.dart';
+import 'package:sechat_app/shared/widgets/contact_details_widget.dart';
+import 'package:sechat_app/shared/providers/auth_provider.dart';
+import 'package:sechat_app/core/services/session_service.dart';
+import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
+import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
+import 'package:sechat_app/shared/widgets/user_avatar.dart';
+import 'package:sechat_app/shared/models/invitation.dart';
+import 'package:sechat_app/shared/models/user.dart';
 import '../../chat/screens/chat_screen.dart';
 import '../../chat/providers/chat_provider.dart';
 import '../../../shared/models/chat.dart';
@@ -22,24 +28,106 @@ class InvitationsScreen extends StatefulWidget {
 
 class _InvitationsScreenState extends State<InvitationsScreen>
     with WidgetsBindingObserver {
+  late InvitationProvider _invitationProvider;
   int _tabIndex = 0; // 0 = Received, 1 = Sent
+  List<String> _newInvitationIds = []; // Track new invitations for animation
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _invitationProvider = context.read<InvitationProvider>();
+    // Mark as on invitations screen
+    _invitationProvider.setOnInvitationsScreen(true);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<InvitationProvider>().loadInvitations();
-      // Mark as on invitations screen
-      context.read<InvitationProvider>().setOnInvitationsScreen(true);
+      _invitationProvider.loadInvitations();
+      _setupRealTimeUpdates();
     });
+  }
+
+  void _setupRealTimeUpdates() {
+    // Listen to invitation provider changes for real-time updates
+    _invitationProvider.addListener(_onInvitationProviderChanged);
+  }
+
+  void _onInvitationProviderChanged() {
+    if (!mounted) return;
+
+    // Check for new received invitations
+    final receivedInvitations = _invitationProvider.invitations
+        .where((invitation) =>
+            invitation.isReceived && invitation.status == 'pending')
+        .toList();
+
+    // Find new invitations that weren't in our list before
+    for (final invitation in receivedInvitations) {
+      if (!_newInvitationIds.contains(invitation.id)) {
+        _newInvitationIds.add(invitation.id);
+        _showNewInvitationToast(invitation);
+
+        // Remove from new list after 5 seconds
+        Future.delayed(const Duration(seconds: 5), () {
+          if (mounted) {
+            setState(() {
+              _newInvitationIds.remove(invitation.id);
+            });
+          }
+        });
+      }
+    }
+  }
+
+  void _showNewInvitationToast(Invitation invitation) {
+    // Get sender username
+    final senderUsername =
+        _invitationProvider.getInvitationUser(invitation.senderId)?.username ??
+            'Someone';
+
+    // Show toast message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.mail, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'New invitation from $senderUsername',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFFF6B35),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        action: SnackBarAction(
+          label: 'View',
+          textColor: Colors.white,
+          onPressed: () {
+            // Switch to received tab if not already there
+            if (_tabIndex != 0) {
+              setState(() {
+                _tabIndex = 0;
+              });
+            }
+          },
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Remove listener to prevent memory leaks
+    _invitationProvider.removeListener(_onInvitationProviderChanged);
     // Mark as not on invitations screen
-    context.read<InvitationProvider>().setOnInvitationsScreen(false);
+    _invitationProvider.setOnInvitationsScreen(false);
     super.dispose();
   }
 
@@ -48,10 +136,10 @@ class _InvitationsScreenState extends State<InvitationsScreen>
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.paused) {
       // Mark as not on invitations screen when app is paused
-      context.read<InvitationProvider>().setOnInvitationsScreen(false);
+      _invitationProvider.setOnInvitationsScreen(false);
     } else if (state == AppLifecycleState.resumed) {
       // Mark as on invitations screen when app is resumed
-      context.read<InvitationProvider>().setOnInvitationsScreen(true);
+      _invitationProvider.setOnInvitationsScreen(true);
     }
   }
 
@@ -119,36 +207,8 @@ Download now and let's chat securely!
   }
 
   void _deleteInvitation(Invitation invitation) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text(
-          'Delete Invitation',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Are you sure you want to delete this invitation?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
+    final confirmed =
+        await _showDeleteInvitationActionSheet(context, invitation);
 
     if (confirmed == true) {
       final provider = context.read<InvitationProvider>();
@@ -172,42 +232,115 @@ Download now and let's chat securely!
     }
   }
 
+  Future<bool?> _showDeleteInvitationActionSheet(
+      BuildContext context, Invitation invitation) async {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Title
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Delete Invitation',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Description
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Are you sure you want to delete this invitation?',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Delete'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _blockUserFromInvitation(Invitation invitation) async {
     final otherUserId = invitation.senderId;
     final otherUser =
         context.read<InvitationProvider>().getInvitationUser(otherUserId);
     final username = otherUser?.username ?? 'Unknown User';
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text(
-          'Block User',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          'Are you sure you want to block $username? This will remove all chats and messages between you and prevent future communication.',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text('Block'),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await _showBlockUserActionSheet(context, username);
 
     if (confirmed == true) {
       try {
@@ -238,6 +371,109 @@ Download now and let's chat securely!
         );
       }
     }
+  }
+
+  Future<bool?> _showBlockUserActionSheet(
+      BuildContext context, String username) async {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Title
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Block User',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Description
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Are you sure you want to block $username? This will remove all chats and messages between you and prevent future communication.',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Block'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   String _formatTime(DateTime time) {
@@ -283,8 +519,6 @@ Download now and let's chat securely!
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = context.watch<AuthProvider>().currentUser;
-    final userId = currentUser?.id;
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       body: SafeArea(
@@ -313,7 +547,7 @@ Download now and let's chat securely!
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
-                    child: SearchWidget(),
+                    child: InviteUserWidget(),
                   ),
                   const SizedBox(width: 12),
                   const ProfileIconWidget(),
@@ -441,12 +675,53 @@ Download now and let's chat securely!
                       itemBuilder: (context, index) {
                         final invitation = filtered[index];
                         // Get the other user (the user who is not the current user)
-                        final otherUserId = invitation.otherUserId ??
-                            (_tabIndex == 0
-                                ? invitation.senderId
-                                : invitation.recipientId);
+                        final otherUserId = _tabIndex == 0
+                            ? invitation.senderId
+                            : invitation.recipientId;
+
+                        // Use stored username from invitation if available, otherwise fall back to provider
                         final otherUser =
                             invitationProvider.getInvitationUser(otherUserId);
+                        final storedUsername = _tabIndex == 0
+                            ? invitation.senderUsername
+                            : invitation.recipientUsername;
+
+                        // Debug logging for sent invitations
+                        if (_tabIndex == 1) {
+                          print(
+                              '📱 InvitationsScreen - Sent invitation debug:');
+                          print(
+                              '📱 InvitationsScreen - Invitation ID: ${invitation.id}');
+                          print(
+                              '📱 InvitationsScreen - Sender ID: ${invitation.senderId}');
+                          print(
+                              '📱 InvitationsScreen - Recipient ID: ${invitation.recipientId}');
+                          print(
+                              '📱 InvitationsScreen - Sender Username: ${invitation.senderUsername}');
+                          print(
+                              '📱 InvitationsScreen - Recipient Username: ${invitation.recipientUsername}');
+                          print(
+                              '📱 InvitationsScreen - Other User ID: $otherUserId');
+                          print(
+                              '📱 InvitationsScreen - Other User from provider: ${otherUser?.username}');
+                          print(
+                              '📱 InvitationsScreen - Stored Username: $storedUsername');
+                        }
+
+                        // Create a user object with stored username if available
+                        final displayUser = storedUsername != null &&
+                                storedUsername.isNotEmpty
+                            ? otherUser?.copyWith(username: storedUsername) ??
+                                User(
+                                  id: otherUserId,
+                                  deviceId: '',
+                                  username: storedUsername,
+                                  isOnline: false,
+                                )
+                            : otherUser;
+
+                        final isNewInvitation =
+                            _newInvitationIds.contains(invitation.id);
 
                         return AnimationConfiguration.staggeredList(
                           position: index,
@@ -456,7 +731,7 @@ Download now and let's chat securely!
                             child: FadeInAnimation(
                               child: _InvitationCard(
                                 invitation: invitation,
-                                otherUser: otherUser,
+                                otherUser: displayUser,
                                 onAccept: _tabIndex == 0
                                     ? () => _acceptInvitation(invitation)
                                     : null,
@@ -521,6 +796,7 @@ Download now and let's chat securely!
                                 isReceived: _tabIndex == 0,
                                 deleteButtonText:
                                     _tabIndex == 0 ? 'Block' : 'Delete',
+                                isNewInvitation: isNewInvitation,
                               ),
                             ),
                           ),
@@ -575,7 +851,7 @@ Download now and let's chat securely!
   }
 }
 
-class _InvitationCard extends StatelessWidget {
+class _InvitationCard extends StatefulWidget {
   final Invitation invitation;
   final User? otherUser;
   final VoidCallback? onAccept;
@@ -586,7 +862,8 @@ class _InvitationCard extends StatelessWidget {
   final Color Function(String) getStatusColor;
   final String Function(String) getStatusText;
   final bool isReceived;
-  final String deleteButtonText; // Add this field
+  final String deleteButtonText;
+  final bool isNewInvitation;
 
   const _InvitationCard({
     required this.invitation,
@@ -599,12 +876,59 @@ class _InvitationCard extends StatelessWidget {
     required this.getStatusColor,
     required this.getStatusText,
     required this.isReceived,
-    required this.deleteButtonText, // Add this parameter
+    required this.deleteButtonText,
+    required this.isNewInvitation,
   });
 
   @override
+  State<_InvitationCard> createState() => _InvitationCardState();
+}
+
+class _InvitationCardState extends State<_InvitationCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+  late Animation<Color?> _borderAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.02,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+
+    _borderAnimation = ColorTween(
+      begin: const Color(0xFFFF6B35),
+      end: Colors.transparent,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+
+    // Start animation if this is a new invitation
+    if (widget.isNewInvitation) {
+      _animationController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isPendingCard = invitation.isPending();
+    final isPendingCard = widget.invitation.isPending();
     final cardBackgroundColor =
         isPendingCard ? const Color(0xFFFF6B35) : const Color(0xFF2C2C2C);
     final primaryTextColor = isPendingCard ? Colors.black : Colors.white;
@@ -613,163 +937,182 @@ class _InvitationCard extends StatelessWidget {
         : Colors.white.withOpacity(0.7);
     final accentColor = isPendingCard ? Colors.black : const Color(0xFFFF6B35);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBackgroundColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: accentColor,
-                child: Text(
-                  otherUser?.username.substring(0, 1).toUpperCase() ?? '?',
-                  style: TextStyle(
-                    color: isPendingCard ? Colors.white : Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cardBackgroundColor,
+              borderRadius: BorderRadius.circular(16),
+              border: widget.isNewInvitation
+                  ? Border.all(
+                      color: _borderAnimation.value ?? Colors.transparent,
+                      width: 2,
+                    )
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(
-                      otherUser?.username ?? 'Unknown User',
-                      style: TextStyle(
-                        color: primaryTextColor,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                    UserAvatar(
+                      displayName: widget.otherUser?.username,
+                      sessionId: widget.otherUser?.id,
+                      radius: 20,
+                      backgroundColor: accentColor,
+                      textColor: isPendingCard ? Colors.white : Colors.black,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.otherUser?.username ?? 'Unknown User',
+                            style: TextStyle(
+                              color: primaryTextColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.invitation.message,
+                            style: TextStyle(
+                              color: secondaryTextColor,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      invitation.message,
-                      style: TextStyle(
-                        color: secondaryTextColor,
-                        fontSize: 14,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          widget.formatTime(widget.invitation.createdAt),
+                          style: TextStyle(
+                            color: secondaryTextColor,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isPendingCard
+                                ? Colors.black.withOpacity(0.2)
+                                : widget
+                                    .getStatusColor(widget.invitation.status),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            widget.getStatusText(widget.invitation.status),
+                            style: TextStyle(
+                              color:
+                                  isPendingCard ? Colors.black : Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    formatTime(invitation.createdAt),
-                    style: TextStyle(
-                      color: secondaryTextColor,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isPendingCard
-                          ? Colors.black.withOpacity(0.2)
-                          : getStatusColor(invitation.status),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      getStatusText(invitation.status),
-                      style: TextStyle(
-                        color: isPendingCard ? Colors.black : Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                if (widget.isReceived && widget.invitation.isPending()) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: widget.onDecline,
+                        style: TextButton.styleFrom(
+                          backgroundColor: isPendingCard
+                              ? Colors.black.withOpacity(0.2)
+                              : Colors.red.withOpacity(0.2),
+                          foregroundColor:
+                              isPendingCard ? Colors.black : Colors.red,
+                        ),
+                        child: const Text('Decline'),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: widget.onAccept,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isPendingCard
+                              ? Colors.black
+                              : const Color(0xFF4CAF50),
+                          foregroundColor: isPendingCard
+                              ? const Color(0xFFFF6B35)
+                              : Colors.white,
+                        ),
+                        child: const Text('Accept'),
+                      ),
+                    ],
+                  ),
+                ] else if (widget.invitation.isAccepted()) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: widget.onDelete,
+                        style: TextButton.styleFrom(
+                          backgroundColor: isPendingCard
+                              ? Colors.black.withOpacity(0.2)
+                              : Colors.red.withOpacity(0.2),
+                          foregroundColor:
+                              isPendingCard ? Colors.black : Colors.red,
+                        ),
+                        child: const Text('Block'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: widget.onChatTap,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isPendingCard
+                              ? Colors.black
+                              : const Color(0xFF4CAF50),
+                          foregroundColor: isPendingCard
+                              ? const Color(0xFFFF6B35)
+                              : Colors.white,
+                        ),
+                        icon: const Icon(Icons.chat, size: 16),
+                        label: const Text('Chat'),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: widget.onDelete,
+                        style: TextButton.styleFrom(
+                          backgroundColor: isPendingCard
+                              ? Colors.black.withOpacity(0.2)
+                              : Colors.red.withOpacity(0.2),
+                          foregroundColor:
+                              isPendingCard ? Colors.black : Colors.red,
+                        ),
+                        child: Text(widget.deleteButtonText),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ],
+              ],
+            ),
           ),
-          if (isReceived && invitation.isPending()) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: onDecline,
-                  style: TextButton.styleFrom(
-                    backgroundColor: isPendingCard
-                        ? Colors.black.withOpacity(0.2)
-                        : Colors.red.withOpacity(0.2),
-                    foregroundColor: isPendingCard ? Colors.black : Colors.red,
-                  ),
-                  child: const Text('Decline'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: onAccept,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        isPendingCard ? Colors.black : const Color(0xFF4CAF50),
-                    foregroundColor:
-                        isPendingCard ? const Color(0xFFFF6B35) : Colors.white,
-                  ),
-                  child: const Text('Accept'),
-                ),
-              ],
-            ),
-          ] else if (invitation.isAccepted()) ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: onDelete,
-                  style: TextButton.styleFrom(
-                    backgroundColor: isPendingCard
-                        ? Colors.black.withOpacity(0.2)
-                        : Colors.red.withOpacity(0.2),
-                    foregroundColor: isPendingCard ? Colors.black : Colors.red,
-                  ),
-                  child: const Text('Block'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: onChatTap,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        isPendingCard ? Colors.black : const Color(0xFF4CAF50),
-                    foregroundColor:
-                        isPendingCard ? const Color(0xFFFF6B35) : Colors.white,
-                  ),
-                  icon: const Icon(Icons.chat, size: 16),
-                  label: const Text('Chat'),
-                ),
-              ],
-            ),
-          ] else ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: onDelete,
-                  style: TextButton.styleFrom(
-                    backgroundColor: isPendingCard
-                        ? Colors.black.withOpacity(0.2)
-                        : Colors.red.withOpacity(0.2),
-                    foregroundColor: isPendingCard ? Colors.black : Colors.red,
-                  ),
-                  child: Text(deleteButtonText),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
+        );
+      },
     );
   }
 }

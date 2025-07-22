@@ -4,8 +4,18 @@ import 'package:share_plus/share_plus.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
+import '../../../core/services/local_storage_service.dart';
 import '../../auth/screens/login_screen.dart';
-import '../../chat/screens/socket_test_screen.dart';
+
+import '../../chat/providers/chat_provider.dart';
+import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
+import 'package:sechat_app/core/services/session_service.dart';
+import 'package:sechat_app/shared/widgets/app_icon.dart';
+import 'package:sechat_app/core/services/notification_service.dart';
+import 'package:sechat_app/core/services/network_service.dart';
+import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
+import '../../invitations/providers/invitation_provider.dart';
+import 'package:sechat_app/features/notifications/providers/notification_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -31,12 +41,12 @@ Download now and let's chat securely!
     );
   }
 
-  void _showPasswordResetSheet(BuildContext context) {
+  void _showStorageManagementSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _PasswordResetSheet(),
+      builder: (context) => const _StorageManagementSheet(),
     );
   }
 
@@ -102,8 +112,7 @@ Download now and let's chat securely!
                     // Navigate to login screen without back button
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(
-                        builder: (_) =>
-                            const LoginScreen(showBackButton: false),
+                        builder: (_) => const LoginScreen(),
                       ),
                       (route) => false,
                     );
@@ -173,7 +182,7 @@ Download now and let's chat securely!
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
-                    child: SearchWidget(),
+                    child: InviteUserWidget(),
                   ),
                   const SizedBox(width: 12),
                   const ProfileIconWidget(),
@@ -206,18 +215,13 @@ Download now and let's chat securely!
                 child: Column(
                   children: [
                     _buildSettingsItem(
-                      title: 'Security',
-                      onTap: () => _showPasswordResetSheet(context),
+                      title: 'Storage & Data',
+                      onTap: () => _showStorageManagementSheet(context),
                     ),
                     _buildSettingsItem(
-                      title: 'Socket.IO Test',
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const SocketTestScreen(),
-                          ),
-                        );
-                      },
+                      title: 'Last Synced',
+                      subtitle: _getLastSyncedTime(),
+                      onTap: () => _showSyncInfo(context),
                     ),
                     _buildSettingsItem(
                       title: 'Logout',
@@ -261,6 +265,7 @@ Download now and let's chat securely!
 
   Widget _buildSettingsItem({
     required String title,
+    String? subtitle,
     required VoidCallback onTap,
     bool isDestructive = false,
   }) {
@@ -280,15 +285,30 @@ Download now and let's chat securely!
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      color: isDestructive
-                          ? const Color(0xFFFF5555)
-                          : Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: isDestructive
+                              ? const Color(0xFFFF5555)
+                              : Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 Icon(
@@ -305,255 +325,404 @@ Download now and let's chat securely!
       ),
     );
   }
-}
 
-class _PasswordResetSheet extends StatefulWidget {
-  @override
-  State<_PasswordResetSheet> createState() => _PasswordResetSheetState();
-}
-
-class _PasswordResetSheetState extends State<_PasswordResetSheet> {
-  final _formKey = GlobalKey<FormState>();
-  final _newPasswordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  bool _obscureNewPassword = true;
-  bool _obscureConfirmPassword = true;
-  bool _isLoading = false;
-
-  @override
-  void dispose() {
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
+  String _getLastSyncedTime() {
+    // TODO: Get actual last sync time from SessionService
+    final now = DateTime.now();
+    return '${now.day}/${now.month}/${now.year} at ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _resetPassword() async {
-    if (!_formKey.currentState!.validate()) return;
+  void _showSyncInfo(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF232323),
+        title: const Text(
+          'Sync Information',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Last Synced: ${_getLastSyncedTime()}',
+              style: const TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'SeChat automatically syncs messages and contacts using the Session Protocol. No manual sync is required.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK', style: TextStyle(color: Colors.blue)),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-    setState(() {
-      _isLoading = true;
-    });
+class _StorageManagementSheet extends StatefulWidget {
+  const _StorageManagementSheet();
 
+  @override
+  State<_StorageManagementSheet> createState() =>
+      _StorageManagementSheetState();
+}
+
+class _StorageManagementSheetState extends State<_StorageManagementSheet> {
+  Map<String, dynamic> _storageStats = {};
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStorageStats();
+  }
+
+  Future<void> _loadStorageStats() async {
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final success =
-          await authProvider.resetPassword(_newPasswordController.text);
-
-      if (success && mounted) {
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Password updated successfully!'),
-            backgroundColor: Color(0xFF4CAF50),
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to update password. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      final stats = await LocalStorageService.instance.getStorageStats();
+      setState(() {
+        _storageStats = stats;
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _clearOldMessages() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        title: const Text(
+          'Clear Old Messages',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'This will delete messages older than 30 days. This action cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white70)),
           ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await LocalStorageService.instance.clearOldMessages();
+        await _loadStorageStats();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Old messages cleared successfully'),
+              backgroundColor: Color(0xFF4CAF50),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error clearing messages: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
+  }
+
+  Future<void> _clearAllData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        title: const Text(
+          'Clear All Data',
+          style: TextStyle(color: Colors.red),
+        ),
+        content: const Text(
+          'This will delete ALL your chats, messages, and files. This action cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await LocalStorageService.instance.clearAllData();
+        await _loadStorageStats();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('All data cleared successfully'),
+              backgroundColor: Color(0xFF4CAF50),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error clearing data: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024)
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.5,
-      maxChildSize: 0.9,
+      initialChildSize: 0.8,
+      minChildSize: 0.6,
+      maxChildSize: 0.95,
       builder: (context, scrollController) => Container(
         decoration: const BoxDecoration(
           color: Color(0xFF232323),
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            controller: scrollController,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+        child: ListView(
+          controller: scrollController,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
+            ),
 
-              // Title
-              const Text(
-                'Reset Password',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
+            // Title
+            const Text(
+              'Storage & Data',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Enter your new password below',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 16,
-                ),
-                textAlign: TextAlign.center,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Manage your local data and storage',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 16,
               ),
-              const SizedBox(height: 32),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
 
-              // New Password Field
-              TextFormField(
-                controller: _newPasswordController,
-                obscureText: _obscureNewPassword,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'New Password',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  prefixIcon: const Icon(Icons.lock, color: Color(0xFFFF6B35)),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureNewPassword
-                          ? Icons.visibility
-                          : Icons.visibility_off,
-                      color: Colors.white70,
+            if (_isLoading)
+              const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFFFF6B35),
+                ),
+              )
+            else ...[
+              // Storage Overview
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C2C2C),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Storage Overview',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _obscureNewPassword = !_obscureNewPassword;
-                      });
-                    },
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFF2C2C2C),
-                  border: OutlineInputBorder(
+                    const SizedBox(height: 16),
+                    _buildStorageItem(
+                      'Total Storage',
+                      _formatBytes(_storageStats['totalStorageSize'] ?? 0),
+                      Icons.storage,
+                    ),
+                    _buildStorageItem(
+                      'Images',
+                      _formatBytes(_storageStats['totalImageSize'] ?? 0),
+                      Icons.image,
+                    ),
+                    _buildStorageItem(
+                      'Voice Messages',
+                      _formatBytes(_storageStats['totalVoiceSize'] ?? 0),
+                      Icons.mic,
+                    ),
+                    _buildStorageItem(
+                      'Files',
+                      _formatBytes(_storageStats['totalFileSize'] ?? 0),
+                      Icons.file_present,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Data Statistics
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C2C2C),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Data Statistics',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDataItem(
+                      'Total Messages',
+                      '${_storageStats['totalMessages'] ?? 0}',
+                      Icons.message,
+                    ),
+                    _buildDataItem(
+                      'Text Messages',
+                      '${_storageStats['textMessages'] ?? 0}',
+                      Icons.text_fields,
+                    ),
+                    _buildDataItem(
+                      'Image Messages',
+                      '${_storageStats['imageMessages'] ?? 0}',
+                      Icons.image,
+                    ),
+                    _buildDataItem(
+                      'Voice Messages',
+                      '${_storageStats['voiceMessages'] ?? 0}',
+                      Icons.mic,
+                    ),
+                    _buildDataItem(
+                      'File Messages',
+                      '${_storageStats['fileMessages'] ?? 0}',
+                      Icons.file_present,
+                    ),
+                    _buildDataItem(
+                      'Chats',
+                      '${_storageStats['chatsCount'] ?? 0}',
+                      Icons.chat,
+                    ),
+                    _buildDataItem(
+                      'Users',
+                      '${_storageStats['usersCount'] ?? 0}',
+                      Icons.people,
+                    ),
+                    _buildDataItem(
+                      'Pending Messages',
+                      '${_storageStats['pendingMessagesCount'] ?? 0}',
+                      Icons.schedule,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Action Buttons
+              ElevatedButton.icon(
+                onPressed: _clearOldMessages,
+                icon: const Icon(Icons.delete_sweep),
+                label: const Text('Clear Old Messages (30+ days)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: Color(0xFFFF6B35), width: 2),
                   ),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a new password';
-                  }
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-                  return null;
-                },
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _clearAllData,
+                icon: const Icon(Icons.delete_forever),
+                label: const Text('Clear All Data'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
 
-              // Confirm Password Field
-              TextFormField(
-                controller: _confirmPasswordController,
-                obscureText: _obscureConfirmPassword,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Confirm New Password',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  prefixIcon:
-                      const Icon(Icons.lock_outline, color: Color(0xFFFF6B35)),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscureConfirmPassword
-                          ? Icons.visibility
-                          : Icons.visibility_off,
-                      color: Colors.white70,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscureConfirmPassword = !_obscureConfirmPassword;
-                      });
-                    },
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFF2C2C2C),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: Color(0xFFFF6B35), width: 2),
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please confirm your new password';
-                  }
-                  if (value != _newPasswordController.text) {
-                    return 'Passwords do not match';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 32),
-
-              // Submit Button
-              SizedBox(
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _resetPassword,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF6B35),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          'Update Password',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+              // Refresh Button
+              TextButton.icon(
+                onPressed: _loadStorageStats,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Refresh Statistics'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFFF6B35),
                 ),
               ),
               const SizedBox(height: 16),
 
-              // Cancel Button
+              // Close Button
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text(
-                  'Cancel',
+                  'Close',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 16,
@@ -561,8 +730,66 @@ class _PasswordResetSheetState extends State<_PasswordResetSheet> {
                 ),
               ),
             ],
-          ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStorageItem(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFFFF6B35), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataItem(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xFFFF6B35), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

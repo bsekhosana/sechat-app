@@ -41,7 +41,7 @@ class AppIcon extends StatelessWidget {
         child: Padding(
           padding: EdgeInsets.all(width * 0.05),
           child: Image.asset(
-            'assets/logo/seChat_cleanLogo.png',
+            'assets/logo/seChat_Logo.png',
             fit: BoxFit.fill,
           ),
         ),

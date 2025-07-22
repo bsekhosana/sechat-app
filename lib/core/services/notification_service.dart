@@ -181,6 +181,96 @@ class NotificationService {
         '📱 NotificationService: Invitation response notification sent for $username - $status');
   }
 
+  Future<void> showInvitationDeletedNotification({
+    required String username,
+    required String invitationId,
+    required String deletedBy,
+  }) async {
+    if (kIsWeb) return; // Skip on web
+    if (!_isInitialized) await initialize();
+
+    const AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+      'invitation_deleted',
+      'Invitation Deleted',
+      channelDescription: 'Notifications for deleted invitations',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      color: Color(0xFFFF5555),
+      enableVibration: true,
+      playSound: true,
+    );
+
+    const DarwinNotificationDetails iosNotificationDetails =
+        DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+      iOS: iosNotificationDetails,
+    );
+
+    await _flutterLocalNotificationsPlugin.show(
+      invitationId.hashCode,
+      '🗑️ Invitation Deleted',
+      '$username deleted the invitation',
+      notificationDetails,
+      payload: 'invitation_deleted:$invitationId:$deletedBy',
+    );
+
+    print(
+        '📱 NotificationService: Invitation deleted notification sent for $username');
+  }
+
+  Future<void> showInvitationCancelledNotification({
+    required String username,
+    required String invitationId,
+    required String cancelledBy,
+  }) async {
+    if (kIsWeb) return; // Skip on web
+    if (!_isInitialized) await initialize();
+
+    const AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+      'invitation_cancelled',
+      'Invitation Cancelled',
+      channelDescription: 'Notifications for cancelled invitations',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      color: Color(0xFFFFAA00),
+      enableVibration: true,
+      playSound: true,
+    );
+
+    const DarwinNotificationDetails iosNotificationDetails =
+        DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+      iOS: iosNotificationDetails,
+    );
+
+    await _flutterLocalNotificationsPlugin.show(
+      invitationId.hashCode,
+      '❌ Invitation Cancelled',
+      '$username cancelled the invitation',
+      notificationDetails,
+      payload: 'invitation_cancelled:$invitationId:$cancelledBy',
+    );
+
+    print(
+        '📱 NotificationService: Invitation cancelled notification sent for $username');
+  }
+
   Future<void> cancelNotification(int id) async {
     await _flutterLocalNotificationsPlugin.cancel(id);
   }

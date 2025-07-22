@@ -8,9 +8,15 @@ class Message {
   final String senderId;
   final String content;
   final MessageType type;
-  final String status; // 'sent', 'delivered', 'read'
+  final String status; // 'sent', 'delivered', 'read', 'pending', 'error'
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? localFilePath; // For images, voice, files
+  final String? fileName; // Original file name
+  final int? fileSize; // File size in bytes
+  final bool isPending; // For offline messages
+  final bool isDeleted; // For deleted messages
+  final String? deleteType; // 'for_me' or 'for_everyone'
 
   Message({
     required this.id,
@@ -21,6 +27,12 @@ class Message {
     this.status = 'sent',
     required this.createdAt,
     required this.updatedAt,
+    this.localFilePath,
+    this.fileName,
+    this.fileSize,
+    this.isPending = false,
+    this.isDeleted = false,
+    this.deleteType,
   });
 
   factory Message.fromJson(dynamic json) {
@@ -44,6 +56,12 @@ class Message {
         updatedAt: data['updated_at'] != null
             ? DateTime.parse(data['updated_at'])
             : DateTime.now(),
+        localFilePath: data['local_file_path'],
+        fileName: data['file_name'],
+        fileSize: data['file_size'],
+        isPending: data['is_pending'] ?? false,
+        isDeleted: data['is_deleted'] ?? false,
+        deleteType: data['delete_type'],
       );
     } catch (e) {
       print('📱 Message.fromJson error: $e for data: $json');
@@ -72,6 +90,12 @@ class Message {
       'status': status,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'local_file_path': localFilePath,
+      'file_name': fileName,
+      'file_size': fileSize,
+      'is_pending': isPending,
+      'is_deleted': isDeleted,
+      'delete_type': deleteType,
     };
   }
 
@@ -94,7 +118,30 @@ class Message {
     if (isError) return Colors.red;
     if (isRead) return Colors.blue;
     if (isDelivered) return baseColor;
+    if (isPending) return Colors.orange;
     return baseColor.withOpacity(0.5);
+  }
+
+  // Check if message is a file type
+  bool get isFile =>
+      type == MessageType.image ||
+      type == MessageType.voice ||
+      type == MessageType.file;
+
+  // Check if message has a local file
+  bool get hasLocalFile => localFilePath != null && localFilePath!.isNotEmpty;
+
+  // Get file size in human readable format
+  String get fileSizeFormatted {
+    if (fileSize == null) return '';
+
+    if (fileSize! < 1024) {
+      return '${fileSize!} B';
+    } else if (fileSize! < 1024 * 1024) {
+      return '${(fileSize! / 1024).toStringAsFixed(1)} KB';
+    } else {
+      return '${(fileSize! / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
   }
 
   Message copyWith({
@@ -106,6 +153,12 @@ class Message {
     String? status,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? localFilePath,
+    String? fileName,
+    int? fileSize,
+    bool? isPending,
+    bool? isDeleted,
+    String? deleteType,
   }) {
     return Message(
       id: id ?? this.id,
@@ -116,6 +169,12 @@ class Message {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      localFilePath: localFilePath ?? this.localFilePath,
+      fileName: fileName ?? this.fileName,
+      fileSize: fileSize ?? this.fileSize,
+      isPending: isPending ?? this.isPending,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deleteType: deleteType ?? this.deleteType,
     );
   }
 }

@@ -24,18 +24,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Future<void> _checkExistingUser() async {
     try {
-      // Check if user data exists in local storage
+      // Check if Session identity exists in local storage
       final authProvider = context.read<AuthProvider>();
-      final hasUserData = await authProvider.userExistsForDevice();
 
-      if (hasUserData) {
-        // User data exists, show login option
+      // Check if user has existing Session identity
+      if (authProvider.isAuthenticated) {
+        // User has existing Session identity, show login option
         setState(() {
           _hasExistingUser = true;
           _checking = false;
         });
       } else {
-        // No user data, only show registration
+        // No Session identity exists, only show registration
         setState(() {
           _hasExistingUser = false;
           _checking = false;
@@ -85,7 +85,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Connect with friends securely',
+                'Private messaging that keeps your conversations safe',
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.white.withOpacity(0.7),
@@ -94,7 +95,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Your conversations are encrypted and completely private. Start chatting with confidence.',
+                'Chat with friends and family knowing your messages are private and secure. No phone numbers needed.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
@@ -143,7 +144,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                         ),
                         child: const Text(
-                          'Login',
+                          'Sign In to SeChat',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -181,7 +182,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         ),
                       ),
                       child: const Text(
-                        'Create Account',
+                        'Create New SeChat Account',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,

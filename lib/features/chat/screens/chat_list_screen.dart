@@ -8,10 +8,19 @@ import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
-import '../../../core/services/socket_service.dart';
+import '../../../core/services/session_service.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/network_service.dart';
 import 'chat_screen.dart';
+import 'package:flutter/foundation.dart';
+import 'package:sechat_app/features/chat/providers/chat_provider.dart';
+import 'package:sechat_app/features/chat/screens/chat_screen.dart';
+import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
+import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
+import 'package:sechat_app/core/services/session_service.dart';
+import 'package:sechat_app/shared/models/user.dart';
+import 'package:sechat_app/core/services/notification_service.dart';
+import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -126,36 +135,7 @@ Download now and let's chat securely!
   }
 
   Future<void> _blockUser(String userId, String username) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text(
-          'Block User',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          'Are you sure you want to block $username? This will remove all chats and messages between you and prevent future communication.',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text('Block'),
-          ),
-        ],
-      ),
-    );
+    final confirmed = await _showBlockUserActionSheet(context, username);
 
     if (confirmed == true) {
       try {
@@ -188,37 +168,111 @@ Download now and let's chat securely!
     }
   }
 
-  Future<void> _removeUserChats(String userId, String username) async {
-    final confirmed = await showDialog<bool>(
+  Future<bool?> _showBlockUserActionSheet(
+      BuildContext context, String username) async {
+    return showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
-        title: const Text(
-          'Remove Chats',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Text(
-          'Are you sure you want to remove all chats and messages with $username? This action cannot be undone.',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white70),
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
             ),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.orange,
-            ),
-            child: const Text('Remove'),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Title
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Block User',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Description
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Are you sure you want to block $username? This will remove all chats and messages between you and prevent future communication.',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Block'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  Future<void> _removeUserChats(String userId, String username) async {
+    final confirmed = await _showRemoveChatsActionSheet(context, username);
 
     if (confirmed == true) {
       try {
@@ -252,6 +306,109 @@ Download now and let's chat securely!
     }
   }
 
+  Future<bool?> _showRemoveChatsActionSheet(
+      BuildContext context, String username) async {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Title
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Remove Chats',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Description
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Are you sure you want to remove all chats and messages with $username? This action cannot be undone.',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[700],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Remove'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -282,63 +439,9 @@ Download now and let's chat securely!
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
-                    child: SearchWidget(),
+                    child: InviteUserWidget(),
                   ),
                   const SizedBox(width: 12),
-                  // Connection status indicator
-                  Consumer2<ChatProvider, NetworkService>(
-                    builder: (context, chatProvider, networkService, child) {
-                      Color statusColor;
-                      IconData statusIcon;
-                      String statusText;
-
-                      if (!networkService.isConnected) {
-                        // Network is disconnected
-                        statusColor = Colors.red;
-                        statusIcon = Icons.wifi_off;
-                        statusText = 'No internet connection';
-                      } else if (networkService.isReconnecting) {
-                        // Network is reconnecting
-                        statusColor = Colors.orange;
-                        statusIcon = Icons.wifi_find;
-                        statusText = 'Reconnecting...';
-                      } else {
-                        // Network is connected, check socket status
-                        final socketService = SocketService.instance;
-                        if (socketService.isConnected &&
-                            socketService.isAuthenticated) {
-                          statusColor = Colors.green;
-                          statusIcon = Icons.wifi;
-                          statusText = 'Connected';
-                        } else if (socketService.isConnecting) {
-                          statusColor = Colors.orange;
-                          statusIcon = Icons.wifi_find;
-                          statusText = 'Connecting...';
-                        } else {
-                          statusColor = Colors.orange;
-                          statusIcon = Icons.wifi_off;
-                          statusText = 'Socket disconnected';
-                        }
-                      }
-
-                      return Tooltip(
-                        message: statusText,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            statusIcon,
-                            color: statusColor,
-                            size: 16,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 8),
                   const ProfileIconWidget(),
                 ],
               ),

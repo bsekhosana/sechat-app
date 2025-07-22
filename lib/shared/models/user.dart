@@ -1,6 +1,6 @@
 class User {
   final String id;
-  final String deviceId;
+  final String? deviceId; // Made optional for Session Protocol compatibility
   final String username;
   final bool isOnline;
   final DateTime? lastSeen;
@@ -12,10 +12,11 @@ class User {
   final String? invitationId; // ID of the invitation if exists
   final bool isTyping; // For typing indicators
   final bool? previousOnlineStatus; // Store previous online status when typing
+  final String? profilePicture; // Added for Session Protocol compatibility
 
   User({
     required this.id,
-    required this.deviceId,
+    this.deviceId, // Made optional
     required this.username,
     this.isOnline = false,
     this.lastSeen,
@@ -26,6 +27,7 @@ class User {
     this.invitationId,
     this.isTyping = false,
     this.previousOnlineStatus,
+    this.profilePicture, // Added for Session Protocol
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory User.fromJson(dynamic json) {
@@ -35,7 +37,7 @@ class User {
 
       return User(
         id: data['id']?.toString() ?? '',
-        deviceId: data['device_id'] ?? data['deviceId'] ?? '',
+        deviceId: data['device_id'] ?? data['deviceId'],
         username: data['username'] ?? 'Unknown User',
         isOnline: data['is_online'] ?? data['isOnline'] ?? false,
         lastSeen: data['last_seen'] != null
@@ -50,16 +52,18 @@ class User {
         invitationId: data['invitation_id']?.toString(),
         isTyping: data['is_typing'] ?? false,
         previousOnlineStatus: data['previous_online_status'],
+        profilePicture: data['profile_picture'] ?? data['profilePicture'],
       );
     } catch (e) {
       print('📱 User.fromJson error: $e for data: $json');
       // Return a default user with available data
       return User(
         id: json['id']?.toString() ?? 'unknown',
-        deviceId: json['device_id'] ?? json['deviceId'] ?? '',
+        deviceId: json['device_id'] ?? json['deviceId'],
         username: json['username'] ?? 'Unknown User',
         isOnline: json['is_online'] ?? json['isOnline'] ?? false,
         createdAt: DateTime.now(),
+        profilePicture: json['profile_picture'] ?? json['profilePicture'],
       );
     }
   }
@@ -78,6 +82,7 @@ class User {
       'invitation_id': invitationId,
       'is_typing': isTyping,
       'previous_online_status': previousOnlineStatus,
+      'profile_picture': profilePicture,
     };
   }
 
@@ -94,6 +99,7 @@ class User {
     String? invitationId,
     bool? isTyping,
     bool? previousOnlineStatus,
+    String? profilePicture,
   }) {
     return User(
       id: id ?? this.id,
@@ -108,6 +114,7 @@ class User {
       invitationId: invitationId ?? this.invitationId,
       isTyping: isTyping ?? this.isTyping,
       previousOnlineStatus: previousOnlineStatus ?? this.previousOnlineStatus,
+      profilePicture: profilePicture ?? this.profilePicture,
     );
   }
 

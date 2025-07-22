@@ -5,6 +5,7 @@ class OrangeButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool primary;
   final bool isDelete;
+  final bool isLoading;
 
   const OrangeButton({
     super.key,
@@ -12,6 +13,7 @@ class OrangeButton extends StatelessWidget {
     required this.onPressed,
     this.primary = true,
     this.isDelete = false,
+    this.isLoading = false,
   });
 
   @override
@@ -33,7 +35,7 @@ class OrangeButton extends StatelessWidget {
       width: double.infinity,
       height: elementHeight,
       child: ElevatedButton(
-        onPressed: onPressed,
+        onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: bgColor,
           foregroundColor: fgColor,
@@ -50,7 +52,16 @@ class OrangeButton extends StatelessWidget {
           ),
           elevation: 0,
         ),
-        child: Text(label),
+        child: isLoading
+            ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(fgColor),
+                ),
+              )
+            : Text(label),
       ),
     );
   }

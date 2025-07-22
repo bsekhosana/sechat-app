@@ -3,45 +3,56 @@ class Invitation {
   final String senderId;
   final String recipientId;
   final String message;
-  final String status;
-  final DateTime? acceptedAt;
-  final DateTime? declinedAt;
+  final String status; // 'pending', 'accepted', 'declined', 'deleted', 'queued'
   final DateTime createdAt;
   final DateTime updatedAt;
-  final bool isReceived;
-  final String? otherUserId;
+  final DateTime? acceptedAt;
+  final DateTime? declinedAt;
+  final bool
+      isReceived; // true if this user received the invitation, false if sent
+  final String? senderUsername; // Store sender username locally
+  final String? recipientUsername; // Store recipient username locally
 
   Invitation({
     required this.id,
     required this.senderId,
     required this.recipientId,
     required this.message,
-    this.status = 'pending',
-    this.acceptedAt,
-    this.declinedAt,
+    required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.acceptedAt,
+    this.declinedAt,
     this.isReceived = false,
-    this.otherUserId,
+    this.senderUsername,
+    this.recipientUsername,
   });
 
   factory Invitation.fromJson(Map<String, dynamic> json) {
     return Invitation(
-      id: json['id'].toString(),
-      senderId: json['sender_id'].toString(),
-      recipientId: json['recipient_id'].toString(),
-      message: json['message'],
+      id: json['id']?.toString() ?? '',
+      senderId:
+          json['sender_id']?.toString() ?? json['senderId']?.toString() ?? '',
+      recipientId: json['recipient_id']?.toString() ??
+          json['recipientId']?.toString() ??
+          '',
+      message: json['message'] ?? '',
       status: json['status'] ?? 'pending',
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : DateTime.now(),
       acceptedAt: json['accepted_at'] != null
           ? DateTime.parse(json['accepted_at'])
           : null,
       declinedAt: json['declined_at'] != null
           ? DateTime.parse(json['declined_at'])
           : null,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
       isReceived: json['is_received'] ?? false,
-      otherUserId: json['other_user']?['id']?.toString(),
+      senderUsername: json['sender_username'] as String?,
+      recipientUsername: json['recipient_username'] as String?,
     );
   }
 
@@ -57,7 +68,9 @@ class Invitation {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'is_received': isReceived,
-      'other_user_id': otherUserId,
+      'sender_username': senderUsername,
+      'recipient_username': recipientUsername,
+      'other_user_id': null, // This field is no longer used
     };
   }
 
@@ -84,7 +97,8 @@ class Invitation {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? isReceived,
-    String? otherUserId,
+    String? senderUsername,
+    String? recipientUsername,
   }) {
     return Invitation(
       id: id ?? this.id,
@@ -97,7 +111,8 @@ class Invitation {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isReceived: isReceived ?? this.isReceived,
-      otherUserId: otherUserId ?? this.otherUserId,
+      senderUsername: senderUsername ?? this.senderUsername,
+      recipientUsername: recipientUsername ?? this.recipientUsername,
     );
   }
 }

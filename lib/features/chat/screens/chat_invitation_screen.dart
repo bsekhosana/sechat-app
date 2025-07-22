@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/models/user.dart';
 import '../../../shared/providers/auth_provider.dart';
+import '../../../shared/models/user.dart';
+import '../../invitations/providers/invitation_provider.dart';
 
 class ChatInvitationScreen extends StatefulWidget {
   final User recipient;
@@ -45,14 +46,11 @@ class _ChatInvitationScreenState extends State<ChatInvitationScreen> {
         return;
       }
 
-      // TODO: Implement invitation API call
-      // final response = await ApiService.sendInvitation({
-      //   'recipient_id': widget.recipient.id,
-      //   'message': _messageController.text.trim(),
-      // });
-
-      // Simulate API call for now
-      await Future.delayed(const Duration(seconds: 1));
+      final invitationProvider = context.read<InvitationProvider>();
+      await invitationProvider.sendInvitation(
+        recipientId: widget.recipient.id,
+        message: _messageController.text.trim(),
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
