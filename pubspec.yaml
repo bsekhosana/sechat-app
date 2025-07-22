@@ -71,7 +71,6 @@ dependencies:
   
   # Platform Channels
   pigeon: ^13.0.0
-  image_gallery_saver: ^2.0.3
   qr: ^3.0.2
   screenshot: ^3.0.0
 
