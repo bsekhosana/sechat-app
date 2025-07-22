@@ -1,11 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sechat_app/shared/providers/auth_provider.dart';
+import 'package:sechat_app/shared/widgets/qr_image_upload_widget.dart';
+import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
 import '../../features/invitations/providers/invitation_provider.dart';
-import 'qr_scanner_widget.dart';
-import 'qr_generator_widget.dart';
-import 'qr_image_upload_widget.dart';
-import '../../shared/providers/auth_provider.dart';
 import '../../core/services/session_service.dart';
 
 class InviteUserWidget extends StatelessWidget {
@@ -252,11 +251,12 @@ class _InviteOptionsSheet extends StatelessWidget {
     Navigator.of(context).pop();
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => QRScannerWidget(
-          onQRCodeScanned: (qrData) {
+        builder: (context) => QRImageUploadWidget(
+          onQRCodeExtracted: (qrData) {
             Navigator.of(context).pop();
             _processQRCode(context, qrData);
           },
+          onCancel: () => Navigator.of(context).pop(),
         ),
       ),
     );
@@ -287,13 +287,11 @@ class _InviteOptionsSheet extends StatelessWidget {
     final sessionId = SessionService.instance.currentSessionId;
 
     if (sessionId != null) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => QRGeneratorWidget(
-            sessionId: sessionId,
-            displayName: 'SeChat User', // TODO: Get from user profile
-          ),
-        ),
+      // Show QR code in profile menu
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) => const ProfileIconWidget(),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

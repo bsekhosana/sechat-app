@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sechat_app/core/services/session_service.dart';
 import 'package:sechat_app/shared/providers/auth_provider.dart';
-import 'package:sechat_app/shared/widgets/qr_generator_widget.dart';
-import 'register_screen.dart';
+import 'package:sechat_app/features/auth/screens/register_screen.dart';
+import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
+import 'package:sechat_app/features/chat/screens/chat_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);

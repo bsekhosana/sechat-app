@@ -4,12 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sechat_app/features/invitations/providers/invitation_provider.dart';
-import 'package:sechat_app/shared/widgets/qr_scanner_widget.dart';
-import 'package:sechat_app/shared/widgets/qr_generator_widget.dart';
-import 'package:sechat_app/shared/widgets/contact_details_widget.dart';
 import 'package:sechat_app/shared/providers/auth_provider.dart';
-import 'package:sechat_app/core/services/session_service.dart';
 import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
+
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
 import 'package:sechat_app/shared/widgets/user_avatar.dart';
 import 'package:sechat_app/shared/models/invitation.dart';
