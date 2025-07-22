@@ -1,0 +1,236 @@
+version: 2.1
+
+orbs:
+  flutter: circleci/flutter@2.0
+
+jobs:
+  test:
+    docker:
+      - image: cimg/android:2024.01.1-node
+    steps:
+      - checkout:
+          path: .
+      - run:
+          name: Configure Git for HTTPS
+          command: |
+            git config --global url."https://github.com/".insteadOf git@github.com:
+            git config --global url."https://".insteadOf git://
+      - flutter/install_sdk:
+          version: 3.32.6
+      - run:
+          name: Install dependencies
+          command: flutter pub get
+      - run:
+          name: Analyze code
+          command: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+  build-android:
+    docker:
+      - image: cimg/android:2024.01.1-node
+    steps:
+      - checkout:
+          path: .
+      - run:
+          name: Configure Git for HTTPS
+          command: |
+            git config --global url."https://github.com/".insteadOf git@github.com:
+            git config --global url."https://".insteadOf git://
+      - flutter/install_sdk:
+          version: 3.32.6
+      - run:
+          name: Install dependencies
+          command: flutter pub get
+      - run:
+          name: Setup Android signing
+          command: |
+            if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+              echo "Setting up Android release signing..."
+              echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+              cat > android/key.properties \<< 'EOF'
+            storeFile=release.keystore
+            storePassword=$ANDROID_STORE_PASSWORD
+            keyAlias=$ANDROID_KEY_ALIAS
+            keyPassword=$ANDROID_KEY_PASSWORD
+            EOF
+            else
+              echo "No Android signing secrets found. Using debug signing..."
+              echo "To enable release signing, add these CircleCI environment variables:"
+              echo "- ANDROID_KEYSTORE_BASE64"
+              echo "- ANDROID_STORE_PASSWORD"
+              echo "- ANDROID_KEY_ALIAS"
+              echo "- ANDROID_KEY_PASSWORD"
+            fi
+      - run:
+          name: Build Android APK
+          command: |
+            if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+              flutter build apk --release
+            else
+              flutter build apk --debug
+            fi
+      - run:
+          name: Build Android AAB
+          command: |
+            if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+              flutter build appbundle --release
+            else
+              flutter build appbundle --debug
+            fi
+      - store_artifacts:
+          path: build/app/outputs/flutter-apk/app-release.apk
+          destination: android-apk
+      - store_artifacts:
+          path: build/app/outputs/bundle/release/app-release.aab
+          destination: android-aab
+      - store_artifacts:
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          destination: android-debug-apk
+      - store_artifacts:
+          path: build/app/outputs/bundle/debug/app-debug.aab
+          destination: android-debug-aab
+
+  build-ios:
+    macos:
+      xcode: "15.2.0"
+    steps:
+      - checkout:
+          path: .
+      - run:
+          name: Configure Git for HTTPS
+          command: |
+            git config --global url."https://github.com/".insteadOf git@github.com:
+            git config --global url."https://".insteadOf git://
+      - flutter/install_sdk:
+          version: 3.32.6
+      - run:
+          name: Install dependencies
+          command: flutter pub get
+      - run:
+          name: Setup iOS signing
+          command: |
+            if [ -n "$IOS_DISTRIBUTION_CERT_BASE64" ] && [ -n "$IOS_PROVISIONING_PROFILE_BASE64" ]; then
+              echo "Setting up iOS signing..."
+              mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+              echo "$IOS_DISTRIBUTION_CERT_BASE64" | base64 -d > ios_distribution.p12
+              echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/SeChat.mobileprovision
+              security create-keychain -p circleci build.keychain
+              security default-keychain -s build.keychain
+              security unlock-keychain -p circleci build.keychain
+              security set-keychain-settings -t 3600 -l ~/Library/Keychains/build.keychain
+              security import ios_distribution.p12 -k build.keychain -P "$IOS_DISTRIBUTION_CERT_PASSWORD" -T /usr/bin/codesign
+              security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k circleci build.keychain
+            else
+              echo "No iOS signing secrets found. Using development signing..."
+              echo "To enable App Store signing, add these CircleCI environment variables:"
+              echo "- IOS_DISTRIBUTION_CERT_BASE64"
+              echo "- IOS_DISTRIBUTION_CERT_PASSWORD"
+              echo "- IOS_PROVISIONING_PROFILE_BASE64"
+            fi
+      - run:
+          name: Build iOS
+          command: |
+            if [ -n "$IOS_DISTRIBUTION_CERT_BASE64" ] && [ -n "$IOS_PROVISIONING_PROFILE_BASE64" ]; then
+              flutter build ios --release --no-codesign
+              cd ios
+              xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -archivePath Runner.xcarchive archive
+              xcodebuild -exportArchive -archivePath Runner.xcarchive -exportOptionsPlist exportOptions.plist -exportPath build/ios
+            else
+              flutter build ios --debug
+            fi
+      - store_artifacts:
+          path: build/ios/iphoneos/Runner.app
+          destination: ios-app
+      - store_artifacts:
+          path: ios/build/ios
+          destination: ios-archive
+
+  deploy-android:
+    docker:
+      - image: cimg/android:2024.01.1-node
+    steps:
+      - checkout:
+          path: .
+      - run:
+          name: Configure Git for HTTPS
+          command: |
+            git config --global url."https://github.com/".insteadOf git@github.com:
+            git config --global url."https://".insteadOf git://
+      - attach_workspace:
+          at: /tmp/workspace
+      - run:
+          name: Download Android artifacts
+          command: |
+            cp /tmp/workspace/android-aab/app-release.aab ./app-release.aab
+            cp /tmp/workspace/android-apk/app-release.apk ./app-release.apk
+      - run:
+          name: Upload to Google Play Console
+          command: |
+            if [ -n "$GOOGLE_PLAY_SERVICE_ACCOUNT_KEY" ]; then
+              echo "Uploading to Google Play Console..."
+              echo "$GOOGLE_PLAY_SERVICE_ACCOUNT_KEY" > service-account-key.json
+              # Install fastlane
+              gem install fastlane
+              # Upload to Google Play Console
+              fastlane supply --aab app-release.aab --json_key service-account-key.json --package_name com.strapblaque.sechat
+            else
+              echo "No Google Play service account key found. Skipping upload."
+              echo "To enable Google Play upload, add GOOGLE_PLAY_SERVICE_ACCOUNT_KEY to CircleCI environment variables."
+            fi
+
+  deploy-ios:
+    macos:
+      xcode: "15.2.0"
+    steps:
+      - checkout:
+          path: .
+      - run:
+          name: Configure Git for HTTPS
+          command: |
+            git config --global url."https://github.com/".insteadOf git@github.com:
+            git config --global url."https://".insteadOf git://
+      - attach_workspace:
+          at: /tmp/workspace
+      - run:
+          name: Download iOS artifacts
+          command: |
+            cp -r /tmp/workspace/ios-archive/* ./ios-build/
+      - run:
+          name: Upload to TestFlight
+          command: |
+            if [ -n "$APP_STORE_CONNECT_API_KEY" ]; then
+              echo "Uploading to TestFlight..."
+              echo "$APP_STORE_CONNECT_API_KEY" > app-store-connect-api-key.json
+              # Install fastlane
+              gem install fastlane
+              # Upload to TestFlight
+              fastlane pilot upload --ipa "ios-build/Runner.ipa" --api_key_path app-store-connect-api-key.json
+            else
+              echo "No App Store Connect API key found. Skipping upload."
+              echo "To enable TestFlight upload, add APP_STORE_CONNECT_API_KEY to CircleCI environment variables."
+            fi
+
+workflows:
+  version: 2
+  test-and-build:
+    jobs:
+      - test
+      - build-android:
+          filters:
+            branches:
+              only: master
+      - build-ios:
+          filters:
+            branches:
+              only: master
+      - deploy-android:
+          requires:
+            - build-android
+          filters:
+            branches:
+              only: master
+      - deploy-ios:
+          requires:
+            - build-ios
+          filters:
+            branches:
+              only: master 
