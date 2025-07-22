@@ -8,13 +8,11 @@ jobs:
     docker:
       - image: cimg/android:2024.01.1-node
     steps:
-      - checkout:
-          path: .
       - run:
-          name: Configure Git for HTTPS
+          name: Clone repository with HTTPS
           command: |
-            git config --global url."https://github.com/".insteadOf git@github.com:
-            git config --global url."https://".insteadOf git://
+            git clone https://github.com/bsekhosana/sechat-app.git .
+            git checkout $CIRCLE_SHA1
       - flutter/install_sdk:
           version: 3.32.6
       - run:
@@ -28,13 +26,11 @@ jobs:
     docker:
       - image: cimg/android:2024.01.1-node
     steps:
-      - checkout:
-          path: .
       - run:
-          name: Configure Git for HTTPS
+          name: Clone repository with HTTPS
           command: |
-            git config --global url."https://github.com/".insteadOf git@github.com:
-            git config --global url."https://".insteadOf git://
+            git clone https://github.com/bsekhosana/sechat-app.git .
+            git checkout $CIRCLE_SHA1
       - flutter/install_sdk:
           version: 3.32.6
       - run:
@@ -93,13 +89,11 @@ jobs:
     macos:
       xcode: "15.2.0"
     steps:
-      - checkout:
-          path: .
       - run:
-          name: Configure Git for HTTPS
+          name: Clone repository with HTTPS
           command: |
-            git config --global url."https://github.com/".insteadOf git@github.com:
-            git config --global url."https://".insteadOf git://
+            git clone https://github.com/bsekhosana/sechat-app.git .
+            git checkout $CIRCLE_SHA1
       - flutter/install_sdk:
           version: 3.32.6
       - run:
@@ -148,13 +142,11 @@ jobs:
     docker:
       - image: cimg/android:2024.01.1-node
     steps:
-      - checkout:
-          path: .
       - run:
-          name: Configure Git for HTTPS
+          name: Clone repository with HTTPS
           command: |
-            git config --global url."https://github.com/".insteadOf git@github.com:
-            git config --global url."https://".insteadOf git://
+            git clone https://github.com/bsekhosana/sechat-app.git .
+            git checkout $CIRCLE_SHA1
       - attach_workspace:
           at: /tmp/workspace
       - run:
@@ -181,13 +173,11 @@ jobs:
     macos:
       xcode: "15.2.0"
     steps:
-      - checkout:
-          path: .
       - run:
-          name: Configure Git for HTTPS
+          name: Clone repository with HTTPS
           command: |
-            git config --global url."https://github.com/".insteadOf git@github.com:
-            git config --global url."https://".insteadOf git://
+            git clone https://github.com/bsekhosana/sechat-app.git .
+            git checkout $CIRCLE_SHA1
       - attach_workspace:
           at: /tmp/workspace
       - run:
