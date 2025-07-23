@@ -51,5 +51,7 @@
 		<string>This app needs camera access to take photos for QR code scanning.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>This app needs photo library access to select images for QR code scanning.</string>
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<false/>
 	</dict>
 </plist>
