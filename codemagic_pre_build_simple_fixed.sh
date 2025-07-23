@@ -18,24 +18,9 @@ echo "✅ Android keystore set up successfully"
 # Version management
 echo "📈 Setting up version management..."
 
-# Get current version from pubspec.yaml
-CURRENT_VERSION=$(grep "^version:" pubspec.yaml | sed 's/version: //')
-echo "Current version: $CURRENT_VERSION"
-
-# Set new version and build number
-NEW_VERSION="2.0.0"
-
-# Handle build number - use CM_BUILD_NUMBER or fallback to timestamp
-if [ -n "$CM_BUILD_NUMBER" ]; then
-    NEW_BUILD_NUMBER="$CM_BUILD_NUMBER"
-    echo "Using Codemagic build number: $NEW_BUILD_NUMBER"
-else
-    # Fallback to timestamp-based build number
-    NEW_BUILD_NUMBER=$(date +%s)
-    echo "CM_BUILD_NUMBER not set, using timestamp: $NEW_BUILD_NUMBER"
-fi
-
-FULL_VERSION="$NEW_VERSION+$NEW_BUILD_NUMBER"
+# Use timestamp as build number to ensure uniqueness
+BUILD_NUMBER=$(date +%s)
+FULL_VERSION="2.0.0+$BUILD_NUMBER"
 
 echo "Setting version to: $FULL_VERSION"
 
@@ -45,12 +30,5 @@ sed -i.bak "s/^version: .*/version: $FULL_VERSION/" pubspec.yaml
 # Verify the update
 UPDATED_VERSION=$(grep "^version:" pubspec.yaml | sed 's/version: //')
 echo "Updated version: $UPDATED_VERSION"
-
-# Display final configuration
-echo "🎯 Final Configuration:"
-echo "Version: $NEW_VERSION"
-echo "Build Number: $NEW_BUILD_NUMBER"
-echo "Full Version: $FULL_VERSION"
-echo "Keystore: $KEYSTORE_PATH"
 
 echo "✅ Pre-build script completed successfully!" 
