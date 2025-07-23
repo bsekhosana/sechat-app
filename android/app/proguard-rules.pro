@@ -96,8 +96,10 @@
 -keep class io.flutter.**  { *; }
 -keep class io.flutter.plugins.**  { *; }
 
-# Keep Google Play Core classes
+# Keep Google Play Core classes (Android 14 compatible)
 -keep class com.google.android.play.core.** { *; }
 -keep class com.google.android.play.core.splitcompat.** { *; }
 -keep class com.google.android.play.core.splitinstall.** { *; }
--keep class com.google.android.play.core.tasks.** { *; } 
+-keep class com.google.android.play.core.tasks.** { *; }
+-keep class com.google.android.play.app-update.** { *; }
+-keep class com.google.android.play.review.** { *; } 
