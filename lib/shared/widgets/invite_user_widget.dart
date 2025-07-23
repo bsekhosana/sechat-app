@@ -4,8 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:sechat_app/shared/providers/auth_provider.dart';
 import 'package:sechat_app/shared/widgets/qr_image_upload_widget.dart';
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
-import '../../features/invitations/providers/invitation_provider.dart';
+import '../../features/invitations/providers/session_invitation_provider.dart';
 import '../../core/services/session_service.dart';
+import '../../core/services/notification_service.dart';
 
 class InviteUserWidget extends StatelessWidget {
   const InviteUserWidget({super.key});
@@ -96,7 +97,7 @@ class _InviteOptionsSheet extends StatelessWidget {
 
           // Options
           Expanded(
-            child: Padding(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 children: [
@@ -146,7 +147,7 @@ class _InviteOptionsSheet extends StatelessWidget {
                     onTap: () => _showMyQRCode(context),
                   ),
 
-                  const Spacer(),
+                  const SizedBox(height: 24),
 
                   // Cancel Button
                   SizedBox(
@@ -252,9 +253,9 @@ class _InviteOptionsSheet extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => QRImageUploadWidget(
-          onQRCodeExtracted: (qrData) {
+          onQRCodeExtracted: (qrData) async {
             Navigator.of(context).pop();
-            _processQRCode(context, qrData);
+            await _processQRCode(context, qrData);
           },
           onCancel: () => Navigator.of(context).pop(),
         ),
@@ -267,9 +268,9 @@ class _InviteOptionsSheet extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => QRImageUploadWidget(
-          onQRCodeExtracted: (qrData) {
+          onQRCodeExtracted: (qrData) async {
             Navigator.of(context).pop();
-            _processQRCode(context, qrData);
+            await _processQRCode(context, qrData);
           },
           onCancel: () => Navigator.of(context).pop(),
         ),
@@ -358,13 +359,14 @@ class _InviteOptionsSheet extends StatelessWidget {
             child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               final sessionId = sessionIdController.text.trim();
               final displayName = displayNameController.text.trim();
 
               if (sessionId.isNotEmpty) {
                 Navigator.of(context).pop();
-                _processQRCode(context, sessionId, displayName: displayName);
+                await _processQRCode(context, sessionId,
+                    displayName: displayName);
               }
             },
             style: ElevatedButton.styleFrom(
@@ -378,8 +380,8 @@ class _InviteOptionsSheet extends StatelessWidget {
     );
   }
 
-  void _processQRCode(BuildContext context, String qrData,
-      {String? displayName}) {
+  Future<void> _processQRCode(BuildContext context, String qrData,
+      {String? displayName}) async {
     try {
       // Try to parse as JSON first
       Map<String, dynamic> data;
@@ -394,10 +396,17 @@ class _InviteOptionsSheet extends StatelessWidget {
           data['displayName'] as String? ?? displayName;
 
       if (sessionId != null) {
-        context.read<InvitationProvider>().addContact(
-              sessionId: sessionId,
+        await context.read<SessionInvitationProvider>().sendInvitation(
+              recipientId: sessionId,
               displayName: extractedDisplayName,
             );
+
+        // Show instant notification
+        await NotificationService.instance.showInvitationReceivedNotification(
+          senderUsername: extractedDisplayName ?? 'Anonymous',
+          message: 'Contact request sent successfully',
+          invitationId: sessionId,
+        );
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/services/session_service.dart';
+import '../../core/services/session_messenger_service.dart';
 import '../models/user.dart';
 import 'dart:convert';
 
@@ -54,6 +55,16 @@ class AuthProvider extends ChangeNotifier {
 
         // Initialize Session Protocol
         await SessionService.instance.initialize();
+
+        // Initialize Session Messenger service
+        await SessionMessengerService.instance.initialize(
+          sessionId: _sessionId!,
+          name: _displayName,
+          profilePicture: _profilePicture,
+        );
+
+        // Connect to real-time messaging
+        await SessionMessengerService.instance.connect();
 
         // Create user object from Session identity
         _currentUser = User(
@@ -131,6 +142,16 @@ class AuthProvider extends ChangeNotifier {
       // Connect to Session network
       await SessionService.instance.connect();
 
+      // Initialize Session Messenger service
+      await SessionMessengerService.instance.initialize(
+        sessionId: _sessionId!,
+        name: displayName,
+        profilePicture: profilePicture,
+      );
+
+      // Connect to real-time messaging
+      await SessionMessengerService.instance.connect();
+
       print('🔐 Auth: Session identity created successfully: $_sessionId');
       return true;
     } catch (e) {
@@ -202,6 +223,16 @@ class AuthProvider extends ChangeNotifier {
 
       // Connect to Session network
       await SessionService.instance.connect();
+
+      // Initialize Session Messenger service
+      await SessionMessengerService.instance.initialize(
+        sessionId: _sessionId!,
+        name: _displayName,
+        profilePicture: _profilePicture,
+      );
+
+      // Connect to real-time messaging
+      await SessionMessengerService.instance.connect();
 
       print('🔐 Auth: Session identity imported successfully: $sessionId');
       return true;
@@ -288,6 +319,9 @@ class AuthProvider extends ChangeNotifier {
       // Disconnect from Session network
       await SessionService.instance.disconnect();
 
+      // Disconnect from Session Messenger
+      await SessionMessengerService.instance.disconnect();
+
       // Clear user data
       _currentUser = null;
       _isAuthenticated = false;
@@ -322,6 +356,9 @@ class AuthProvider extends ChangeNotifier {
 
       // Disconnect from Session network
       await SessionService.instance.disconnect();
+
+      // Disconnect from Session Messenger
+      await SessionMessengerService.instance.disconnect();
 
       // Clear all data
       await _storage.deleteAll();

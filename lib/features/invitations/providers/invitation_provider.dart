@@ -6,6 +6,7 @@ import '../../../core/services/api_service.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/services/local_storage_service.dart';
+import '../../../core/services/notification_service.dart';
 import 'dart:async';
 
 class InvitationProvider extends ChangeNotifier {
@@ -161,6 +162,13 @@ class InvitationProvider extends ChangeNotifier {
       await LocalStorageService.instance
           .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
 
+      // Show instant notification for successful invitation
+      await NotificationService.instance.showInvitationReceivedNotification(
+        senderUsername: displayName ?? 'Anonymous',
+        message: 'Contact request sent successfully',
+        invitationId: invitation.id,
+      );
+
       print('📱 InvitationProvider: Contact added: $sessionId');
     } catch (e) {
       _error = 'Failed to add contact: $e';
@@ -313,7 +321,7 @@ class InvitationProvider extends ChangeNotifier {
   }
 
   // Session Protocol Event Handlers
-  void _handleContactAdded(LocalSessionContact contact) {
+  void _handleContactAdded(LocalSessionContact contact) async {
     try {
       print(
           '📱 InvitationProvider: Contact added via Session: ${contact.sessionId}');
@@ -343,6 +351,13 @@ class InvitationProvider extends ChangeNotifier {
       );
 
       _invitations.add(invitation);
+
+      // Show notification for contact added (invitation accepted)
+      await NotificationService.instance.showInvitationResponseNotification(
+        username: contact.name ?? 'Anonymous User',
+        status: 'accepted',
+        invitationId: invitation.id,
+      );
 
       notifyListeners();
     } catch (e) {

@@ -6,15 +6,16 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'features/search/providers/search_provider.dart';
-import 'features/chat/providers/chat_provider.dart';
+import 'features/chat/providers/session_chat_provider.dart';
 import 'shared/providers/auth_provider.dart';
-import 'features/invitations/providers/invitation_provider.dart';
+import 'features/invitations/providers/session_invitation_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/session_service.dart';
+import 'core/services/session_messenger_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/local_storage_service.dart';
 
@@ -34,6 +35,8 @@ Future<void> main() async {
   // Initialize notification service
   await NotificationService.instance.initialize();
 
+  // Session Messenger service will be initialized after authentication
+
   // Socket.IO service will be initialized after user authentication
 
   runApp(
@@ -41,8 +44,8 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider.value(value: AuthProvider.instance),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
-        ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ChangeNotifierProvider(create: (_) => InvitationProvider()),
+        ChangeNotifierProvider(create: (_) => SessionChatProvider()),
+        ChangeNotifierProvider(create: (_) => SessionInvitationProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
         Provider.value(value: SessionService.instance),

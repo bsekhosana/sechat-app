@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../shared/providers/auth_provider.dart';
-import '../providers/chat_provider.dart';
+import '../providers/session_chat_provider.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/search_widget.dart';
@@ -34,7 +34,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final chatProvider = context.read<ChatProvider>();
+      final chatProvider = context.read<SessionChatProvider>();
       chatProvider.loadChats();
       // Refresh online status after loading chats
       chatProvider.refreshOnlineStatus();
@@ -594,6 +594,7 @@ Download now and let's chat securely!
                       await chatProvider.manualRefreshOnlineStatus();
                     },
                     color: const Color(0xFFFF6B35),
+                    backgroundColor: const Color(0xFF121212),
                     child: AnimationLimiter(
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 20),

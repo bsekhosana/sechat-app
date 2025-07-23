@@ -39,7 +39,7 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
           },
         ),
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
@@ -228,7 +228,7 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
               ),
             ],
 
-            const Spacer(),
+            const SizedBox(height: 24),
 
             // Tips
             Container(
@@ -354,7 +354,8 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
       final status = await Permission.camera.request();
       if (status != PermissionStatus.granted) {
         setState(() {
-          _errorMessage = 'Camera permission is required';
+          _errorMessage =
+              'Camera permission is required. Please enable camera access in Settings.';
         });
         return;
       }
@@ -396,17 +397,27 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
       final qrData =
           '{"sessionId":"Fd82sQAceAp8myHMOfzdgeUFjMfuTw4J6qnht9IxmkA","displayName":"TestUser","timestamp":1753156120920}';
 
+      // Call the callback first, then navigate
       widget.onQRCodeExtracted(qrData);
-      Navigator.of(context).pop();
+
+      // Use a small delay to ensure the callback is processed
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Check if the widget is still mounted before navigating
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     } catch (e) {
       setState(() {
         _errorMessage =
             'No QR code found in the image. Please try a different image.';
       });
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
