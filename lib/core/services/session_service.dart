@@ -460,6 +460,26 @@ class SessionService {
     }
   }
 
+  // Send typing indicator
+  Future<void> sendTypingIndicator(String receiverId, bool isTyping) async {
+    if (!_isConnected) {
+      print(
+          '🔐 Session: Error sending typing indicator: Not connected to Session network');
+      return;
+    }
+
+    try {
+      // Send typing indicator via native SDK
+      await _channel.invokeMethod('sendTypingIndicator', {
+        'receiverId': receiverId,
+        'isTyping': isTyping,
+      });
+    } catch (e) {
+      print('🔐 Session: Error sending typing indicator: $e');
+      // Don't rethrow - typing indicators are not critical
+    }
+  }
+
   // Remove contact
   Future<void> removeContact(String sessionId) async {
     try {
@@ -474,20 +494,6 @@ class SessionService {
     } catch (e) {
       print('🔐 Session: Error removing contact: $e');
       rethrow;
-    }
-  }
-
-  // Send typing indicator
-  Future<void> sendTypingIndicator(String receiverId, bool isTyping) async {
-    if (!_isConnected) return;
-
-    try {
-      await _channel.invokeMethod('sendTypingIndicator', {
-        'receiverId': receiverId,
-        'isTyping': isTyping,
-      });
-    } catch (e) {
-      print('🔐 Session: Error sending typing indicator: $e');
     }
   }
 

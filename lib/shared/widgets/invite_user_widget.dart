@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:sechat_app/shared/providers/auth_provider.dart';
 import 'package:sechat_app/shared/widgets/qr_image_upload_widget.dart';
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
-import '../../features/invitations/providers/session_invitation_provider.dart';
+import '../../features/invitations/providers/invitation_provider.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/notification_service.dart';
 
@@ -248,34 +249,122 @@ class _InviteOptionsSheet extends StatelessWidget {
     );
   }
 
-  void _scanQRCode(BuildContext context) {
+  void _scanQRCode(BuildContext context) async {
+    print('📱 InviteUserWidget: Starting QR scan navigation');
+
+    // Check camera permission first
+    final status = await Permission.camera.request();
+    if (status != PermissionStatus.granted) {
+      if (context.mounted) {
+        _showCameraPermissionDialog(context);
+      }
+      return;
+    }
+
     Navigator.of(context).pop();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => QRImageUploadWidget(
-          onQRCodeExtracted: (qrData) async {
-            Navigator.of(context).pop();
-            await _processQRCode(context, qrData);
-          },
-          onCancel: () => Navigator.of(context).pop(),
+    // Use a post-frame callback to ensure the modal is fully closed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print(
+          '📱 InviteUserWidget: Post-frame callback executed, context.mounted: ${context.mounted}');
+      if (context.mounted) {
+        // Simple navigation approach
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => QRImageUploadWidget(
+              onQRCodeExtracted: (qrData) async {
+                print('📱 InviteUserWidget: QR code extracted, processing...');
+                // Don't pop here, let the QR screen handle its own navigation
+                await _processQRCode(context, qrData);
+              },
+              onCancel: () {
+                print('📱 InviteUserWidget: QR screen cancelled');
+                // Don't pop here, let the QR screen handle its own navigation
+              },
+            ),
+          ),
+        );
+      }
+    });
+  }
+
+  void _showCameraPermissionDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF232323),
+        title: const Text(
+          'Camera Permission Required',
+          style: TextStyle(color: Colors.white),
         ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Camera access is required to scan QR codes for adding contacts.',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'To enable camera access:',
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '1. Go to Settings > SeChat\n'
+              '2. Tap "Camera"\n'
+              '3. Enable "Allow SeChat to Access Camera"',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              openAppSettings();
+            },
+            child: const Text(
+              'Open Settings',
+              style: TextStyle(color: Color(0xFFFF6B35)),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   void _uploadQRImage(BuildContext context) {
+    print('📱 InviteUserWidget: Starting QR upload navigation');
     Navigator.of(context).pop();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => QRImageUploadWidget(
-          onQRCodeExtracted: (qrData) async {
-            Navigator.of(context).pop();
-            await _processQRCode(context, qrData);
-          },
-          onCancel: () => Navigator.of(context).pop(),
-        ),
-      ),
-    );
+    // Use a post-frame callback to ensure the modal is fully closed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print(
+          '📱 InviteUserWidget: Post-frame callback executed, context.mounted: ${context.mounted}');
+      if (context.mounted) {
+        // Simple navigation approach
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => QRImageUploadWidget(
+              onQRCodeExtracted: (qrData) async {
+                print('📱 InviteUserWidget: QR code extracted, processing...');
+                // Don't pop here, let the QR screen handle its own navigation
+                await _processQRCode(context, qrData);
+              },
+              onCancel: () {
+                print('📱 InviteUserWidget: QR screen cancelled');
+                // Don't pop here, let the QR screen handle its own navigation
+              },
+            ),
+          ),
+        );
+      }
+    });
   }
 
   void _enterSessionId(BuildContext context) {
@@ -382,6 +471,7 @@ class _InviteOptionsSheet extends StatelessWidget {
 
   Future<void> _processQRCode(BuildContext context, String qrData,
       {String? displayName}) async {
+    print('📱 InviteUserWidget: Starting QR code processing');
     try {
       // Try to parse as JSON first
       Map<String, dynamic> data;
@@ -396,35 +486,109 @@ class _InviteOptionsSheet extends StatelessWidget {
           data['displayName'] as String? ?? displayName;
 
       if (sessionId != null) {
-        await context.read<SessionInvitationProvider>().sendInvitation(
-              recipientId: sessionId,
-              displayName: extractedDisplayName,
+        // Show loading indicator
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Adding contact...'),
+              backgroundColor: Colors.blue,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+
+        print(
+            '📱 InviteUserWidget: Sending invitation for sessionId: $sessionId with displayName: $extractedDisplayName');
+        // Add timeout to prevent hanging
+        final success = await context
+            .read<InvitationProvider>()
+            .sendInvitation(sessionId, displayName: extractedDisplayName)
+            .timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw Exception('Invitation request timed out');
+          },
+        ).catchError((error) {
+          print('📱 InviteUserWidget: Error sending invitation: $error');
+          return false; // Return false on error instead of throwing
+        });
+        print('📱 InviteUserWidget: Invitation send result: $success');
+
+        // Show instant notification with timeout (don't block on this)
+        try {
+          NotificationService.instance
+              .showInvitationSentNotification(
+            recipientUsername: extractedDisplayName ?? 'Anonymous',
+            invitationId: sessionId,
+          )
+              .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              print('Notification timeout - continuing anyway');
+            },
+          );
+        } catch (e) {
+          print('Notification failed: $e');
+          // Don't fail the whole process if notification fails
+        }
+
+        if (context.mounted) {
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content:
+                    Text('Contact added: ${extractedDisplayName ?? sessionId}'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+              ),
             );
-
-        // Show instant notification
-        await NotificationService.instance.showInvitationReceivedNotification(
-          senderUsername: extractedDisplayName ?? 'Anonymous',
-          message: 'Contact request sent successfully',
-          invitationId: sessionId,
-        );
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Contact added: ${extractedDisplayName ?? sessionId}'),
-            backgroundColor: Colors.green,
-          ),
-        );
+          } else {
+            // Check if it's a validation error
+            final invitationProvider = context.read<InvitationProvider>();
+            if (invitationProvider.isUserInvited(sessionId)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      '${extractedDisplayName ?? sessionId} is already in your contacts'),
+                  backgroundColor: Colors.blue,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            } else if (invitationProvider.isUserQueued(sessionId)) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'Invitation to ${extractedDisplayName ?? sessionId} is already pending'),
+                  backgroundColor: Colors.orange,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content:
+                      const Text('Contact added locally (network unavailable)'),
+                  backgroundColor: Colors.orange,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+        }
       } else {
         throw Exception('Invalid QR code format');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Invalid QR code: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      print('📱 InviteUserWidget: Error in QR processing: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
+    print('📱 InviteUserWidget: QR code processing completed');
   }
 }

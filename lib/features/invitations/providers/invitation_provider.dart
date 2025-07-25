@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
 import '../../../shared/models/invitation.dart';
 import '../../../shared/models/user.dart';
@@ -7,6 +8,7 @@ import '../../../core/services/session_service.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/services/airnotifier_service.dart';
 import 'dart:async';
 
 class InvitationProvider extends ChangeNotifier {
@@ -29,6 +31,7 @@ class InvitationProvider extends ChangeNotifier {
     _setupNetworkListener();
     _loadInvitationsFromLocal();
     _setupLocalStorageListener();
+    _setupNotificationHandlers();
   }
 
   void _setupSession() {
@@ -49,9 +52,79 @@ class InvitationProvider extends ChangeNotifier {
     LocalStorageService.instance.addListener(_handleLocalStorageChange);
   }
 
+  void _setupNotificationHandlers() {
+    // Set up handlers for incoming push notifications
+    // These will be called by the PushNotificationHandler
+    print('📱 InvitationProvider: Setting up notification handlers');
+  }
+
+  // Handle incoming invitation notification
+  void handleIncomingInvitation(
+      String senderId, String senderName, String invitationId) {
+    print(
+        '📱 InvitationProvider: Received invitation from $senderName ($senderId)');
+
+    // Create invitation record
+    final invitation = Invitation(
+      id: invitationId,
+      senderId: senderId,
+      recipientId: SessionService.instance.currentSessionId ?? '',
+      message: 'Contact request',
+      status: 'pending',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    // Add to list if not already present
+    if (!_invitations.any((inv) => inv.id == invitationId)) {
+      _invitations.add(invitation);
+      notifyListeners();
+      print('📱 InvitationProvider: Added incoming invitation: $invitationId');
+    }
+  }
+
+  // Handle invitation response notification
+  void handleInvitationResponse(
+      String responderId, String responderName, String status) {
+    print(
+        '📱 InvitationProvider: Received invitation response from $responderName ($responderId): $status');
+
+    // Find and update the invitation
+    final invitationIndex = _invitations.indexWhere(
+        (inv) => inv.recipientId == responderId && inv.status == 'pending');
+
+    if (invitationIndex != -1) {
+      final oldInvitation = _invitations[invitationIndex];
+      final updatedInvitation = Invitation(
+        id: oldInvitation.id,
+        senderId: oldInvitation.senderId,
+        recipientId: oldInvitation.recipientId,
+        message: oldInvitation.message,
+        status: status,
+        createdAt: oldInvitation.createdAt,
+        updatedAt: DateTime.now(),
+      );
+
+      _invitations[invitationIndex] = updatedInvitation;
+      notifyListeners();
+      print('📱 InvitationProvider: Updated invitation status to: $status');
+    }
+  }
+
   void _handleLocalStorageChange() {
     _loadInvitationsFromLocal();
-    notifyListeners();
+    _scheduleNotifyListeners();
+  }
+
+  void _scheduleNotifyListeners() {
+    // Schedule notification to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        notifyListeners();
+      } catch (e) {
+        print('📱 InvitationProvider: Error notifying listeners: $e');
+      }
+    });
   }
 
   bool _isHandlingNetworkChange = false;
@@ -172,11 +245,11 @@ class InvitationProvider extends ChangeNotifier {
       print('📱 InvitationProvider: Contact added: $sessionId');
     } catch (e) {
       _error = 'Failed to add contact: $e';
-      notifyListeners();
+      _scheduleNotifyListeners();
       print('📱 InvitationProvider: Error adding contact: $e');
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _scheduleNotifyListeners();
     }
   }
 
@@ -185,7 +258,7 @@ class InvitationProvider extends ChangeNotifier {
     try {
       _isLoading = true;
       _error = null;
-      notifyListeners();
+      _scheduleNotifyListeners();
 
       // Remove contact via Session Protocol
       await SessionService.instance.removeContact(sessionId);
@@ -201,11 +274,11 @@ class InvitationProvider extends ChangeNotifier {
       print('📱 InvitationProvider: Contact removed: $sessionId');
     } catch (e) {
       _error = 'Failed to remove contact: $e';
-      notifyListeners();
+      _scheduleNotifyListeners();
       print('📱 InvitationProvider: Error removing contact: $e');
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _scheduleNotifyListeners();
     }
   }
 
@@ -500,7 +573,7 @@ class InvitationProvider extends ChangeNotifier {
   // Set on invitations screen (for tracking UI state)
   void setOnInvitationsScreen(bool isOnScreen) {
     // This method is for UI state tracking
-    notifyListeners();
+    // No state change needed, so no notifyListeners() call
   }
 
   // Check if there are unread invitations
@@ -579,14 +652,71 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
-  // Send invitation (Session Protocol equivalent)
-  Future<bool> sendInvitation(String recipientId) async {
+  // Send invitation using AirNotifier
+  Future<bool> sendInvitation(String recipientId, {String? displayName}) async {
     try {
-      await addContact(
-        sessionId: recipientId,
-        displayName: null, // Will be fetched from Session network
+      // Check if user is already in contacts
+      if (isUserInvited(recipientId)) {
+        print(
+            '📱 InvitationProvider: User $recipientId is already in contacts');
+        return false;
+      }
+
+      // Check if invitation is already pending
+      if (isUserQueued(recipientId)) {
+        print(
+            '📱 InvitationProvider: Invitation to $recipientId is already pending');
+        return false;
+      }
+
+      // Generate unique invitation ID
+      final invitationId =
+          'inv_${DateTime.now().millisecondsSinceEpoch}_${recipientId}';
+
+      // Get current user info
+      final currentUser = SessionService.instance.currentIdentity;
+      final senderName =
+          displayName ?? currentUser?.sessionId ?? 'Unknown User';
+
+      // Send push notification via AirNotifier
+      final success =
+          await AirNotifierService.instance.sendInvitationNotification(
+        recipientId: recipientId,
+        senderName: senderName,
+        invitationId: invitationId,
+        message: 'Contact request',
       );
-      return true;
+
+      if (success) {
+        print(
+            '📱 InvitationProvider: Invitation sent via AirNotifier to: $recipientId');
+
+        // Create invitation record for tracking
+        final invitation = Invitation(
+          id: invitationId,
+          senderId: SessionService.instance.currentSessionId ?? '',
+          recipientId: recipientId,
+          message: 'Contact request',
+          status: 'pending', // Set as pending until recipient responds
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        _invitations.add(invitation);
+        notifyListeners();
+
+        // Show local notification
+        NotificationService.instance.showInvitationSentNotification(
+          recipientUsername: senderName,
+          invitationId: invitationId,
+        );
+
+        return true;
+      } else {
+        print(
+            '📱 InvitationProvider: Failed to send invitation via AirNotifier to: $recipientId');
+        return false;
+      }
     } catch (e) {
       print('📱 InvitationProvider: Error sending invitation: $e');
       return false;

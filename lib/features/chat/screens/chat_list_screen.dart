@@ -34,7 +34,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final chatProvider = context.read<SessionChatProvider>();
+      final chatProvider = context.read<ChatProvider>();
       chatProvider.loadChats();
       // Refresh online status after loading chats
       chatProvider.refreshOnlineStatus();

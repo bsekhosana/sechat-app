@@ -87,8 +87,8 @@ class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
       showWidget = false; // Hide when fully connected
     } else if (isNetworkConnected && !isSessionConnected) {
       // Network available but Session not connected
-      message = 'Connecting to Session Network...';
-      color = Colors.orange;
+      message = 'Failed to connect to Session Network';
+      color = Colors.red;
       showWidget = true;
     } else if (isReconnecting) {
       // Reconnecting
@@ -136,12 +136,29 @@ class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
 
   Future<void> _attemptReconnect() async {
     try {
+      print('ConnectionStatusWidget: Attempting to reconnect...');
+
       // Try to reconnect Session Protocol
       if (!SessionService.instance.isConnected) {
         await SessionService.instance.connect();
       }
+
+      // Note: Session Messenger is now optional and uses push notifications
+      // No need to manually reconnect as it's handled automatically
+
+      // Refresh connection status
+      _checkConnectionStatus();
     } catch (e) {
       print('ConnectionStatusWidget: Reconnection failed: $e');
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -183,19 +200,26 @@ class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
             ),
           ),
           if (_statusColor == Colors.red || _statusColor == Colors.orange)
-            TextButton(
-              onPressed: _showReconnectDialog,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            Container(
+              decoration: BoxDecoration(
+                color: _statusColor,
+                borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(
-                'Retry',
-                style: TextStyle(
-                  color: _statusColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+              child: TextButton(
+                onPressed: _attemptReconnect,
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'Retry',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),

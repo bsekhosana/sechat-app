@@ -3,7 +3,7 @@ import 'package:pigeon/pigeon.dart';
 @ConfigurePigeon(PigeonOptions(
   dartOut: 'lib/core/generated/session_api.g.dart',
   dartOptions: DartOptions(copyrightHeader: []),
-  javaOut: 'android/app/src/main/kotlin/com/strapblaque/sechat/SessionApi.java',
+  javaOut: 'android/app/src/main/java/com/strapblaque/sechat/SessionApi.java',
   javaOptions: JavaOptions(package: 'com.strapblaque.sechat'),
   objcHeaderOut: 'ios/Runner/SessionApi.h',
   objcSourceOut: 'ios/Runner/SessionApi.m',

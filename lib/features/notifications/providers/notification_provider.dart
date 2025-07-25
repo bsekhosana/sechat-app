@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:sechat_app/features/notifications/models/local_notification.dart';
+import 'package:sechat_app/core/services/notification_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class NotificationProvider extends ChangeNotifier {
@@ -14,11 +15,54 @@ class NotificationProvider extends ChangeNotifier {
 
   NotificationProvider() {
     _initializeNotificationsBox();
+    _setupNotificationServiceCallback();
   }
 
   Future<void> _initializeNotificationsBox() async {
     _notificationsBox = await Hive.openBox('notifications');
     loadNotifications();
+  }
+
+  void _setupNotificationServiceCallback() {
+    NotificationService.instance.setOnLocalNotificationAdded(
+      (title, body, type, data) {
+        _handleNotificationFromService(title, body, type, data);
+      },
+    );
+  }
+
+  void _handleNotificationFromService(
+    String title,
+    String body,
+    String type,
+    Map<String, dynamic>? data,
+  ) {
+    NotificationType notificationType;
+    switch (type) {
+      case 'invitation':
+      case 'invitation_sent':
+      case 'invitation_deleted':
+      case 'invitation_cancelled':
+        notificationType = NotificationType.invitation;
+        break;
+      case 'message':
+        notificationType = NotificationType.message;
+        break;
+      default:
+        notificationType = NotificationType.system;
+    }
+
+    final notification = LocalNotification(
+      id: '${type}_${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      body: body,
+      type: notificationType,
+      timestamp: DateTime.now(),
+      isRead: false,
+      data: data,
+    );
+
+    addNotification(notification);
   }
 
   void loadNotifications() async {
@@ -31,7 +75,15 @@ class NotificationProvider extends ChangeNotifier {
 
       for (final value in _notificationsBox.values) {
         try {
-          notificationsList.add(LocalNotification.fromJson(value));
+          // Convert Map<dynamic, dynamic> to Map<String, dynamic>
+          if (value is Map) {
+            final Map<String, dynamic> jsonData =
+                Map<String, dynamic>.from(value);
+            notificationsList.add(LocalNotification.fromJson(jsonData));
+          } else {
+            print(
+                'Error parsing notification: Invalid data type: ${value.runtimeType}');
+          }
         } catch (e) {
           print('Error parsing notification: $e');
         }
@@ -181,6 +233,27 @@ class NotificationProvider extends ChangeNotifier {
       timestamp: DateTime.now(),
       isRead: false,
       data: data,
+    );
+    addNotification(notification);
+  }
+
+  // Add connection status notification
+  void addConnectionNotification({
+    required String title,
+    required String body,
+    required bool isConnected,
+  }) {
+    final notification = LocalNotification(
+      id: 'conn_${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      body: body,
+      type: NotificationType.system,
+      timestamp: DateTime.now(),
+      isRead: false,
+      data: {
+        'isConnected': isConnected,
+        'timestamp': DateTime.now().toIso8601String(),
+      },
     );
     addNotification(notification);
   }

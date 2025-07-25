@@ -1,0 +1,6 @@
+version: "Apple Swift version 5.7.2 (swiftlang-5.7.2.135.5 clang-1400.0.29.51)"
+options: "8e3bf035cc5d09133a6ce65e961b3cbdbe8c39b731bc5de744c9152247c377e5"
+build_start_time: [1753361440, 912531852]
+build_end_time: [1753361441, 1572132]
+inputs:
+  "/Users/brunosekhosana/Projects/SeChat/sechat_app/ios/Runner/AppDelegate.swift": !private [1753360453, 160265445]

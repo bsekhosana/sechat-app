@@ -2,6 +2,7 @@ import UIKit
 import Flutter
 import CryptoKit
 import CommonCrypto
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -10,6 +11,9 @@ import CommonCrypto
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
+    
+    // Set up push notifications
+    setupPushNotifications(application)
     
     // Set up method channel for Session Protocol
     let controller = window?.rootViewController as! FlutterViewController
@@ -23,6 +27,27 @@ import CommonCrypto
     }
     
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+  
+  // MARK: - Push Notifications Setup
+  private func setupPushNotifications(_ application: UIApplication) {
+    // Request authorization
+    UNUserNotificationCenter.current().requestAuthorization(
+      options: [.alert, .badge, .sound],
+      completionHandler: { granted, error in
+        if granted {
+          print("📱 iOS: Push notification permission granted")
+          DispatchQueue.main.async {
+            application.registerForRemoteNotifications()
+          }
+        } else {
+          print("📱 iOS: Push notification permission denied: \(error?.localizedDescription ?? "Unknown error")")
+        }
+      }
+    )
+    
+    // Set delegate
+    UNUserNotificationCenter.current().delegate = self
   }
   
   private func generateEd25519KeyPair() throws -> [String: String] {
@@ -519,6 +544,86 @@ import CommonCrypto
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+}
+
+// MARK: - Push Notification Delegate
+extension AppDelegate {
+  // Called when app is in foreground
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    print("📱 iOS: Received notification in foreground: \(notification.request.content.title)")
+    completionHandler([.alert, .badge, .sound])
+  }
+  
+  // Called when user taps notification
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    print("📱 iOS: User tapped notification: \(response.notification.request.content.title)")
+    completionHandler()
+  }
+}
+
+// MARK: - Remote Notifications
+extension AppDelegate {
+  // Called when device token is received
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+    print("📱 iOS: Device token received: \(tokenString)")
+    
+    // Send token to Flutter
+    let controller = window?.rootViewController as! FlutterViewController
+    let channel = FlutterMethodChannel(
+      name: "push_notifications",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    channel.invokeMethod("onDeviceTokenReceived", arguments: tokenString)
+  }
+  
+  // Called when registration fails
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    print("📱 iOS: Failed to register for remote notifications: \(error.localizedDescription)")
+    
+    // Send error to Flutter
+    let controller = window?.rootViewController as! FlutterViewController
+    let channel = FlutterMethodChannel(
+      name: "push_notifications",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    channel.invokeMethod("onDeviceTokenError", arguments: error.localizedDescription)
+  }
+  
+  // Called when remote notification is received
+  override func application(
+    _ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+    fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+    print("📱 iOS: Received remote notification: \(userInfo)")
+    
+    // Send notification to Flutter
+    let controller = window?.rootViewController as! FlutterViewController
+    let channel = FlutterMethodChannel(
+      name: "push_notifications",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    channel.invokeMethod("onRemoteNotificationReceived", arguments: userInfo)
+    completionHandler(.newData)
   }
 }
 

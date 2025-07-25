@@ -1,136 +1,286 @@
-# Android Wireless Debugging Setup
+# Android Camera Permissions & Wireless Debugging Setup
 
-## Current Status
-- **Device IP:** 192.168.1.6
-- **Port:** 44375
-- **Network Connectivity:** ✅ Device is reachable (ping successful)
-- **ADB Connection:** ❌ Connection refused
+## 🎯 **1. Android Camera Permissions**
 
-## Troubleshooting Steps
+### ✅ **Permissions Added to AndroidManifest.xml:**
 
-### 1. Enable Wireless Debugging on Android Device
+```xml
+<!-- Camera permissions for QR code scanning -->
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-feature android:name="android.hardware.camera" android:required="false" />
+<uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
-1. **Open Developer Options:**
-   - Go to Settings → About Phone
-   - Tap "Build Number" 7 times to enable Developer Options
+<!-- Storage permissions for saving QR codes and images -->
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
-2. **Enable Developer Options:**
-   - Go to Settings → System → Developer Options
-   - Turn on "Developer Options"
+<!-- Internet permissions for messaging -->
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-3. **Enable Wireless Debugging:**
-   - In Developer Options, find "Wireless Debugging"
-   - Turn it ON
-   - Tap on "Wireless Debugging" to open settings
+<!-- Notification permissions -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+```
 
-4. **Get New Connection Details:**
-   - In Wireless Debugging settings, you'll see:
-     - IP Address (e.g., 192.168.1.6)
-     - Port (e.g., 44375)
-   - **Note:** The port may change when you restart wireless debugging
+### 🔧 **Android Permission Handling:**
 
-### 2. Connect via ADB
+The app already uses `permission_handler` package which automatically handles:
+- Runtime permission requests for Android 6.0+
+- Permission status checking
+- Settings navigation for denied permissions
 
+### 🧪 **Testing Android Permissions:**
+
+1. **Install app on Android device**
+2. **Try QR code scanning** - Should show permission dialog
+3. **Check app permissions** - Go to Settings > Apps > SeChat > Permissions
+4. **Verify camera access** - Should be listed and toggleable
+
+---
+
+## 📱 **2. Wireless Debugging Setup**
+
+### **Prerequisites:**
+- Android device with Android 11+ (API level 30+)
+- Device and computer on same WiFi network
+- USB cable for initial setup
+
+### **Step 1: Enable Developer Options**
+1. Go to **Settings > About phone**
+2. Tap **Build number** 7 times
+3. Go back to **Settings > System > Developer options**
+4. Enable **Developer options**
+
+### **Step 2: Enable Wireless Debugging**
+1. In **Developer options**, find **Wireless debugging**
+2. Enable **Wireless debugging**
+3. Tap **Wireless debugging** to open settings
+4. Tap **Use wireless debugging**
+
+### **Step 3: Connect Device Wirelessly**
+
+#### **Method 1: Using ADB (Recommended)**
 ```bash
-# Disconnect any existing connections
-adb disconnect 192.168.1.6:44375
+# 1. Connect device via USB first
+adb devices
 
-# Connect using the new port (if it changed)
-adb connect 192.168.1.6:NEW_PORT
+# 2. Enable wireless debugging
+adb tcpip 5555
 
-# Check connection status
+# 3. Get device IP address (shown in wireless debugging settings)
+# Or use: adb shell ip addr show wlan0
+
+# 4. Disconnect USB and connect wirelessly
+adb connect <DEVICE_IP>:5555
+
+# 5. Verify connection
 adb devices
 ```
 
-### 3. Alternative Connection Methods
+#### **Method 2: Using Flutter**
+```bash
+# 1. Connect via USB first
+flutter devices
 
-#### Method 1: Pair Device First (Recommended)
-1. In Wireless Debugging settings, tap "Pair device with pairing code"
-2. Note the pairing code and IP:port
-3. Run: `adb pair IP:PORT`
-4. Enter the pairing code when prompted
-5. Then run: `adb connect IP:PORT`
+# 2. Enable wireless debugging
+flutter run --debug
 
-#### Method 2: Use ADB Over WiFi
-1. Connect device via USB first
-2. Run: `adb tcpip 5555`
-3. Disconnect USB
-4. Run: `adb connect 192.168.1.6:5555`
+# 3. In another terminal, get device IP
+adb shell ip addr show wlan0
 
-### 4. Verify Connection
+# 4. Connect wirelessly
+flutter run -d <DEVICE_IP>:5555
+```
 
+### **Step 4: Flutter Wireless Debugging Commands**
+
+#### **List Wireless Devices:**
+```bash
+flutter devices
+```
+
+#### **Run App Wirelessly:**
+```bash
+flutter run -d <DEVICE_IP>:5555
+```
+
+#### **Hot Reload Wirelessly:**
+```bash
+# Press 'r' in the terminal where flutter run is active
+```
+
+#### **Hot Restart Wirelessly:**
+```bash
+# Press 'R' in the terminal where flutter run is active
+```
+
+### **Step 5: Troubleshooting Wireless Debugging**
+
+#### **Issue 1: Device Not Found**
 ```bash
 # Check if device is connected
 adb devices
 
-# Should show something like:
-# List of devices attached
-# 192.168.1.6:44375    device
+# Restart ADB server
+adb kill-server
+adb start-server
+
+# Reconnect device
+adb connect <DEVICE_IP>:5555
 ```
 
-### 5. Deploy SeChat App
-
-Once connected, you can deploy the app:
-
+#### **Issue 2: Connection Lost**
 ```bash
-# Install the debug APK
-flutter install
+# Check network connectivity
+ping <DEVICE_IP>
 
-# Or build and install
-flutter build apk --debug
-flutter install
+# Restart wireless debugging on device
+# Settings > Developer options > Wireless debugging > Turn off/on
+
+# Reconnect
+adb connect <DEVICE_IP>:5555
 ```
 
-## Common Issues
-
-### Connection Refused
-- **Cause:** Wireless debugging disabled or port changed
-- **Solution:** Re-enable wireless debugging and get new port
-
-### Device Shows as "Offline"
-- **Cause:** Device disconnected or debugging stopped
-- **Solution:** Reconnect using new port
-
-### Port Changes
-- **Cause:** Android restarts wireless debugging
-- **Solution:** Always check the current port in Wireless Debugging settings
-
-## Current Commands to Try
-
+#### **Issue 3: Port Already in Use**
 ```bash
-# 1. Check current devices
+# Kill existing ADB processes
+adb kill-server
+
+# Use different port
+adb tcpip 5556
+adb connect <DEVICE_IP>:5556
+```
+
+### **Step 6: Advanced Wireless Debugging**
+
+#### **Persistent Wireless Connection:**
+```bash
+# Create script for easy connection
+echo '#!/bin/bash
+adb kill-server
+adb start-server
+adb connect <DEVICE_IP>:5555
+flutter devices' > connect_wireless.sh
+
+chmod +x connect_wireless.sh
+./connect_wireless.sh
+```
+
+#### **Multiple Device Support:**
+```bash
+# Connect multiple devices
+adb connect <DEVICE1_IP>:5555
+adb connect <DEVICE2_IP>:5555
+
+# List all devices
+flutter devices
+
+# Run on specific device
+flutter run -d <DEVICE_ID>
+```
+
+### **Step 7: Security Considerations**
+
+#### **Network Security:**
+- Use private WiFi network
+- Avoid public WiFi for debugging
+- Consider VPN for additional security
+
+#### **Device Security:**
+- Disable wireless debugging when not in use
+- Use strong WiFi passwords
+- Keep device and computer updated
+
+---
+
+## 🚀 **Quick Setup Commands**
+
+### **Complete Setup Script:**
+```bash
+#!/bin/bash
+echo "Setting up wireless debugging..."
+
+# 1. Check if device is connected via USB
+if ! adb devices | grep -q "device$"; then
+    echo "Please connect device via USB first"
+    exit 1
+fi
+
+# 2. Enable wireless debugging
+echo "Enabling wireless debugging..."
+adb tcpip 5555
+
+# 3. Get device IP
+DEVICE_IP=$(adb shell ip addr show wlan0 | grep "inet " | cut -d" " -f6 | cut -d"/" -f1)
+echo "Device IP: $DEVICE_IP"
+
+# 4. Disconnect USB and connect wirelessly
+echo "Disconnect USB cable now, then press Enter..."
+read
+
+echo "Connecting wirelessly..."
+adb connect $DEVICE_IP:5555
+
+# 5. Verify connection
+if adb devices | grep -q "$DEVICE_IP"; then
+    echo "✅ Wireless debugging connected successfully!"
+    echo "Device IP: $DEVICE_IP"
+    echo "Run: flutter run -d $DEVICE_IP:5555"
+else
+    echo "❌ Connection failed. Please check network and try again."
+fi
+```
+
+### **Save as `setup_wireless_debugging.sh` and run:**
+```bash
+chmod +x setup_wireless_debugging.sh
+./setup_wireless_debugging.sh
+```
+
+---
+
+## 📋 **Verification Checklist**
+
+### **Android Permissions:**
+- [ ] Camera permission declared in AndroidManifest.xml
+- [ ] App requests camera permission at runtime
+- [ ] Permission dialog appears when scanning QR codes
+- [ ] Camera settings accessible in device settings
+- [ ] QR code scanning works after permission granted
+
+### **Wireless Debugging:**
+- [ ] Developer options enabled
+- [ ] Wireless debugging enabled
+- [ ] Device and computer on same WiFi
+- [ ] ADB can connect wirelessly
+- [ ] Flutter can run wirelessly
+- [ ] Hot reload works wirelessly
+- [ ] App can be installed wirelessly
+
+### **Testing Commands:**
+```bash
+# Test wireless connection
 adb devices
 
-# 2. Try pairing (if pairing option is available)
-adb pair 192.168.1.6:44375
+# Test Flutter wireless
+flutter devices
+flutter run -d <DEVICE_IP>:5555
 
-# 3. Try connecting with different port
-adb connect 192.168.1.6:5555
+# Test hot reload
+# Press 'r' in terminal
 
-# 4. Check if device responds
-adb -s 192.168.1.6:44375 shell echo "test"
+# Test hot restart
+# Press 'R' in terminal
 ```
 
-## Next Steps
+---
 
-1. **On your Android device:** Re-enable wireless debugging and get the current port
-2. **Update the port** in the connection command if it changed
-3. **Try the connection** again
-4. **Once connected:** Deploy and test the SeChat app
+## 🔄 **Next Steps:**
 
-## Testing the App
+1. **Test Android permissions** on physical Android device
+2. **Set up wireless debugging** using the guide above
+3. **Test QR code scanning** with camera permissions
+4. **Verify wireless debugging** works for development
+5. **Test both platforms** (iOS and Android) for camera functionality
 
-Once connected successfully:
-
-```bash
-# Install the app
-flutter install
-
-# Run the app
-flutter run
-
-# Or install the built APK
-flutter install --release
-```
-
-The SeChat app should then be installed and ready for testing on your Android device! 
+The Android camera permissions are now properly configured, and you have a complete guide for setting up wireless debugging! 

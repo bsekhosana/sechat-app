@@ -17,6 +17,8 @@ class NotificationService {
   bool _isInitialized = false;
   String? _selectedNotificationPayload;
   Function(String?)? _onNotificationTap;
+  Function(String, String, String, Map<String, dynamic>?)?
+      _onLocalNotificationAdded;
 
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -88,6 +90,26 @@ class NotificationService {
     _onNotificationTap = callback;
   }
 
+  // Set callback for adding local notifications
+  void setOnLocalNotificationAdded(
+      Function(String, String, String, Map<String, dynamic>?) callback) {
+    _onLocalNotificationAdded = callback;
+  }
+
+  // Add notification to local notifications list
+  void _addToLocalNotifications({
+    required String title,
+    required String body,
+    required String type,
+    Map<String, dynamic>? data,
+  }) {
+    print('📱 NotificationService: Adding to local notifications - $title');
+
+    if (_onLocalNotificationAdded != null) {
+      _onLocalNotificationAdded!(title, body, type, data);
+    }
+  }
+
   Future<void> showInvitationReceivedNotification({
     required String senderUsername,
     required String message,
@@ -95,6 +117,18 @@ class NotificationService {
   }) async {
     if (kIsWeb) return; // Skip on web
     if (!_isInitialized) await initialize();
+
+    // Add to local notifications list
+    _addToLocalNotifications(
+      title: 'Contact request from $senderUsername',
+      body: message,
+      type: 'invitation',
+      data: {
+        'senderUsername': senderUsername,
+        'invitationId': invitationId,
+        'message': message,
+      },
+    );
 
     const AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails(
@@ -181,6 +215,61 @@ class NotificationService {
         '📱 NotificationService: Invitation response notification sent for $username - $status');
   }
 
+  Future<void> showInvitationSentNotification({
+    required String recipientUsername,
+    required String invitationId,
+  }) async {
+    if (kIsWeb) return; // Skip on web
+    if (!_isInitialized) await initialize();
+
+    // Add to local notifications list
+    _addToLocalNotifications(
+      title: 'Invitation Sent',
+      body: 'Invitation sent to $recipientUsername',
+      type: 'invitation_sent',
+      data: {
+        'recipientUsername': recipientUsername,
+        'invitationId': invitationId,
+      },
+    );
+
+    const AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+      'invitation_sent',
+      'Invitation Sent',
+      channelDescription: 'Notifications for sent invitations',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      icon: '@mipmap/ic_launcher',
+      color: Color(0xFF4CAF50),
+      enableVibration: false,
+      playSound: false,
+    );
+
+    const DarwinNotificationDetails iosNotificationDetails =
+        DarwinNotificationDetails(
+      presentAlert: false,
+      presentBadge: false,
+      presentSound: false,
+    );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+      iOS: iosNotificationDetails,
+    );
+
+    await _flutterLocalNotificationsPlugin.show(
+      invitationId.hashCode,
+      'Invitation Sent',
+      'Invitation sent to $recipientUsername',
+      notificationDetails,
+      payload: 'invitation_sent:$invitationId',
+    );
+
+    print(
+        '📱 NotificationService: Invitation sent notification for $recipientUsername');
+  }
+
   Future<void> showInvitationDeletedNotification({
     required String username,
     required String invitationId,
@@ -188,6 +277,18 @@ class NotificationService {
   }) async {
     if (kIsWeb) return; // Skip on web
     if (!_isInitialized) await initialize();
+
+    // Add to local notifications list
+    _addToLocalNotifications(
+      title: '🗑️ Invitation Deleted',
+      body: '$username deleted the invitation',
+      type: 'invitation_deleted',
+      data: {
+        'username': username,
+        'invitationId': invitationId,
+        'deletedBy': deletedBy,
+      },
+    );
 
     const AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails(
@@ -234,6 +335,18 @@ class NotificationService {
     if (kIsWeb) return; // Skip on web
     if (!_isInitialized) await initialize();
 
+    // Add to local notifications list
+    _addToLocalNotifications(
+      title: '❌ Invitation Cancelled',
+      body: '$username cancelled the invitation',
+      type: 'invitation_cancelled',
+      data: {
+        'username': username,
+        'invitationId': invitationId,
+        'cancelledBy': cancelledBy,
+      },
+    );
+
     const AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails(
       'invitation_cancelled',
@@ -269,6 +382,62 @@ class NotificationService {
 
     print(
         '📱 NotificationService: Invitation cancelled notification sent for $username');
+  }
+
+  Future<void> showMessageNotification({
+    required String senderName,
+    required String message,
+    required String conversationId,
+  }) async {
+    if (kIsWeb) return; // Skip on web
+    if (!_isInitialized) await initialize();
+
+    // Add to local notifications list
+    _addToLocalNotifications(
+      title: 'Message from $senderName',
+      body: message,
+      type: 'message',
+      data: {
+        'senderName': senderName,
+        'message': message,
+        'conversationId': conversationId,
+      },
+    );
+
+    const AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+      'message_received',
+      'Message Received',
+      channelDescription: 'Notifications for received messages',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      color: Color(0xFF4CAF50),
+      enableVibration: true,
+      playSound: true,
+    );
+
+    const DarwinNotificationDetails iosNotificationDetails =
+        DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
+    const NotificationDetails notificationDetails = NotificationDetails(
+      android: androidNotificationDetails,
+      iOS: iosNotificationDetails,
+    );
+
+    await _flutterLocalNotificationsPlugin.show(
+      conversationId.hashCode,
+      '💬 Message from $senderName',
+      message,
+      notificationDetails,
+      payload: 'message:$conversationId',
+    );
+
+    print('📱 NotificationService: Message notification sent for $senderName');
   }
 
   Future<void> cancelNotification(int id) async {
@@ -315,6 +484,19 @@ class NotificationService {
       }
     } catch (e) {
       print('📱 NotificationService: Error parsing payload: $e');
+      return null;
+    }
+  }
+
+  // Helper method to safely convert dynamic maps to Map<String, dynamic>
+  Map<String, dynamic>? _safeMapConversion(dynamic data) {
+    try {
+      if (data is Map) {
+        return Map<String, dynamic>.from(data);
+      }
+      return null;
+    } catch (e) {
+      print('📱 NotificationService: Error converting map: $e');
       return null;
     }
   }

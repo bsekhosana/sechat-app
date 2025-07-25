@@ -34,45 +34,11 @@ class _InvitationsScreenState extends State<InvitationsScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _invitationProvider = context.read<InvitationProvider>();
-    // Mark as on invitations screen
-    _invitationProvider.setOnInvitationsScreen(true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Mark as on invitations screen after build is complete
       _invitationProvider.loadInvitations();
-      _setupRealTimeUpdates();
     });
-  }
-
-  void _setupRealTimeUpdates() {
-    // Listen to invitation provider changes for real-time updates
-    _invitationProvider.addListener(_onInvitationProviderChanged);
-  }
-
-  void _onInvitationProviderChanged() {
-    if (!mounted) return;
-
-    // Check for new received invitations
-    final receivedInvitations = _invitationProvider.invitations
-        .where((invitation) =>
-            invitation.isReceived && invitation.status == 'pending')
-        .toList();
-
-    // Find new invitations that weren't in our list before
-    for (final invitation in receivedInvitations) {
-      if (!_newInvitationIds.contains(invitation.id)) {
-        _newInvitationIds.add(invitation.id);
-        _showNewInvitationToast(invitation);
-
-        // Remove from new list after 5 seconds
-        Future.delayed(const Duration(seconds: 5), () {
-          if (mounted) {
-            setState(() {
-              _newInvitationIds.remove(invitation.id);
-            });
-          }
-        });
-      }
-    }
   }
 
   void _showNewInvitationToast(Invitation invitation) {
@@ -121,23 +87,13 @@ class _InvitationsScreenState extends State<InvitationsScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Remove listener to prevent memory leaks
-    _invitationProvider.removeListener(_onInvitationProviderChanged);
-    // Mark as not on invitations screen
-    _invitationProvider.setOnInvitationsScreen(false);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.paused) {
-      // Mark as not on invitations screen when app is paused
-      _invitationProvider.setOnInvitationsScreen(false);
-    } else if (state == AppLifecycleState.resumed) {
-      // Mark as on invitations screen when app is resumed
-      _invitationProvider.setOnInvitationsScreen(true);
-    }
+    // App lifecycle changes are now handled by silent notifications
   }
 
   void _shareApp() {

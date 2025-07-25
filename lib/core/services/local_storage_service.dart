@@ -20,6 +20,7 @@ class LocalStorageService extends ChangeNotifier {
   late Box<dynamic> _deletedMessagesBox;
   late Box<dynamic> _storageStatsBox;
   late Box<dynamic> _invitationsBox;
+  late Box<dynamic> _notificationsBox;
 
   final Uuid _uuid = const Uuid();
   Directory? _appDocumentsDir;
@@ -39,6 +40,7 @@ class LocalStorageService extends ChangeNotifier {
     _deletedMessagesBox = await Hive.openBox('deleted_messages');
     _storageStatsBox = await Hive.openBox('storage_stats');
     _invitationsBox = await Hive.openBox('invitations');
+    _notificationsBox = await Hive.openBox('notifications');
 
     // Create directories for file storage
     await _createDirectories();
@@ -438,6 +440,7 @@ class LocalStorageService extends ChangeNotifier {
     await _deletedMessagesBox.clear();
     await _storageStatsBox.clear();
     await _invitationsBox.clear();
+    await _notificationsBox.clear();
     notifyListeners();
   }
 
@@ -549,6 +552,14 @@ class LocalStorageService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Map<String, dynamic>? getInvitation(String invitationId) {
+    final data = _invitationsBox.get(invitationId);
+    if (data != null && data is Map<String, dynamic>) {
+      return data;
+    }
+    return null;
+  }
+
   Future<void> deleteInvitation(String invitationId) async {
     await _invitationsBox.delete(invitationId);
     notifyListeners();
@@ -557,6 +568,84 @@ class LocalStorageService extends ChangeNotifier {
   Future<void> clearAllInvitations() async {
     await _invitationsBox.clear();
     notifyListeners();
+  }
+
+  // ==================== NOTIFICATION MANAGEMENT ====================
+
+  Future<void> saveNotification(Map<String, dynamic> notificationData) async {
+    await _notificationsBox.put(notificationData['id'], notificationData);
+    notifyListeners();
+  }
+
+  Future<void> saveNotifications(
+      List<Map<String, dynamic>> notifications) async {
+    final batch = <String, dynamic>{};
+    for (final notification in notifications) {
+      batch[notification['id']] = notification;
+    }
+    await _notificationsBox.putAll(batch);
+    notifyListeners();
+  }
+
+  List<Map<String, dynamic>> getNotifications(
+      {int limit = 10, int offset = 0}) {
+    final notifications = <Map<String, dynamic>>[];
+    final keys = _notificationsBox.keys.toList();
+
+    // Sort by timestamp (newest first)
+    keys.sort((a, b) {
+      final aData = _notificationsBox.get(a);
+      final bData = _notificationsBox.get(b);
+      if (aData == null || bData == null) return 0;
+
+      final aTimestamp = DateTime.parse(
+          aData['timestamp'] ?? DateTime.now().toIso8601String());
+      final bTimestamp = DateTime.parse(
+          bData['timestamp'] ?? DateTime.now().toIso8601String());
+      return bTimestamp.compareTo(aTimestamp);
+    });
+
+    // Apply pagination
+    final startIndex = offset;
+    final endIndex = (offset + limit).clamp(0, keys.length);
+
+    for (int i = startIndex; i < endIndex; i++) {
+      final data = _notificationsBox.get(keys[i]);
+      if (data != null && data is Map<String, dynamic>) {
+        notifications.add(data);
+      }
+    }
+
+    return notifications;
+  }
+
+  Future<void> markNotificationAsRead(String notificationId) async {
+    final data = _notificationsBox.get(notificationId);
+    if (data != null && data is Map<String, dynamic>) {
+      data['isRead'] = true;
+      await _notificationsBox.put(notificationId, data);
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteNotification(String notificationId) async {
+    await _notificationsBox.delete(notificationId);
+    notifyListeners();
+  }
+
+  Future<void> clearAllNotifications() async {
+    await _notificationsBox.clear();
+    notifyListeners();
+  }
+
+  int getUnreadNotificationCount() {
+    int count = 0;
+    for (final value in _notificationsBox.values) {
+      if (value is Map<String, dynamic> && value['isRead'] != true) {
+        count++;
+      }
+    }
+    return count;
   }
 
   // ==================== RECENT SEARCHES ====================
@@ -602,5 +691,6 @@ class LocalStorageService extends ChangeNotifier {
     await _deletedMessagesBox.close();
     await _storageStatsBox.close();
     await _invitationsBox.close();
+    await _notificationsBox.close();
   }
 }

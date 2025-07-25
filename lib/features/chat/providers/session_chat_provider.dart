@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import '../../../core/services/session_messenger_service.dart';
+import '../../../core/services/airnotifier_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
@@ -7,7 +7,7 @@ import '../../../shared/models/message.dart';
 import 'dart:async';
 
 class SessionChatProvider extends ChangeNotifier {
-  final SessionMessengerService _messenger = SessionMessengerService.instance;
+  final AirNotifierService _airNotifier = AirNotifierService.instance;
   final NotificationService _notificationService = NotificationService.instance;
 
   List<Chat> _chats = [];
@@ -26,359 +26,289 @@ class SessionChatProvider extends ChangeNotifier {
   }
 
   SessionChatProvider() {
-    _setupMessengerCallbacks();
-    loadChatsFromMessenger();
+    // No real-time callbacks needed - everything goes through silent notifications
   }
 
-  void _setupMessengerCallbacks() {
-    _messenger.onMessageReceived = _handleMessageReceived;
-    _messenger.onContactOnline = _handleContactOnline;
-    _messenger.onContactOffline = _handleContactOffline;
-    _messenger.onContactTyping = _handleContactTyping;
-    _messenger.onContactTypingStopped = _handleContactTypingStopped;
-    _messenger.onMessageStatusUpdated = _handleMessageStatusUpdated;
-    _messenger.onError = _handleMessengerError;
-  }
-
-  // Load chats from Session Messenger
-  Future<void> loadChatsFromMessenger() async {
+  // Send message using AirNotifier silent notifications
+  Future<void> sendMessage({
+    required String recipientId,
+    required String content,
+    String messageType = 'text',
+  }) async {
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      final contacts = _messenger.contacts;
-      final conversations = _messenger.conversations;
+      // Generate unique message ID
+      final messageId =
+          'msg_${DateTime.now().millisecondsSinceEpoch}_$recipientId';
 
-      _chats.clear();
-      _chatUsers.clear();
+      // Send message via AirNotifier
+      final success = await _airNotifier.sendMessageNotification(
+        recipientId: recipientId,
+        senderName: _airNotifier.currentUserId ?? 'Anonymous User',
+        message: content,
+        conversationId: recipientId,
+      );
 
-      for (final contact in contacts.values) {
-        // Create user object
-        final user = User(
-          id: contact.sessionId,
-          username: contact.name ?? 'Anonymous User',
-          profilePicture: contact.profilePicture,
-          isOnline: contact.isOnline,
-          lastSeen: contact.lastSeen,
-          alreadyInvited: true,
-          invitationStatus: 'accepted',
+      if (success) {
+        // Create message object
+        final message = Message(
+          id: messageId,
+          chatId: recipientId,
+          senderId: _airNotifier.currentUserId ?? '',
+          content: content,
+          type: MessageType.text,
+          status: 'sent',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
         );
 
-        _chatUsers[contact.sessionId] = user;
+        // Add message to chat
+        _addMessageToChat(recipientId, message);
 
-        // Get messages for this contact
-        final messages = conversations[contact.sessionId] ?? [];
+        // Update chat
+        _updateOrCreateChat(recipientId, message);
 
-        // Create chat object
-        final chat = Chat(
-          id: contact.sessionId,
-          user1Id: _messenger.currentSessionId ?? '',
-          user2Id: contact.sessionId,
-          lastMessageAt: contact.lastMessageAt ?? contact.lastSeen,
-          createdAt: contact.lastSeen,
-          updatedAt: contact.lastMessageAt ?? contact.lastSeen,
-          otherUser: {
-            'id': contact.sessionId,
-            'username': contact.name ?? 'Anonymous User',
-            'is_online': contact.isOnline,
-            'last_seen': contact.lastSeen.toIso8601String(),
-          },
-          lastMessage:
-              messages.isNotEmpty ? _convertToMessageMap(messages.last) : null,
-        );
-
-        _chats.add(chat);
-
-        // Calculate unread count
-        _unreadCounts[contact.sessionId] = messages
-            .where((msg) => !msg.isOutgoing && msg.status != 'read')
-            .length;
+        print(
+            '📱 SessionChatProvider: Message sent via silent notification: $recipientId');
+      } else {
+        throw Exception('Failed to send message notification');
       }
-
-      // Sort chats by last message time
-      _chats.sort((a, b) => (b.lastMessageAt ?? DateTime.now())
-          .compareTo(a.lastMessageAt ?? DateTime.now()));
-
-      print('📱 SessionChatProvider: Loaded ${_chats.length} chats');
     } catch (e) {
-      _error = 'Failed to load chats: $e';
-      print('📱 SessionChatProvider: Error loading chats: $e');
+      _error = 'Failed to send message: $e';
+      notifyListeners();
+      print('📱 SessionChatProvider: Error sending message: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // Send message
-  Future<String> sendMessage({
-    required String recipientId,
-    required String content,
-    String messageType = 'text',
-    Map<String, dynamic>? metadata,
-    String? replyToId,
-    List<String>? mentions,
-  }) async {
-    try {
-      // Send via Session Messenger
-      final messageId = await _messenger.sendMessage(
-        recipientId: recipientId,
-        content: content,
-        messageType: messageType,
-        metadata: metadata,
-        replyToId: replyToId,
-        mentions: mentions,
-      );
-
-      // Update chat
-      _updateChatWithMessage(recipientId, content, true);
-
-      print('📱 SessionChatProvider: Message sent: $messageId');
-      return messageId;
-    } catch (e) {
-      _error = 'Failed to send message: $e';
-      notifyListeners();
-      print('📱 SessionChatProvider: Error sending message: $e');
-      rethrow;
-    }
-  }
-
-  // Send typing indicator
+  // Send typing indicator using AirNotifier silent notifications
   Future<void> sendTypingIndicator(String recipientId, bool isTyping) async {
     try {
-      await _messenger.sendTypingIndicator(recipientId, isTyping);
+      final success = await _airNotifier.sendTypingIndicator(
+        recipientId: recipientId,
+        senderName: _airNotifier.currentUserId ?? 'Anonymous User',
+        isTyping: isTyping,
+      );
+
+      if (success) {
+        print(
+            '📱 SessionChatProvider: Typing indicator sent via silent notification: $recipientId - $isTyping');
+      } else {
+        print('📱 SessionChatProvider: Failed to send typing indicator');
+      }
     } catch (e) {
       print('📱 SessionChatProvider: Error sending typing indicator: $e');
     }
   }
 
-  // Mark message as read
-  Future<void> markMessageAsRead(String messageId) async {
+  // Handle message received via silent notification
+  void handleMessageReceived(Map<String, dynamic> data) {
     try {
-      await _messenger.markMessageAsRead(messageId);
-    } catch (e) {
-      print('📱 SessionChatProvider: Error marking message as read: $e');
-    }
-  }
+      final senderId = data['senderId'] as String;
+      final senderName = data['senderName'] as String;
+      final content = data['message'] as String;
+      final conversationId = data['conversationId'] as String;
 
-  // Mark all messages as read for a chat
-  Future<void> markChatAsRead(String chatId) async {
-    try {
-      final messages = _messenger.getMessagesForContact(chatId);
-      for (final message in messages) {
-        if (!message.isOutgoing && message.status != 'read') {
-          await _messenger.markMessageAsRead(message.id);
-        }
-      }
-      _unreadCounts[chatId] = 0;
-      notifyListeners();
-    } catch (e) {
-      print('📱 SessionChatProvider: Error marking chat as read: $e');
-    }
-  }
+      // Generate message ID
+      final messageId =
+          'msg_${DateTime.now().millisecondsSinceEpoch}_$senderId';
 
-  // Get messages for a chat
-  List<Message> getMessagesForChat(String chatId) {
-    final sessionMessages = _messenger.getMessagesForContact(chatId);
-    return sessionMessages
-        .map((sessionMsg) => Message(
-              id: sessionMsg.id,
-              chatId: chatId,
-              senderId: sessionMsg.senderId,
-              content: sessionMsg.content,
-              type: _convertMessageType(sessionMsg.messageType),
-              status: sessionMsg.status,
-              createdAt: sessionMsg.timestamp,
-              updatedAt: sessionMsg.timestamp,
-            ))
-        .toList();
-  }
-
-  MessageType _convertMessageType(String messageType) {
-    switch (messageType) {
-      case 'image':
-        return MessageType.image;
-      case 'voice':
-        return MessageType.voice;
-      case 'file':
-        return MessageType.file;
-      default:
-        return MessageType.text;
-    }
-  }
-
-  // Get unread count for a chat
-  int getUnreadCount(String chatId) {
-    return _unreadCounts[chatId] ?? 0;
-  }
-
-  // Check if user is typing
-  bool isUserTyping(String userId) {
-    return _typingUsers[userId] ?? false;
-  }
-
-  // Get effective online status (considers typing state)
-  bool getEffectiveOnlineStatus(String userId) {
-    final user = _chatUsers[userId];
-    if (user == null) return false;
-
-    // If user is typing, they're considered online
-    if (_typingUsers[userId] == true) return true;
-
-    return user.isOnline;
-  }
-
-  // Refresh online status
-  Future<void> refreshOnlineStatus() async {
-    try {
-      // The Session Messenger automatically updates online status
-      // Just trigger a UI refresh
-      notifyListeners();
-    } catch (e) {
-      print('📱 SessionChatProvider: Error refreshing online status: $e');
-    }
-  }
-
-  // Manual refresh for online status
-  Future<void> manualRefreshOnlineStatus() async {
-    await refreshOnlineStatus();
-  }
-
-  // Event handlers
-  void _handleMessageReceived(SessionMessage sessionMessage) {
-    try {
-      print('📱 SessionChatProvider: Message received: ${sessionMessage.id}');
-
-      // Update chat with new message
-      _updateChatWithMessage(
-        sessionMessage.senderId,
-        sessionMessage.content,
-        false,
+      // Create message object
+      final message = Message(
+        id: messageId,
+        chatId: senderId,
+        senderId: senderId,
+        content: content,
+        type: MessageType.text,
+        status: 'received',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
       );
 
-      // Increment unread count if message is not from current user
-      if (!sessionMessage.isOutgoing) {
-        _unreadCounts[sessionMessage.senderId] =
-            (_unreadCounts[sessionMessage.senderId] ?? 0) + 1;
-      }
+      // Add message to chat
+      _addMessageToChat(senderId, message);
 
-      // Show notification for incoming messages
-      if (!sessionMessage.isOutgoing) {
-        final sender = _chatUsers[sessionMessage.senderId];
-        _notificationService.showInvitationReceivedNotification(
-          senderUsername: sender?.username ?? 'Anonymous User',
-          message: sessionMessage.content,
-          invitationId: sessionMessage.id,
-        );
-      }
+      // Update chat
+      _updateOrCreateChat(senderId, message);
 
+      // Show notification
+      _notificationService.showMessageNotification(
+        senderName: senderName,
+        message: content,
+        conversationId: conversationId,
+      );
+
+      // Send delivery status
+      _airNotifier.sendMessageDeliveryStatus(
+        recipientId: senderId,
+        messageId: messageId,
+        status: 'delivered',
+        conversationId: conversationId,
+      );
+
+      print(
+          '📱 SessionChatProvider: Message received via silent notification: $senderId');
       notifyListeners();
     } catch (e) {
       print('📱 SessionChatProvider: Error handling message received: $e');
     }
   }
 
-  void _handleContactOnline(String sessionId) {
-    final user = _chatUsers[sessionId];
-    if (user != null) {
-      _chatUsers[sessionId] = user.copyWith(isOnline: true);
-      notifyListeners();
-    }
-  }
+  // Handle typing indicator via silent notification
+  void handleTypingIndicator(Map<String, dynamic> data) {
+    try {
+      final senderId = data['senderId'] as String;
+      final isTyping = data['isTyping'] as bool;
 
-  void _handleContactOffline(String sessionId) {
-    final user = _chatUsers[sessionId];
-    if (user != null) {
-      _chatUsers[sessionId] = user.copyWith(
-        isOnline: false,
-        lastSeen: DateTime.now(),
-      );
-      notifyListeners();
-    }
-  }
-
-  void _handleContactTyping(String sessionId) {
-    _typingUsers[sessionId] = true;
-    notifyListeners();
-  }
-
-  void _handleContactTypingStopped(String sessionId) {
-    _typingUsers[sessionId] = false;
-    notifyListeners();
-  }
-
-  void _handleMessageStatusUpdated(String messageId) {
-    // Update message status in conversations
-    final conversations = _messenger.conversations;
-    for (final entry in conversations.entries) {
-      final messageIndex = entry.value.indexWhere((msg) => msg.id == messageId);
-      if (messageIndex != -1) {
-        final message = entry.value[messageIndex];
-        if (message.status == 'read' && !message.isOutgoing) {
-          // Decrement unread count when message is read
-          _unreadCounts[entry.key] = (_unreadCounts[entry.key] ?? 1) - 1;
-          if (_unreadCounts[entry.key]! < 0) _unreadCounts[entry.key] = 0;
-        }
-        break;
+      if (isTyping) {
+        _typingUsers[senderId] = true;
+      } else {
+        _typingUsers.remove(senderId);
       }
+
+      print(
+          '📱 SessionChatProvider: Typing indicator received via silent notification: $senderId - $isTyping');
+      notifyListeners();
+    } catch (e) {
+      print('📱 SessionChatProvider: Error handling typing indicator: $e');
     }
-    notifyListeners();
   }
 
-  void _handleMessengerError(String error) {
-    _error = error;
-    notifyListeners();
-    print('📱 SessionChatProvider: Messenger error: $error');
+  // Handle online status update via silent notification
+  void handleOnlineStatusUpdate(Map<String, dynamic> data) {
+    try {
+      final senderId = data['senderId'] as String;
+      final isOnline = data['isOnline'] as bool;
+      final lastSeen = data['lastSeen'] as String;
+
+      final user = _chatUsers[senderId];
+      if (user != null) {
+        _chatUsers[senderId] = user.copyWith(
+          isOnline: isOnline,
+          lastSeen: DateTime.parse(lastSeen),
+        );
+
+        // Update chat
+        final chatIndex = _chats.indexWhere((chat) => chat.id == senderId);
+        if (chatIndex != -1) {
+          final chat = _chats[chatIndex];
+          _chats[chatIndex] = chat.copyWith(
+            otherUser: {
+              ...?chat.otherUser,
+              'is_online': isOnline,
+              'last_seen': lastSeen,
+            },
+          );
+        }
+
+        print(
+            '📱 SessionChatProvider: Online status update received via silent notification: $senderId - $isOnline');
+        notifyListeners();
+      }
+    } catch (e) {
+      print('📱 SessionChatProvider: Error handling online status update: $e');
+    }
   }
 
-  // Helper methods
-  void _updateChatWithMessage(
-      String contactId, String content, bool isOutgoing) {
-    final chatIndex = _chats.indexWhere((chat) => chat.id == contactId);
+  // Add message to chat
+  void _addMessageToChat(String chatId, Message message) {
+    // This would typically add the message to a local storage or in-memory list
+    // For now, we'll just update the chat's last message
+    final chatIndex = _chats.indexWhere((chat) => chat.id == chatId);
     if (chatIndex != -1) {
       final chat = _chats[chatIndex];
       _chats[chatIndex] = chat.copyWith(
-        lastMessage: {
-          'content': content,
-          'sender_id': isOutgoing ? _messenger.currentSessionId : contactId,
-          'timestamp': DateTime.now().toIso8601String(),
-          'status': 'sent',
-        },
-        lastMessageAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+        lastMessageAt: message.createdAt,
+        lastMessage: _convertToMessageMap(message),
+        updatedAt: message.createdAt,
       );
-
-      // Move chat to top
-      final updatedChat = _chats.removeAt(chatIndex);
-      _chats.insert(0, updatedChat);
     }
   }
 
-  Map<String, dynamic> _convertToMessageMap(SessionMessage sessionMessage) {
+  // Update or create chat
+  void _updateOrCreateChat(String userId, Message message) {
+    final existingChatIndex = _chats.indexWhere((chat) => chat.id == userId);
+
+    if (existingChatIndex != -1) {
+      // Update existing chat
+      final chat = _chats[existingChatIndex];
+      _chats[existingChatIndex] = chat.copyWith(
+        lastMessageAt: message.createdAt,
+        lastMessage: _convertToMessageMap(message),
+        updatedAt: message.createdAt,
+      );
+    } else {
+      // Create new chat
+      final user = _chatUsers[userId] ??
+          User(
+            id: userId,
+            username: 'Anonymous User',
+            profilePicture: null,
+            isOnline: false,
+            lastSeen: DateTime.now(),
+            alreadyInvited: true,
+            invitationStatus: 'accepted',
+          );
+
+      _chatUsers[userId] = user;
+
+      final chat = Chat(
+        id: userId,
+        user1Id: _airNotifier.currentUserId ?? '',
+        user2Id: userId,
+        lastMessageAt: message.createdAt,
+        createdAt: message.createdAt,
+        updatedAt: message.createdAt,
+        otherUser: {
+          'id': userId,
+          'username': user.username,
+          'is_online': user.isOnline,
+          'last_seen': user.lastSeen?.toIso8601String() ??
+              DateTime.now().toIso8601String(),
+        },
+        lastMessage: _convertToMessageMap(message),
+      );
+
+      _chats.add(chat);
+    }
+  }
+
+  // Convert Message to Map for Chat
+  Map<String, dynamic> _convertToMessageMap(Message message) {
     return {
-      'content': sessionMessage.content,
-      'sender_id': sessionMessage.senderId,
-      'timestamp': sessionMessage.timestamp.toIso8601String(),
-      'status': sessionMessage.status,
+      'id': message.id,
+      'sender_id': message.senderId,
+      'content': message.content,
+      'type': message.type.toString().split('.').last,
+      'timestamp': message.createdAt.toIso8601String(),
+      'status': message.status,
     };
   }
 
-  // Public methods for UI compatibility
-  Future<void> loadChats() async {
-    await loadChatsFromMessenger();
+  // Mark message as read
+  Future<void> markMessageAsRead(String messageId, String senderId) async {
+    try {
+      // Send read receipt via AirNotifier
+      await _airNotifier.sendMessageDeliveryStatus(
+        recipientId: senderId,
+        messageId: messageId,
+        status: 'read',
+        conversationId: senderId,
+      );
+
+      print('📱 SessionChatProvider: Message marked as read: $messageId');
+    } catch (e) {
+      print('📱 SessionChatProvider: Error marking message as read: $e');
+    }
   }
 
+  // Clear error
   void clearError() {
-    _error = null;
-    notifyListeners();
-  }
-
-  void reset() {
-    _chats.clear();
-    _chatUsers.clear();
-    _typingUsers.clear();
-    _unreadCounts.clear();
-    _isLoading = false;
     _error = null;
     notifyListeners();
   }

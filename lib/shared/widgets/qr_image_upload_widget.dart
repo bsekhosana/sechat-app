@@ -35,7 +35,22 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () {
-            Navigator.of(context).pop();
+            print('📱 QRImageUploadWidget: Close button pressed');
+            // Call the onCancel callback first if provided
+            try {
+              widget.onCancel?.call();
+            } catch (e) {
+              print('Error in onCancel callback: $e');
+            }
+
+            // Then navigate back
+            if (context.mounted) {
+              print('📱 QRImageUploadWidget: Navigating back');
+              Navigator.of(context).pop();
+            } else {
+              print(
+                  '📱 QRImageUploadWidget: Context not mounted, cannot navigate');
+            }
           },
         ),
       ),
@@ -284,38 +299,51 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
     required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: _isProcessing ? null : onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: const Color(0xFF232323),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: Colors.grey.withOpacity(0.3),
+            color: _isProcessing
+                ? Colors.grey.withOpacity(0.1)
+                : Colors.grey.withOpacity(0.3),
             width: 1,
           ),
         ),
         child: Column(
           children: [
-            Icon(
-              icon,
-              color: const Color(0xFFFF6B35),
-              size: 32,
-            ),
+            _isProcessing
+                ? const SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(Color(0xFFFF6B35)),
+                    ),
+                  )
+                : Icon(
+                    icon,
+                    color: const Color(0xFFFF6B35),
+                    size: 32,
+                  ),
             const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: _isProcessing ? Colors.grey : Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              subtitle,
-              style: const TextStyle(
-                color: Colors.grey,
+              _isProcessing ? 'Processing...' : subtitle,
+              style: TextStyle(
+                color:
+                    _isProcessing ? Colors.grey.withOpacity(0.7) : Colors.grey,
                 fontSize: 12,
               ),
               textAlign: TextAlign.center,
@@ -328,6 +356,11 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
 
   Future<void> _pickFromGallery() async {
     try {
+      setState(() {
+        _isProcessing = true;
+        _errorMessage = null;
+      });
+
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1920,
@@ -340,16 +373,28 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
           _selectedImage = File(image.path);
           _errorMessage = null;
         });
+        print(
+            '📱 QRImageUploadWidget: Image selected from gallery: ${image.path}');
       }
     } catch (e) {
       setState(() {
         _errorMessage = 'Failed to pick image: $e';
+      });
+      print('📱 QRImageUploadWidget: Error picking image from gallery: $e');
+    } finally {
+      setState(() {
+        _isProcessing = false;
       });
     }
   }
 
   Future<void> _pickFromCamera() async {
     try {
+      setState(() {
+        _isProcessing = true;
+        _errorMessage = null;
+      });
+
       // Request camera permission
       final status = await Permission.camera.request();
       if (status != PermissionStatus.granted) {
@@ -357,6 +402,11 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
           _errorMessage =
               'Camera permission is required. Please enable camera access in Settings.';
         });
+
+        // Show permission dialog
+        if (mounted) {
+          _showCameraPermissionDialog();
+        }
         return;
       }
 
@@ -372,10 +422,17 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
           _selectedImage = File(image.path);
           _errorMessage = null;
         });
+        print(
+            '📱 QRImageUploadWidget: Image captured from camera: ${image.path}');
       }
     } catch (e) {
       setState(() {
         _errorMessage = 'Failed to take photo: $e';
+      });
+      print('📱 QRImageUploadWidget: Error capturing image from camera: $e');
+    } finally {
+      setState(() {
+        _isProcessing = false;
       });
     }
   }
@@ -397,21 +454,32 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
       final qrData =
           '{"sessionId":"Fd82sQAceAp8myHMOfzdgeUFjMfuTw4J6qnht9IxmkA","displayName":"TestUser","timestamp":1753156120920}';
 
-      // Call the callback first, then navigate
-      widget.onQRCodeExtracted(qrData);
+      // Call the callback with timeout protection
+      try {
+        await widget.onQRCodeExtracted(qrData).timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw Exception('QR processing timeout');
+          },
+        );
 
-      // Use a small delay to ensure the callback is processed
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // Check if the widget is still mounted before navigating
-      if (mounted) {
-        Navigator.of(context).pop();
+        // Only navigate back if the callback completed successfully
+        if (mounted && context.mounted) {
+          print(
+              '📱 QRImageUploadWidget: QR processing completed, navigating back');
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        print('QR processing error: $e');
+        // Don't navigate back on error, let user try again
       }
     } catch (e) {
-      setState(() {
-        _errorMessage =
-            'No QR code found in the image. Please try a different image.';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage =
+              'No QR code found in the image. Please try a different image.';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -426,5 +494,57 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
       _selectedImage = null;
       _errorMessage = null;
     });
+  }
+
+  void _showCameraPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF232323),
+        title: const Text(
+          'Camera Permission Required',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Camera access is required to take photos of QR codes.',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'To enable camera access:',
+              style:
+                  TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '1. Go to Settings > SeChat\n'
+              '2. Tap "Camera"\n'
+              '3. Enable "Allow SeChat to Access Camera"',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              openAppSettings();
+            },
+            child: const Text(
+              'Open Settings',
+              style: TextStyle(color: Color(0xFFFF6B35)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

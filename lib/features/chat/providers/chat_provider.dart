@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
@@ -7,6 +8,7 @@ import '../../../core/services/api_service.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/services/local_storage_service.dart';
+import '../../../core/services/airnotifier_service.dart';
 import 'dart:async';
 
 class ChatProvider extends ChangeNotifier {
@@ -51,6 +53,7 @@ class ChatProvider extends ChangeNotifier {
     _loadChatsFromLocal();
     _startOnlineStatusRefreshTimer();
     _setupLocalStorageListener();
+    _setupNotificationHandlers();
   }
 
   void _setupSession() {
@@ -77,6 +80,126 @@ class ChatProvider extends ChangeNotifier {
     LocalStorageService.instance.addListener(_handleLocalStorageChange);
   }
 
+  void _setupNotificationHandlers() {
+    // Set up handlers for incoming push notifications
+    // These will be called by the PushNotificationHandler
+    print('📱 ChatProvider: Setting up notification handlers');
+  }
+
+  // Handle incoming message notification
+  void handleIncomingMessage(String senderId, String senderName, String message,
+      String conversationId) {
+    print('📱 ChatProvider: Received message from $senderName ($senderId)');
+
+    // Create message object
+    final newMessage = Message(
+      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+      chatId: conversationId,
+      senderId: senderId,
+      content: message,
+      type: MessageType.text,
+      status: 'received',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    // Add to messages list
+    final chatId = conversationId;
+    if (!_messages.containsKey(chatId)) {
+      _messages[chatId] = [];
+    }
+    _messages[chatId]!.add(newMessage);
+
+    // Update unread count
+    _unreadCounts[chatId] = (_unreadCounts[chatId] ?? 0) + 1;
+
+    // Update or create chat
+    _updateOrCreateChat(senderId, senderName, newMessage);
+
+    notifyListeners();
+    print('📱 ChatProvider: Added incoming message to chat: $chatId');
+  }
+
+  // Handle typing indicator notification
+  void handleTypingIndicator(String senderId, bool isTyping) {
+    print('📱 ChatProvider: Typing indicator from $senderId: $isTyping');
+
+    // Update typing status for the user
+    final user = _chatUsers[senderId];
+    if (user != null) {
+      // Create a new user object with updated typing status
+      final updatedUser = User(
+        id: user.id,
+        username: user.username,
+        profilePicture: user.profilePicture,
+        isOnline: user.isOnline,
+        lastSeen: user.lastSeen,
+        isTyping: isTyping,
+      );
+      _chatUsers[senderId] = updatedUser;
+      notifyListeners();
+    }
+  }
+
+  void _updateOrCreateChat(String userId, String userName, Message message) {
+    final currentUserId = SessionService.instance.currentSessionId ?? '';
+
+    // Find existing chat
+    final existingChatIndex = _chats.indexWhere((chat) =>
+        (chat.user1Id == userId && chat.user2Id == currentUserId) ||
+        (chat.user1Id == currentUserId && chat.user2Id == userId));
+
+    if (existingChatIndex != -1) {
+      // Update existing chat
+      final existingChat = _chats[existingChatIndex];
+      final updatedChat = Chat(
+        id: existingChat.id,
+        user1Id: existingChat.user1Id,
+        user2Id: existingChat.user2Id,
+        status: existingChat.status,
+        lastMessageAt: message.createdAt,
+        createdAt: existingChat.createdAt,
+        updatedAt: DateTime.now(),
+        otherUser: existingChat.otherUser,
+        lastMessage: {
+          'content': message.content,
+          'created_at': message.createdAt.toIso8601String(),
+        },
+      );
+      _chats[existingChatIndex] = updatedChat;
+    } else {
+      // Create new chat
+      final newChat = Chat(
+        id: 'chat_${DateTime.now().millisecondsSinceEpoch}',
+        user1Id: currentUserId,
+        user2Id: userId,
+        status: 'active',
+        lastMessageAt: message.createdAt,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        otherUser: {
+          'id': userId,
+          'username': userName,
+          'profile_picture': null,
+        },
+        lastMessage: {
+          'content': message.content,
+          'created_at': message.createdAt.toIso8601String(),
+        },
+      );
+      _chats.add(newChat);
+
+      // Add user to chat users
+      _chatUsers[userId] = User(
+        id: userId,
+        username: userName,
+        profilePicture: null,
+        isOnline: true,
+        lastSeen: DateTime.now(),
+      );
+    }
+  }
+
   void _handleLocalStorageChange() {
     // Refresh data when local storage changes
     _loadChatsFromLocal();
@@ -90,13 +213,20 @@ class ChatProvider extends ChangeNotifier {
       final index = messages.indexWhere((m) => m.id == messageId);
       if (index != -1) {
         messages[index] = updatedMessage;
-        try {
-          notifyListeners();
-        } catch (e) {
-          print('📱 ChatProvider: Error notifying listeners: $e');
-        }
+        _scheduleNotifyListeners();
       }
     }
+  }
+
+  void _scheduleNotifyListeners() {
+    // Schedule notification to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        notifyListeners();
+      } catch (e) {
+        print('📱 ChatProvider: Error notifying listeners: $e');
+      }
+    });
   }
 
   void addMessageToChat(String chatId, Message message) {
@@ -121,6 +251,88 @@ class ChatProvider extends ChangeNotifier {
           print('📱 ChatProvider: Error notifying listeners: $e');
         }
       }
+    }
+  }
+
+  // Send message using AirNotifier
+  Future<bool> sendMessageViaAirNotifier(
+      String recipientId, String message) async {
+    try {
+      print('📱 ChatProvider: Sending message via AirNotifier to $recipientId');
+
+      // Create message object
+      final newMessage = Message(
+        id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+        chatId: 'conv_$recipientId',
+        senderId: SessionService.instance.currentSessionId ?? '',
+        content: message,
+        type: MessageType.text,
+        status: 'sent',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Add to local messages
+      final chatId = 'conv_$recipientId';
+      if (!_messages.containsKey(chatId)) {
+        _messages[chatId] = [];
+      }
+      _messages[chatId]!.add(newMessage);
+
+      // Update chat
+      final recipientName = _chatUsers[recipientId]?.username ?? 'Unknown User';
+      _updateOrCreateChat(recipientId, recipientName, newMessage);
+
+      notifyListeners();
+
+      // Send via AirNotifier
+      final success = await AirNotifierService.instance.sendMessageNotification(
+        recipientId: recipientId,
+        senderName: 'Unknown User', // Will be updated when we have display name
+        message: message,
+        conversationId: chatId,
+      );
+
+      if (success) {
+        print('📱 ChatProvider: Message sent successfully via AirNotifier');
+        return true;
+      } else {
+        print('📱 ChatProvider: Failed to send message via AirNotifier');
+        // Update message status to error
+        final errorMessage = newMessage.copyWith(status: 'error');
+        _updateMessageInList(chatId, newMessage.id, errorMessage);
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      print('📱 ChatProvider: Error sending message: $e');
+      return false;
+    }
+  }
+
+  // Send typing indicator using AirNotifier
+  Future<bool> sendTypingIndicatorViaAirNotifier(
+      String recipientId, bool isTyping) async {
+    try {
+      print(
+          '📱 ChatProvider: Sending typing indicator via AirNotifier to $recipientId: $isTyping');
+
+      final success = await AirNotifierService.instance.sendTypingIndicator(
+        recipientId: recipientId,
+        senderName: 'Unknown User', // Will be updated when we have display name
+        isTyping: isTyping,
+      );
+
+      if (success) {
+        print('📱 ChatProvider: Typing indicator sent successfully');
+        return true;
+      } else {
+        print('📱 ChatProvider: Failed to send typing indicator');
+        return false;
+      }
+    } catch (e) {
+      print('📱 ChatProvider: Error sending typing indicator: $e');
+      return false;
     }
   }
 

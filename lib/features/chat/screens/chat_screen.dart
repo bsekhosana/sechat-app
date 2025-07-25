@@ -109,19 +109,47 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
     _typingTimer?.cancel();
 
+    // Store references to providers before disposal to avoid unsafe access
+    ChatProvider? chatProvider;
+    AuthProvider? authProvider;
+
+    try {
+      chatProvider = context.read<ChatProvider>();
+      authProvider = context.read<AuthProvider>();
+    } catch (e) {
+      print('📱 ChatScreen: Error accessing providers during disposal: $e');
+    }
+
     // Remove listener to prevent memory leaks
-    context.read<ChatProvider>().removeListener(_onMessagesChanged);
+    if (chatProvider != null) {
+      try {
+        chatProvider.removeListener(_onMessagesChanged);
+      } catch (e) {
+        print('📱 ChatScreen: Error removing listener: $e');
+      }
+    }
 
     // Set current user as inactive when leaving chat
-    final currentUser = context.read<AuthProvider>().currentUser;
-    if (currentUser != null) {
-      context.read<ChatProvider>().setUserInactiveInChat(currentUser.id);
+    if (authProvider != null && chatProvider != null) {
+      final currentUser = authProvider.currentUser;
+      if (currentUser != null) {
+        try {
+          chatProvider.setUserInactiveInChat(currentUser.id);
+        } catch (e) {
+          print('📱 ChatScreen: Error setting user inactive: $e');
+        }
+      }
     }
 
     // Stop typing indicator when leaving chat
-    if (_isTyping) {
-      context.read<ChatProvider>().sendTypingIndicator(widget.chat.id, false);
+    if (_isTyping && chatProvider != null) {
+      try {
+        chatProvider.sendTypingIndicator(widget.chat.id, false);
+      } catch (e) {
+        print('📱 ChatScreen: Error stopping typing indicator: $e');
+      }
     }
+
     super.dispose();
   }
 

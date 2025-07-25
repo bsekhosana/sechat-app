@@ -10,6 +10,7 @@ import '../../auth/screens/login_screen.dart';
 import '../../chat/providers/chat_provider.dart';
 import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
 import 'package:sechat_app/core/services/session_service.dart';
+
 import 'package:sechat_app/shared/widgets/app_icon.dart';
 import 'package:sechat_app/core/services/notification_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
@@ -48,6 +49,73 @@ Download now and let's chat securely!
       backgroundColor: Colors.transparent,
       builder: (context) => const _StorageManagementSheet(),
     );
+  }
+
+  void _retryConnection(BuildContext context) async {
+    try {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFFFF6B35),
+          ),
+        ),
+      );
+
+      // Try to reconnect Session Protocol
+      try {
+        await SessionService.instance.connect().timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            throw Exception('Session Protocol connection timeout');
+          },
+        );
+        print('🔐 Settings: Session Protocol connected successfully');
+      } catch (e) {
+        print('🔐 Settings: Session Protocol connection failed: $e');
+        throw Exception('Session Protocol: $e');
+      }
+
+      // Note: Session Messenger is now optional and uses push notifications
+      // No need to manually reconnect as it's handled automatically
+      print(
+          '🔐 Settings: Session Messenger uses push notifications (no manual connection needed)');
+
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Connection retry successful!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.of(context).pop();
+
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Connection failed: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _retryConnection(context),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   void _showLogoutConfirmation(BuildContext context) {
@@ -214,6 +282,11 @@ Download now and let's chat securely!
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
+                    _buildSettingsItem(
+                      title: 'Retry Connection',
+                      subtitle: 'Reconnect to Session Network',
+                      onTap: () => _retryConnection(context),
+                    ),
                     _buildSettingsItem(
                       title: 'Storage & Data',
                       onTap: () => _showStorageManagementSheet(context),

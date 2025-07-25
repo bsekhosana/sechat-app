@@ -6,18 +6,19 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'features/search/providers/search_provider.dart';
-import 'features/chat/providers/session_chat_provider.dart';
+import 'features/chat/providers/chat_provider.dart';
 import 'shared/providers/auth_provider.dart';
-import 'features/invitations/providers/session_invitation_provider.dart';
+import 'features/invitations/providers/invitation_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/session_service.dart';
-import 'core/services/session_messenger_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/local_storage_service.dart';
+import 'core/services/push_notification_handler.dart';
+import 'core/services/native_push_service.dart';
 
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -35,17 +36,21 @@ Future<void> main() async {
   // Initialize notification service
   await NotificationService.instance.initialize();
 
-  // Session Messenger service will be initialized after authentication
+  // Initialize native push service
+  await NativePushService.instance.initialize();
 
-  // Socket.IO service will be initialized after user authentication
+  // Initialize push notification handler
+  _setupPushNotificationHandler();
+
+  // All real-time features now use silent notifications via AirNotifier
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: AuthProvider.instance),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
-        ChangeNotifierProvider(create: (_) => SessionChatProvider()),
-        ChangeNotifierProvider(create: (_) => SessionInvitationProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => InvitationProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
         Provider.value(value: SessionService.instance),
@@ -54,6 +59,61 @@ Future<void> main() async {
       child: const SeChatApp(),
     ),
   );
+}
+
+// Setup push notification handler with callbacks
+void _setupPushNotificationHandler() {
+  final handler = PushNotificationHandler.instance;
+
+  // Set up invitation received callback
+  handler.setOnInvitationReceived((senderId, senderName, invitationId) {
+    print('📱 Main: Invitation received from $senderName ($senderId)');
+    // The notification service will handle this automatically
+  });
+
+  // Set up invitation response callback
+  handler.setOnInvitationResponse((responderId, responderName, status) {
+    print(
+        '📱 Main: Invitation response from $responderName ($responderId): $status');
+    // The notification service will handle this automatically
+  });
+
+  // Set up message received callback
+  handler.setOnMessageReceived((senderId, senderName, message) {
+    print('📱 Main: Message received from $senderName ($senderId)');
+    // Get ChatProvider instance and handle the message
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatProvider = ChatProvider();
+        chatProvider.handleIncomingMessage(
+            senderId, senderName, message, 'conv_$senderId');
+      } catch (e) {
+        print('📱 Main: Error handling message: $e');
+      }
+    });
+  });
+
+  // Set up typing indicator callback
+  handler.setOnTypingIndicator((senderId, isTyping) {
+    print('📱 Main: Typing indicator from $senderId: $isTyping');
+    // Get ChatProvider instance and handle the typing indicator
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatProvider = ChatProvider();
+        chatProvider.handleTypingIndicator(senderId, isTyping);
+      } catch (e) {
+        print('📱 Main: Error handling typing indicator: $e');
+      }
+    });
+  });
+
+  // Set up connection status callback
+  handler.setOnConnectionStatus((userId, isConnected) {
+    print('📱 Main: Connection status for $userId: $isConnected');
+    // The NetworkService will handle this
+  });
+
+  print('📱 Main: Push notification handler setup complete');
 }
 
 class SeChatApp extends StatelessWidget {

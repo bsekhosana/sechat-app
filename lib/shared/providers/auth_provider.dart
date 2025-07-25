@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/services/session_service.dart';
-import '../../core/services/session_messenger_service.dart';
+import '../../core/services/airnotifier_service.dart';
+import '../../core/services/native_push_service.dart';
 import '../models/user.dart';
 import 'dart:convert';
 
@@ -56,15 +57,18 @@ class AuthProvider extends ChangeNotifier {
         // Initialize Session Protocol
         await SessionService.instance.initialize();
 
-        // Initialize Session Messenger service
-        await SessionMessengerService.instance.initialize(
-          sessionId: _sessionId!,
-          name: _displayName,
-          profilePicture: _profilePicture,
-        );
+        // Initialize AirNotifier service for push notifications
+        await AirNotifierService.instance.initialize(sessionId: _sessionId!);
+        print('🔐 Auth: AirNotifier service initialized');
 
-        // Connect to real-time messaging
-        await SessionMessengerService.instance.connect();
+        // Register device token with Session ID if available
+        try {
+          await NativePushService.instance
+              .registerStoredDeviceToken(_sessionId!);
+          print('🔐 Auth: Device token registered with Session ID');
+        } catch (e) {
+          print('🔐 Auth: Error registering device token: $e');
+        }
 
         // Create user object from Session identity
         _currentUser = User(
@@ -142,15 +146,17 @@ class AuthProvider extends ChangeNotifier {
       // Connect to Session network
       await SessionService.instance.connect();
 
-      // Initialize Session Messenger service
-      await SessionMessengerService.instance.initialize(
-        sessionId: _sessionId!,
-        name: displayName,
-        profilePicture: profilePicture,
-      );
+      // Initialize AirNotifier service for push notifications
+      await AirNotifierService.instance.initialize(sessionId: _sessionId!);
+      print('🔐 Auth: AirNotifier service initialized');
 
-      // Connect to real-time messaging
-      await SessionMessengerService.instance.connect();
+      // Register device token with Session ID if available
+      try {
+        await NativePushService.instance.registerStoredDeviceToken(_sessionId!);
+        print('🔐 Auth: Device token registered with Session ID');
+      } catch (e) {
+        print('🔐 Auth: Error registering device token: $e');
+      }
 
       print('🔐 Auth: Session identity created successfully: $_sessionId');
       return true;
@@ -224,15 +230,17 @@ class AuthProvider extends ChangeNotifier {
       // Connect to Session network
       await SessionService.instance.connect();
 
-      // Initialize Session Messenger service
-      await SessionMessengerService.instance.initialize(
-        sessionId: _sessionId!,
-        name: _displayName,
-        profilePicture: _profilePicture,
-      );
+      // Initialize AirNotifier service for push notifications
+      await AirNotifierService.instance.initialize(sessionId: _sessionId!);
+      print('🔐 Auth: AirNotifier service initialized');
 
-      // Connect to real-time messaging
-      await SessionMessengerService.instance.connect();
+      // Register device token with Session ID if available
+      try {
+        await NativePushService.instance.registerStoredDeviceToken(_sessionId!);
+        print('🔐 Auth: Device token registered with Session ID');
+      } catch (e) {
+        print('🔐 Auth: Error registering device token: $e');
+      }
 
       print('🔐 Auth: Session identity imported successfully: $sessionId');
       return true;
@@ -319,9 +327,6 @@ class AuthProvider extends ChangeNotifier {
       // Disconnect from Session network
       await SessionService.instance.disconnect();
 
-      // Disconnect from Session Messenger
-      await SessionMessengerService.instance.disconnect();
-
       // Clear user data
       _currentUser = null;
       _isAuthenticated = false;
@@ -329,6 +334,16 @@ class AuthProvider extends ChangeNotifier {
       _displayName = null;
       _profilePicture = null;
       _error = null;
+
+      // Unlink token from session
+      if (_sessionId != null) {
+        try {
+          await AirNotifierService.instance.unlinkTokenFromSession();
+          print('🔐 Auth: Unlinked token from session for logout');
+        } catch (e) {
+          print('🔐 Auth: Error unlinking token from session: $e');
+        }
+      }
 
       // Clear secure storage
       await _storage.delete(key: 'session_identity');
@@ -357,8 +372,15 @@ class AuthProvider extends ChangeNotifier {
       // Disconnect from Session network
       await SessionService.instance.disconnect();
 
-      // Disconnect from Session Messenger
-      await SessionMessengerService.instance.disconnect();
+      // Unlink token from session
+      if (_sessionId != null) {
+        try {
+          await AirNotifierService.instance.unlinkTokenFromSession();
+          print('🔐 Auth: Unlinked token from session for account deletion');
+        } catch (e) {
+          print('🔐 Auth: Error unlinking token from session: $e');
+        }
+      }
 
       // Clear all data
       await _storage.deleteAll();
