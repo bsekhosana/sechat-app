@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/session_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import '../providers/auth_provider.dart';
+import '../../core/services/global_user_service.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
 import 'package:sechat_app/features/chat/providers/chat_provider.dart';
 import 'package:sechat_app/core/services/local_storage_service.dart';
@@ -51,124 +52,131 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
   void _showProfileMenu() {
     showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[600],
-                borderRadius: BorderRadius.circular(2),
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (context) {
+          final screenHeight = MediaQuery.of(context).size.height;
+          final statusBarHeight = MediaQuery.of(context).padding.top;
+          final bottomPadding = MediaQuery.of(context).padding.bottom;
+          final availableHeight =
+              screenHeight - statusBarHeight - bottomPadding;
+
+          return Container(
+            height: availableHeight * 0.95,
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
             ),
-            const SizedBox(height: 24),
-
-            // Profile header
-            Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
+                // Handle bar
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    image: const DecorationImage(
-                      image: AssetImage('assets/logo/seChat_Logo.png'),
-                      fit: BoxFit.cover,
-                    ),
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.read<AuthProvider>().currentUser?.username ??
-                            'User',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                const SizedBox(height: 24),
+
+                // Profile header
+                Row(
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        image: const DecorationImage(
+                          image: AssetImage('assets/logo/seChat_Logo.png'),
+                          fit: BoxFit.cover,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Consumer2<NetworkService, SessionService>(
-                        builder:
-                            (context, networkService, sessionService, child) {
-                          bool isConnected = networkService.isConnected &&
-                              sessionService.isConnected;
-
-                          return Text(
-                            isConnected ? 'Connected' : 'Disconnected',
-                            style: TextStyle(
-                              color: isConnected
-                                  ? const Color(0xFF4CAF50)
-                                  : Colors.red,
-                              fontSize: 12,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            GlobalUserService.instance.currentUsername ??
+                                'User',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
-                          );
-                        },
+                          ),
+                          const SizedBox(height: 4),
+                          Consumer2<NetworkService, SessionService>(
+                            builder: (context, networkService, sessionService,
+                                child) {
+                              bool isConnected = networkService.isConnected &&
+                                  sessionService.isConnected;
+
+                              return Text(
+                                isConnected ? 'Connected' : 'Disconnected',
+                                style: TextStyle(
+                                  color: isConnected
+                                      ? const Color(0xFF4CAF50)
+                                      : Colors.red,
+                                  fontSize: 12,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Menu buttons
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    _buildMenuButton(
-                      icon: Icons.delete_sweep,
-                      title: 'Clear All Chats',
-                      subtitle: 'Delete all your conversations',
-                      onTap: () => _showClearChatsConfirmation(),
-                      isDestructive: true,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildMenuButton(
-                      icon: Icons.account_circle_outlined,
-                      title: 'Delete Account',
-                      subtitle: 'Permanently delete your account',
-                      onTap: () => _showDeleteAccountConfirmation(),
-                      isDestructive: true,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildMenuButton(
-                      icon: Icons.qr_code,
-                      title: 'My QR Code',
-                      subtitle: 'Share your Session ID with others',
-                      onTap: () => _showQRCode(),
-                      isDestructive: false,
                     ),
                   ],
                 ),
-              ),
-            ),
 
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
+                const SizedBox(height: 24),
+
+                // Menu buttons
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _buildMenuButton(
+                          icon: Icons.delete_sweep,
+                          title: 'Clear All Chats',
+                          subtitle: 'Delete all your conversations',
+                          onTap: () => _showClearChatsConfirmation(),
+                          isDestructive: true,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildMenuButton(
+                          icon: Icons.account_circle_outlined,
+                          title: 'Delete Account',
+                          subtitle: 'Permanently delete your account',
+                          onTap: () => _showDeleteAccountConfirmation(),
+                          isDestructive: true,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildMenuButton(
+                          icon: Icons.qr_code,
+                          title: 'My QR Code',
+                          subtitle: 'Share your Session ID with others',
+                          onTap: () => _showQRCode(),
+                          isDestructive: false,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+              ],
+            ),
+          );
+        });
   }
 
   Widget _buildMenuButton({
@@ -373,190 +381,198 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
     final sessionId =
         SessionService.instance.currentSessionId ?? 'No Session ID';
     final displayName =
-        context.read<AuthProvider>().currentUser?.username ?? 'SeChat User';
+        GlobalUserService.instance.currentUsername ?? 'SeChat User';
 
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        child: Column(
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[600],
-                borderRadius: BorderRadius.circular(2),
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) {
+          final screenHeight = MediaQuery.of(context).size.height;
+          final statusBarHeight = MediaQuery.of(context).padding.top;
+          final bottomPadding = MediaQuery.of(context).padding.bottom;
+          final availableHeight =
+              screenHeight - statusBarHeight - bottomPadding;
+
+          return Container(
+            height: availableHeight * 0.95,
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
             ),
-            const SizedBox(height: 24),
-
-            // Title
-            const Text(
-              'My QR Code',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // QR Code Container
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
+            child: Column(
+              children: [
+                // Handle bar
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Real QR Code
-                    Container(
-                      width: 200,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey[300]!),
-                      ),
-                      child: Stack(
-                        children: [
-                          // Real QR Code
-                          Positioned.fill(
-                            child: CustomPaint(
-                              painter: WorkingQRCodePainter(sessionId),
-                            ),
-                          ),
-                          // Center logo
-                          Center(
-                            child: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey[300]!),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  image: const DecorationImage(
-                                    image: AssetImage(
-                                        'assets/logo/seChat_Logo.png'),
-                                    fit: BoxFit.contain,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      displayName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            sessionId,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                              fontFamily: 'monospace',
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => _copySessionId(context),
-                          icon: const Icon(Icons.copy, size: 16),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.blue.withOpacity(0.1),
-                            shape: const CircleBorder(),
-                            padding: const EdgeInsets.all(4),
-                          ),
-                          tooltip: 'Copy Session ID',
+                const SizedBox(height: 24),
+
+                // Title
+                const Text(
+                  'My QR Code',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // QR Code Container
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Real QR Code
+                        Container(
+                          width: 200,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: Stack(
+                            children: [
+                              // Real QR Code
+                              Positioned.fill(
+                                child: CustomPaint(
+                                  painter: WorkingQRCodePainter(sessionId),
+                                ),
+                              ),
+                              // Center logo
+                              Center(
+                                child: Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border:
+                                        Border.all(color: Colors.grey[300]!),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      image: const DecorationImage(
+                                        image: AssetImage(
+                                            'assets/logo/seChat_Logo.png'),
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          displayName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                sessionId,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                  fontFamily: 'monospace',
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => _copySessionId(context),
+                              icon: const Icon(Icons.copy, size: 16),
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.blue.withOpacity(0.1),
+                                shape: const CircleBorder(),
+                                padding: const EdgeInsets.all(4),
+                              ),
+                              tooltip: 'Copy Session ID',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _shareQRCode(context),
+                        icon: const Icon(Icons.send),
+                        label: const Text('Send'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF6B35),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _saveQRCode(context),
+                        icon: const Icon(Icons.save),
+                        label: const Text('Save'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
                   ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _shareQRCode(context),
-                    icon: const Icon(Icons.send),
-                    label: const Text('Send'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF6B35),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _saveQRCode(context),
-                    icon: const Icon(Icons.save),
-                    label: const Text('Save'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
+          );
+        });
   }
 
   void _copySessionId(BuildContext context) {
@@ -577,7 +593,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       final sessionId =
           SessionService.instance.currentSessionId ?? 'No Session ID';
       final displayName =
-          context.read<AuthProvider>().currentUser?.username ?? 'SeChat User';
+          GlobalUserService.instance.currentUsername ?? 'SeChat User';
 
       // Create QR code data
       final qrData = {
@@ -637,7 +653,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       final sessionId =
           SessionService.instance.currentSessionId ?? 'No Session ID';
       final displayName =
-          context.read<AuthProvider>().currentUser?.username ?? 'SeChat User';
+          GlobalUserService.instance.currentUsername ?? 'SeChat User';
 
       // Create QR code data
       final qrData = {

@@ -9,14 +9,37 @@ import android.util.Log
 import java.util.UUID
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.RemoteMessage
+import com.google.firebase.FirebaseApp
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class MainActivity : FlutterActivity() {
     private lateinit var sessionApiImpl: SessionApiImpl
     private val CHANNEL = "push_notifications"
     private val SESSION_CHANNEL = "session_protocol"
+    private lateinit var notificationReceiver: BroadcastReceiver
+
+    init {
+        Log.d("MainActivity", "MainActivity constructor called")
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        Log.d("MainActivity", "MainActivity onCreate called")
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        
+        Log.d("MainActivity", "Configuring Flutter engine...")
         
         // Initialize Session Protocol implementation
         sessionApiImpl = SessionApiImpl(this)
@@ -27,8 +50,16 @@ class MainActivity : FlutterActivity() {
         // Set up legacy Session Protocol channel
         setupSessionProtocolChannel(flutterEngine)
         
-        // Set up push notifications
+        // Set up push notifications FIRST (before other setup)
         setupPushNotifications(flutterEngine)
+        
+        // Set up notification receiver
+        setupNotificationReceiver()
+        
+        // Automatically get FCM token and send to Flutter
+        getFCMTokenAndSendToFlutter(flutterEngine)
+        
+        Log.d("MainActivity", "Flutter engine configuration complete")
     }
     
     private fun setupSessionProtocolChannel(flutterEngine: FlutterEngine) {
@@ -100,27 +131,229 @@ class MainActivity : FlutterActivity() {
     }
     
     private fun setupPushNotifications(flutterEngine: FlutterEngine) {
+        Log.d("MainActivity", "Setting up push notifications channel...")
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
         
-        // Get FCM token
+        // Set up method call handler for Flutter requests
+        channel.setMethodCallHandler { call, result ->
+            Log.d("MainActivity", "Received method call: ${call.method}")
+            when (call.method) {
+                                    "requestDeviceToken" -> {
+                        Log.d("MainActivity", "Flutter requested device token")
+                        // Get FCM token
+                        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                            if (task.isSuccessful) {
+                                val deviceToken = task.result
+                                Log.d("MainActivity", "FCM device token: $deviceToken")
+
+                                // Send token to Flutter
+                                channel.invokeMethod("onDeviceTokenReceived", deviceToken)
+                                result.success(null)
+                            } else {
+                                Log.e("MainActivity", "Failed to get FCM token", task.exception)
+
+                                // Fallback to UUID if FCM fails
+                                val fallbackToken = UUID.randomUUID().toString()
+                                Log.d("MainActivity", "Using fallback device token: $fallbackToken")
+                                channel.invokeMethod("onDeviceTokenReceived", fallbackToken)
+                                result.success(null)
+                            }
+                        }
+                    }
+                    "requestNotificationPermissions" -> {
+                        Log.d("MainActivity", "Flutter requested notification permissions")
+                        // Android 13+ requires runtime permission for notifications
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+                            }
+                        }
+                        result.success(true) // Android permissions are usually granted by default
+                    }
+                    "testMethodChannel" -> {
+                        Log.d("MainActivity", "Flutter requested test method channel")
+                        result.success("Android method channel is working!")
+                    }
+                    "testMainActivity" -> {
+                        Log.d("MainActivity", "Flutter requested MainActivity test")
+                        result.success("MainActivity is working! Session API: ${::sessionApiImpl.isInitialized}")
+                    }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        
+        // Get FCM token on app start
+        Log.d("MainActivity", "Attempting to get FCM token on app start...")
+        
+        // Check if Firebase is initialized
+        try {
+            val firebaseApp = FirebaseApp.getInstance()
+            Log.d("MainActivity", "✅ Firebase is initialized: ${firebaseApp.name}")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "❌ Firebase not initialized: ${e.message}")
+        }
+        
+        // Check if FCM is available
+        try {
+            val isAutoInitEnabled = FirebaseMessaging.getInstance().isAutoInitEnabled
+            Log.d("MainActivity", "FCM auto init enabled: $isAutoInitEnabled")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "❌ Error checking FCM auto init: ${e.message}")
+        }
+        
+        // Add timeout for FCM token retrieval
+        val timeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val timeoutRunnable = Runnable {
+            Log.e("MainActivity", "❌ FCM token retrieval timed out after 10 seconds")
+            
+            // Use fallback token
+            val fallbackToken = UUID.randomUUID().toString()
+            Log.d("MainActivity", "🔄 Using fallback device token due to timeout: $fallbackToken")
+            try {
+                channel.invokeMethod("onDeviceTokenReceived", fallbackToken)
+                Log.d("MainActivity", "✅ Fallback token sent to Flutter successfully")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "❌ Error sending fallback token to Flutter: ${e.message}")
+            }
+        }
+        
+        // Set 10-second timeout
+        timeoutHandler.postDelayed(timeoutRunnable, 10000)
+        
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            // Cancel timeout since we got a response
+            timeoutHandler.removeCallbacks(timeoutRunnable)
+            
             if (task.isSuccessful) {
                 val deviceToken = task.result
-                Log.d("MainActivity", "FCM device token: $deviceToken")
+                Log.d("MainActivity", "✅ FCM device token obtained: $deviceToken")
                 
                 // Send token to Flutter
-                channel.invokeMethod("onDeviceTokenReceived", deviceToken)
+                try {
+                    channel.invokeMethod("onDeviceTokenReceived", deviceToken)
+                    Log.d("MainActivity", "✅ Device token sent to Flutter successfully")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "❌ Error sending token to Flutter: ${e.message}")
+                }
             } else {
-                Log.e("MainActivity", "Failed to get FCM token", task.exception)
+                Log.e("MainActivity", "❌ Failed to get FCM token: ${task.exception?.message}")
                 
                 // Fallback to UUID if FCM fails
                 val fallbackToken = UUID.randomUUID().toString()
-                Log.d("MainActivity", "Using fallback device token: $fallbackToken")
-                channel.invokeMethod("onDeviceTokenReceived", fallbackToken)
+                Log.d("MainActivity", "🔄 Using fallback device token: $fallbackToken")
+                try {
+                    channel.invokeMethod("onDeviceTokenReceived", fallbackToken)
+                    Log.d("MainActivity", "✅ Fallback token sent to Flutter successfully")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "❌ Error sending fallback token to Flutter: ${e.message}")
+                }
             }
         }
         
         // Handle incoming messages when app is in foreground
         FirebaseMessaging.getInstance().isAutoInitEnabled = true
+    }
+    
+    private fun getFCMTokenAndSendToFlutter(flutterEngine: FlutterEngine) {
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        Log.d("MainActivity", "Attempting to get FCM token on app start...")
+
+        // Check if Firebase is initialized
+        try {
+            val firebaseApp = FirebaseApp.getInstance()
+            Log.d("MainActivity", "✅ Firebase is initialized: ${firebaseApp.name}")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "❌ Firebase not initialized: ${e.message}")
+        }
+
+        // Check if FCM is available
+        try {
+            val isAutoInitEnabled = FirebaseMessaging.getInstance().isAutoInitEnabled
+            Log.d("MainActivity", "FCM auto init enabled: $isAutoInitEnabled")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "❌ Error checking FCM auto init: ${e.message}")
+        }
+
+        // Add timeout for FCM token retrieval
+        val timeoutHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val timeoutRunnable = Runnable {
+            Log.e("MainActivity", "❌ FCM token retrieval timed out after 10 seconds")
+
+            // Use fallback token
+            val fallbackToken = UUID.randomUUID().toString()
+            Log.d("MainActivity", "🔄 Using fallback device token due to timeout: $fallbackToken")
+            try {
+                channel.invokeMethod("onDeviceTokenReceived", fallbackToken)
+                Log.d("MainActivity", "✅ Fallback token sent to Flutter successfully")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "❌ Error sending fallback token to Flutter: ${e.message}")
+            }
+        }
+
+        // Set 10-second timeout
+        timeoutHandler.postDelayed(timeoutRunnable, 10000)
+
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            // Cancel timeout since we got a response
+            timeoutHandler.removeCallbacks(timeoutRunnable)
+
+            if (task.isSuccessful) {
+                val deviceToken = task.result
+                Log.d("MainActivity", "✅ FCM device token obtained: $deviceToken")
+
+                // Send token to Flutter
+                try {
+                    channel.invokeMethod("onDeviceTokenReceived", deviceToken)
+                    Log.d("MainActivity", "✅ Device token sent to Flutter successfully")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "❌ Error sending token to Flutter: ${e.message}")
+                }
+            } else {
+                Log.e("MainActivity", "❌ Failed to get FCM token: ${task.exception?.message}")
+
+                // Fallback to UUID if FCM fails
+                val fallbackToken = UUID.randomUUID().toString()
+                Log.d("MainActivity", "🔄 Using fallback device token: $fallbackToken")
+                try {
+                    channel.invokeMethod("onDeviceTokenReceived", fallbackToken)
+                    Log.d("MainActivity", "✅ Fallback token sent to Flutter successfully")
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "❌ Error sending fallback token to Flutter: ${e.message}")
+                }
+            }
+        }
+    }
+    
+    private fun setupNotificationReceiver() {
+        notificationReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action == "FORWARD_NOTIFICATION_TO_FLUTTER") {
+                    val notificationData = intent.getSerializableExtra("notification_data") as? HashMap<String, Any>
+                    if (notificationData != null) {
+                        Log.d("MainActivity", "Received notification data from FCM service: $notificationData")
+                        
+                        // Forward to Flutter
+                        val channel = MethodChannel(flutterEngine?.dartExecutor?.binaryMessenger ?: return, CHANNEL)
+                        channel.invokeMethod("onRemoteNotificationReceived", notificationData)
+                    }
+                }
+            }
+        }
+        
+        // Register the receiver with explicit export flag for Android 14+
+        val filter = IntentFilter("FORWARD_NOTIFICATION_TO_FLUTTER")
+        registerReceiver(notificationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Unregister the receiver
+        try {
+            unregisterReceiver(notificationReceiver)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error unregistering receiver: ${e.message}")
+        }
     }
 } 

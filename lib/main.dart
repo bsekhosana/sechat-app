@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 
 import 'features/search/providers/search_provider.dart';
 import 'features/chat/providers/chat_provider.dart';
@@ -13,15 +14,18 @@ import 'features/notifications/providers/notification_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
-import 'core/services/notification_service.dart';
+import 'shared/widgets/app_lifecycle_handler.dart';
+import 'core/services/simple_notification_service.dart';
 import 'core/services/session_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/local_storage_service.dart';
-import 'core/services/push_notification_handler.dart';
-import 'core/services/native_push_service.dart';
 
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+
+  print('🔔 Main: Starting SeChat application...');
+  print(
+      '🔔 Main: Platform: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : 'Web'}');
 
   // Only use native splash on mobile platforms
   if (!kIsWeb) {
@@ -33,14 +37,19 @@ Future<void> main() async {
   // Initialize LocalStorageService
   await LocalStorageService.instance.initialize();
 
-  // Initialize notification service
-  await NotificationService.instance.initialize();
+  // Initialize simple notification service (without session ID - will be set later)
+  await SimpleNotificationService.instance.initialize();
 
-  // Initialize native push service
-  await NativePushService.instance.initialize();
+  // Set up notification callbacks
+  _setupSimpleNotifications();
 
-  // Initialize push notification handler
-  _setupPushNotificationHandler();
+  // Set up method channel for native communication
+  _setupMethodChannels();
+
+  // Add a longer delay to ensure native platforms are ready
+  print('🔔 Main: Waiting for native platforms to initialize...');
+  await Future.delayed(const Duration(seconds: 3));
+  print('🔔 Main: Native platform initialization delay complete');
 
   // All real-time features now use silent notifications via AirNotifier
 
@@ -61,59 +70,117 @@ Future<void> main() async {
   );
 }
 
-// Setup push notification handler with callbacks
-void _setupPushNotificationHandler() {
-  final handler = PushNotificationHandler.instance;
+// Simple notification setup
+void _setupSimpleNotifications() {
+  final notificationService = SimpleNotificationService.instance;
 
-  // Set up invitation received callback
-  handler.setOnInvitationReceived((senderId, senderName, invitationId) {
-    print('📱 Main: Invitation received from $senderName ($senderId)');
-    // The notification service will handle this automatically
-  });
-
-  // Set up invitation response callback
-  handler.setOnInvitationResponse((responderId, responderName, status) {
-    print(
-        '📱 Main: Invitation response from $responderName ($responderId): $status');
-    // The notification service will handle this automatically
-  });
-
-  // Set up message received callback
-  handler.setOnMessageReceived((senderId, senderName, message) {
-    print('📱 Main: Message received from $senderName ($senderId)');
-    // Get ChatProvider instance and handle the message
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+  // Set up notification callbacks
+  notificationService
+      .setOnInvitationReceived((senderId, senderName, invitationId) async {
+    print('🔔 Main: Invitation received from $senderName ($senderId)');
+    // Update InvitationProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        final chatProvider = ChatProvider();
-        chatProvider.handleIncomingMessage(
-            senderId, senderName, message, 'conv_$senderId');
+        final invitationProvider = InvitationProvider();
+        await invitationProvider.handleIncomingInvitation(
+            senderId, senderName, invitationId);
       } catch (e) {
-        print('📱 Main: Error handling message: $e');
+        print('🔔 Main: Error updating InvitationProvider: $e');
       }
     });
   });
 
-  // Set up typing indicator callback
-  handler.setOnTypingIndicator((senderId, isTyping) {
-    print('📱 Main: Typing indicator from $senderId: $isTyping');
-    // Get ChatProvider instance and handle the typing indicator
+  notificationService
+      .setOnInvitationResponse((responderId, responderName, status) async {
+    print(
+        '🔔 Main: Invitation response from $responderName ($responderId): $status');
+    // Update InvitationProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final invitationProvider = InvitationProvider();
+        await invitationProvider.handleInvitationResponse(
+            responderId, responderName, status);
+      } catch (e) {
+        print('🔔 Main: Error updating InvitationProvider: $e');
+      }
+    });
+  });
+
+  notificationService.setOnMessageReceived((senderId, senderName, message) {
+    print('🔔 Main: Message received from $senderName ($senderId)');
+    // Update ChatProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatProvider = ChatProvider();
+        chatProvider.handleIncomingMessage(senderId, senderName, message, '');
+      } catch (e) {
+        print('🔔 Main: Error updating ChatProvider: $e');
+      }
+    });
+  });
+
+  notificationService.setOnTypingIndicator((senderId, isTyping) {
+    print('🔔 Main: Typing indicator from $senderId: $isTyping');
+    // Update ChatProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
         final chatProvider = ChatProvider();
         chatProvider.handleTypingIndicator(senderId, isTyping);
       } catch (e) {
-        print('📱 Main: Error handling typing indicator: $e');
+        print('🔔 Main: Error updating ChatProvider: $e');
       }
     });
   });
 
-  // Set up connection status callback
-  handler.setOnConnectionStatus((userId, isConnected) {
-    print('📱 Main: Connection status for $userId: $isConnected');
-    // The NetworkService will handle this
+  print('🔔 Main: Simple notification service setup complete');
+}
+
+// Set up method channels for native communication
+void _setupMethodChannels() {
+  const MethodChannel channel = MethodChannel('push_notifications');
+
+  channel.setMethodCallHandler((call) async {
+    switch (call.method) {
+      case 'onDeviceTokenReceived':
+        final String deviceToken = call.arguments as String;
+        print('🔔 Main: Received device token from native: $deviceToken');
+
+        // Handle device token received from native platform
+        try {
+          await SimpleNotificationService.instance
+              .handleDeviceTokenReceived(deviceToken);
+          print('🔔 Main: ✅ Device token handled successfully');
+        } catch (e) {
+          print('🔔 Main: Error handling device token: $e');
+        }
+        return null;
+
+      case 'onRemoteNotificationReceived':
+        final Map<String, dynamic> notificationData =
+            Map<String, dynamic>.from(call.arguments);
+        print('🔔 Main: Received remote notification: $notificationData');
+
+        // Handle the notification
+        try {
+          await SimpleNotificationService.instance
+              .handleNotification(notificationData);
+        } catch (e) {
+          print('🔔 Main: Error handling remote notification: $e');
+        }
+        return null;
+
+      case 'requestDeviceToken':
+        print('🔔 Main: Native platform requested device token');
+        // This is handled by the native platform automatically
+        return null;
+
+      default:
+        print('🔔 Main: Unknown method call: ${call.method}');
+        return null;
+    }
   });
 
-  print('📱 Main: Push notification handler setup complete');
+  print('🔔 Main: Method channels setup complete');
 }
 
 class SeChatApp extends StatelessWidget {
@@ -121,33 +188,36 @@ class SeChatApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SeChat',
-      theme: ThemeData(
-        colorScheme: ColorScheme.dark(
-          brightness: Brightness.dark,
-          primary: const Color(0xFFFF6B35), // Orange from designs
-          onPrimary: Colors.white,
-          primaryContainer: const Color(0xFF2C2C2C), // Dark grey containers
-          onPrimaryContainer: Colors.white,
-          secondary: const Color(0xFF666666), // Medium grey
-          onSecondary: Colors.white,
-          secondaryContainer: const Color(0xFF1A1A1A), // Very dark grey
-          onSecondaryContainer: Colors.white,
-          surface: const Color(0xFF1E1E1E), // Dark surface
-          onSurface: Colors.white,
-          surfaceContainerHighest: const Color(0xFF2C2C2C), // Card backgrounds
-          onSurfaceVariant: const Color(0xFFCCCCCC), // Text on cards
-          outline: const Color(0xFF404040), // Borders
-          error: const Color(0xFFFF5555),
-          onError: Colors.white,
+    return AppLifecycleHandler(
+      child: MaterialApp(
+        title: 'SeChat',
+        theme: ThemeData(
+          colorScheme: ColorScheme.dark(
+            brightness: Brightness.dark,
+            primary: const Color(0xFFFF6B35), // Orange from designs
+            onPrimary: Colors.white,
+            primaryContainer: const Color(0xFF2C2C2C), // Dark grey containers
+            onPrimaryContainer: Colors.white,
+            secondary: const Color(0xFF666666), // Medium grey
+            onSecondary: Colors.white,
+            secondaryContainer: const Color(0xFF1A1A1A), // Very dark grey
+            onSecondaryContainer: Colors.white,
+            surface: const Color(0xFF1E1E1E), // Dark surface
+            onSurface: Colors.white,
+            surfaceContainerHighest:
+                const Color(0xFF2C2C2C), // Card backgrounds
+            onSurfaceVariant: const Color(0xFFCCCCCC), // Text on cards
+            outline: const Color(0xFF404040), // Borders
+            error: const Color(0xFFFF5555),
+            onError: Colors.white,
+          ),
+          scaffoldBackgroundColor: const Color(0xFF121212),
+          useMaterial3: true,
+          fontFamily: 'System',
         ),
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        useMaterial3: true,
-        fontFamily: 'System',
+        home: const AuthChecker(),
+        debugShowCheckedModeBanner: false,
       ),
-      home: const AuthChecker(),
-      debugShowCheckedModeBanner: false,
     );
   }
 }

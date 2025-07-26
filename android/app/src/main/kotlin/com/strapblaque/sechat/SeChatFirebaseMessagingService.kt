@@ -30,10 +30,61 @@ class SeChatFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
         Log.d("SeChatFCM", "Message received: ${remoteMessage.data}")
+        Log.d("SeChatFCM", "Message data keys: ${remoteMessage.data.keys}")
+        Log.d("SeChatFCM", "Message data values: ${remoteMessage.data.values}")
+        
+        // Enhanced metadata extraction
+        val enhancedData = HashMap<String, String>(remoteMessage.data)
+        
+        // Check for encrypted data
+        val data = remoteMessage.data["data"]
+        val encrypted = remoteMessage.data["encrypted"]
+        val checksum = remoteMessage.data["checksum"]
+        
+        if (data != null) {
+            try {
+                // Check if this is encrypted data (base64 encoded)
+                if (encrypted == "1" || encrypted == "true") {
+                    Log.d("SeChatFCM", "Detected encrypted notification data")
+                    enhancedData["isEncrypted"] = "true"
+                    enhancedData["encryptedData"] = data
+                    
+                    if (checksum != null && checksum.isNotEmpty()) {
+                        Log.d("SeChatFCM", "Notification checksum: $checksum")
+                        enhancedData["checksum"] = checksum
+                    }
+                } else {
+                    // Try to parse as JSON for non-encrypted data
+                    try {
+                        val dataMap = org.json.JSONObject(data)
+                        Log.d("SeChatFCM", "Parsed JSON notification data")
+                    } catch (e: Exception) {
+                        Log.d("SeChatFCM", "Data is not JSON, treating as plain text")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("SeChatFCM", "Error processing notification data: ${e.message}")
+            }
+        }
+        
+        // Log metadata if present
+        val metadata = remoteMessage.data["metadata"]
+        if (metadata != null) {
+            Log.d("SeChatFCM", "Notification metadata: $metadata")
+        }
+        
+        // Log notification details if present
+        remoteMessage.notification?.let { notification ->
+            Log.d("SeChatFCM", "Notification title: ${notification.title}")
+            Log.d("SeChatFCM", "Notification body: ${notification.body}")
+        }
+        
+        // Forward enhanced notification data to Flutter
+        forwardNotificationToFlutter(enhancedData)
         
         // Handle notification when app is in background
         remoteMessage.notification?.let { notification ->
-            showNotification(notification.title, notification.body, remoteMessage.data)
+            showNotification(notification.title, notification.body, enhancedData)
         }
     }
     
@@ -88,5 +139,23 @@ class SeChatFirebaseMessagingService : FirebaseMessagingService() {
         // This will be handled by the MainActivity when the app is running
         // For background token updates, we could use a broadcast or shared preferences
         Log.d("SeChatFCM", "Token updated, will be sent to Flutter when app resumes")
+    }
+    
+    private fun forwardNotificationToFlutter(data: Map<String, String>) {
+        try {
+            Log.d("SeChatFCM", "Forwarding notification data to Flutter: $data")
+            
+            // Convert Map<String, String> to Map<String, Any> for Flutter
+            val flutterData = data.mapValues { it.value as Any }
+            
+            // Try to send to Flutter via MainActivity
+            val intent = Intent("FORWARD_NOTIFICATION_TO_FLUTTER")
+            intent.putExtra("notification_data", HashMap(flutterData))
+            sendBroadcast(intent)
+            
+            Log.d("SeChatFCM", "Notification data forwarded to Flutter")
+        } catch (e: Exception) {
+            Log.e("SeChatFCM", "Error forwarding notification to Flutter: ${e.message}")
+        }
     }
 } 

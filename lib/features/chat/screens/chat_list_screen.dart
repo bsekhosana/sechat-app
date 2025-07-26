@@ -19,7 +19,7 @@ import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
 import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
 import 'package:sechat_app/core/services/session_service.dart';
 import 'package:sechat_app/shared/models/user.dart';
-import 'package:sechat_app/core/services/notification_service.dart';
+import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
 
 class ChatListScreen extends StatefulWidget {

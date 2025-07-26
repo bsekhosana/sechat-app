@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:sechat_app/features/notifications/models/local_notification.dart';
-import 'package:sechat_app/core/services/notification_service.dart';
+import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 class NotificationProvider extends ChangeNotifier {
@@ -24,9 +24,14 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   void _setupNotificationServiceCallback() {
-    NotificationService.instance.setOnLocalNotificationAdded(
-      (title, body, type, data) {
-        _handleNotificationFromService(title, body, type, data);
+    SimpleNotificationService.instance.setOnInvitationReceived(
+      (senderId, senderName, invitationId) {
+        _handleNotificationFromService('New Invitation',
+            '$senderName would like to connect', 'invitation', {
+          'senderId': senderId,
+          'senderName': senderName,
+          'invitationId': invitationId,
+        });
       },
     );
   }
@@ -77,8 +82,12 @@ class NotificationProvider extends ChangeNotifier {
         try {
           // Convert Map<dynamic, dynamic> to Map<String, dynamic>
           if (value is Map) {
-            final Map<String, dynamic> jsonData =
-                Map<String, dynamic>.from(value);
+            final Map<String, dynamic> jsonData = {};
+            value.forEach((key, val) {
+              if (key is String) {
+                jsonData[key] = val;
+              }
+            });
             notificationsList.add(LocalNotification.fromJson(jsonData));
           } else {
             print(

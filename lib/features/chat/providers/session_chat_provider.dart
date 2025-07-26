@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/services/airnotifier_service.dart';
-import '../../../core/services/notification_service.dart';
+import '../../../core/services/simple_notification_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/models/message.dart';
@@ -8,7 +8,8 @@ import 'dart:async';
 
 class SessionChatProvider extends ChangeNotifier {
   final AirNotifierService _airNotifier = AirNotifierService.instance;
-  final NotificationService _notificationService = NotificationService.instance;
+  final SimpleNotificationService _notificationService =
+      SimpleNotificationService.instance;
 
   List<Chat> _chats = [];
   final Map<String, User> _chatUsers = {};
@@ -107,7 +108,7 @@ class SessionChatProvider extends ChangeNotifier {
   }
 
   // Handle message received via silent notification
-  void handleMessageReceived(Map<String, dynamic> data) {
+  Future<void> handleMessageReceived(Map<String, dynamic> data) async {
     try {
       final senderId = data['senderId'] as String;
       final senderName = data['senderName'] as String;
@@ -137,10 +138,15 @@ class SessionChatProvider extends ChangeNotifier {
       _updateOrCreateChat(senderId, message);
 
       // Show notification
-      _notificationService.showMessageNotification(
-        senderName: senderName,
-        message: content,
-        conversationId: conversationId,
+      await _notificationService.showLocalNotification(
+        title: senderName,
+        body: content,
+        type: 'message',
+        data: {
+          'senderName': senderName,
+          'message': content,
+          'conversationId': conversationId,
+        },
       );
 
       // Send delivery status

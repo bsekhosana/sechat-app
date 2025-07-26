@@ -12,7 +12,8 @@ import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
 import 'package:sechat_app/core/services/session_service.dart';
 
 import 'package:sechat_app/shared/widgets/app_icon.dart';
-import 'package:sechat_app/core/services/notification_service.dart';
+import 'package:sechat_app/core/services/simple_notification_service.dart';
+import 'package:sechat_app/core/services/airnotifier_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
 import '../../invitations/providers/invitation_provider.dart';
@@ -49,6 +50,153 @@ Download now and let's chat securely!
       backgroundColor: Colors.transparent,
       builder: (context) => const _StorageManagementSheet(),
     );
+  }
+
+  void _testNotificationFlow(BuildContext context) async {
+    try {
+      print('🧪 Settings: Testing notification flow...');
+
+      // Test method channel connectivity first
+      final methodChannelTest =
+          await SimpleNotificationService.instance.testMethodChannel();
+
+      if (methodChannelTest == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  '❌ Method channel test failed - native communication broken'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      } else {
+        print('🧪 Settings: Method channel test result: $methodChannelTest');
+      }
+
+      // Test MainActivity connectivity
+      final mainActivityTest =
+          await SimpleNotificationService.instance.testMainActivity();
+
+      if (mainActivityTest == null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content:
+                  Text('❌ MainActivity test failed - MainActivity not working'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      } else {
+        print('🧪 Settings: MainActivity test result: $mainActivityTest');
+      }
+
+      // Test AirNotifier connection
+      final airNotifierService = AirNotifierService.instance;
+      final connectionTest =
+          await airNotifierService.testAirNotifierConnection();
+
+      if (!connectionTest) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ AirNotifier connection test failed'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Test token registration
+      final notificationService = SimpleNotificationService.instance;
+      final deviceToken = notificationService.deviceToken;
+      final sessionId = notificationService.sessionId;
+
+      print('🧪 Settings: Device token: $deviceToken');
+      print('🧪 Settings: Session ID: $sessionId');
+
+      if (deviceToken != null && sessionId != null) {
+        final success = await airNotifierService.registerDeviceToken(
+          deviceToken: deviceToken,
+          sessionId: sessionId,
+        );
+
+        if (success) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('✅ Token registration test successful!'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        } else {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('❌ Token registration test failed'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Missing device token or session ID'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+
+      // Simulate invitation notification
+      final notificationData = {
+        'type': 'invitation',
+        'action': 'invitation_received',
+        'senderId': 'test_sender_${DateTime.now().millisecondsSinceEpoch}',
+        'senderName': 'Test User',
+        'invitationId':
+            'test_invitation_${DateTime.now().millisecondsSinceEpoch}',
+        'message': 'Would you like to connect?',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      await SimpleNotificationService.instance
+          .processNotification(notificationData);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🧪 Test invitation notification sent!'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      print('🧪 Settings: Test notification failed: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Test failed: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   void _retryConnection(BuildContext context) async {
@@ -280,53 +428,60 @@ Download now and let's chat securely!
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  children: [
-                    _buildSettingsItem(
-                      title: 'Retry Connection',
-                      subtitle: 'Reconnect to Session Network',
-                      onTap: () => _retryConnection(context),
-                    ),
-                    _buildSettingsItem(
-                      title: 'Storage & Data',
-                      onTap: () => _showStorageManagementSheet(context),
-                    ),
-                    _buildSettingsItem(
-                      title: 'Last Synced',
-                      subtitle: _getLastSyncedTime(),
-                      onTap: () => _showSyncInfo(context),
-                    ),
-                    _buildSettingsItem(
-                      title: 'Logout',
-                      onTap: () => _showLogoutConfirmation(context),
-                      isDestructive: true,
-                    ),
-                    const Spacer(),
-                    // App version info
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 20),
-                      child: Column(
-                        children: [
-                          Text(
-                            'SeChat',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Version 1.0.0 (Build 1)',
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildSettingsItem(
+                        title: 'Retry Connection',
+                        subtitle: 'Reconnect to Session Network',
+                        onTap: () => _retryConnection(context),
                       ),
-                    ),
-                  ],
+                      _buildSettingsItem(
+                        title: 'Test Notifications',
+                        subtitle: 'Test UI update flow',
+                        onTap: () => _testNotificationFlow(context),
+                      ),
+                      _buildSettingsItem(
+                        title: 'Storage & Data',
+                        onTap: () => _showStorageManagementSheet(context),
+                      ),
+                      _buildSettingsItem(
+                        title: 'Last Synced',
+                        subtitle: _getLastSyncedTime(),
+                        onTap: () => _showSyncInfo(context),
+                      ),
+                      _buildSettingsItem(
+                        title: 'Logout',
+                        onTap: () => _showLogoutConfirmation(context),
+                        isDestructive: true,
+                      ),
+                      const SizedBox(height: 30),
+                      // App version info
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 20),
+                        child: Column(
+                          children: [
+                            Text(
+                              'SeChat',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Version 1.0.0 (Build 1)',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

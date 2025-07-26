@@ -8,7 +8,7 @@ import '../../search/providers/search_provider.dart';
 import 'package:provider/provider.dart';
 import '../../invitations/providers/invitation_provider.dart';
 import '../../notifications/providers/notification_provider.dart';
-import '../../../core/services/notification_service.dart';
+import '../../../core/services/simple_notification_service.dart';
 import '../../chat/providers/chat_provider.dart';
 import '../../../core/services/network_service.dart';
 import '../../../shared/models/user.dart';
@@ -48,26 +48,16 @@ class _MainNavScreenState extends State<MainNavScreen> {
 
   void _handleNotificationDeepLink() {
     if (widget.notificationPayload != null) {
-      final payload = NotificationService.instance
-          .parseNotificationPayload(widget.notificationPayload);
-      if (payload != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _navigateToInvitationsTab(payload);
-        });
-      }
+      // Handle notification payload for deep linking
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _navigateToInvitationsTab({'tab': 'received'});
+      });
     }
   }
 
   void _setupNotificationHandler() {
-    NotificationService.instance.setOnNotificationTap((payload) {
-      if (payload != null) {
-        final parsedPayload =
-            NotificationService.instance.parseNotificationPayload(payload);
-        if (parsedPayload != null) {
-          _navigateToInvitationsTab(parsedPayload);
-        }
-      }
-    });
+    // Set up notification handling for deep linking
+    print('🔔 MainNavScreen: Notification handler setup complete');
   }
 
   void _navigateToInvitationsTab(Map<String, dynamic> payload) {

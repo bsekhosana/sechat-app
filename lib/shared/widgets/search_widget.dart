@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../features/search/providers/search_provider.dart';
 import '../models/user.dart';
 import '../../features/invitations/providers/invitation_provider.dart';
+import '../../core/services/global_user_service.dart';
 
 class SearchWidget extends StatefulWidget {
   const SearchWidget({super.key});
@@ -194,8 +195,13 @@ class _SearchActionSheetState extends State<_SearchActionSheet>
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final availableHeight = screenHeight - statusBarHeight - bottomPadding;
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.9,
+      height: availableHeight * 0.95,
       decoration: const BoxDecoration(
         color: Color(0xFF121212),
         borderRadius: BorderRadius.only(
@@ -297,54 +303,56 @@ class _SearchActionSheetState extends State<_SearchActionSheet>
 
           // Results section
           Expanded(
-            child: Consumer<SearchProvider>(
-              builder: (context, searchProvider, child) {
-                print(
-                    '🔍 SearchWidget: Building UI - State: ${searchProvider.searchState}, Query: "${searchProvider.query}", Error: "${searchProvider.error}", ShowNetworkError: ${searchProvider.showNetworkError}');
+            child: SingleChildScrollView(
+              child: Consumer<SearchProvider>(
+                builder: (context, searchProvider, child) {
+                  print(
+                      '🔍 SearchWidget: Building UI - State: ${searchProvider.searchState}, Query: "${searchProvider.query}", Error: "${searchProvider.error}", ShowNetworkError: ${searchProvider.showNetworkError}');
 
-                if (searchProvider.query.isEmpty) {
+                  if (searchProvider.query.isEmpty) {
+                    return _buildEmptyState();
+                  }
+
+                  // Show network error with retry
+                  if (searchProvider.showNetworkError) {
+                    print('🔍 SearchWidget: Showing network error widget');
+                    return _buildNetworkErrorWidget(searchProvider);
+                  }
+
+                  // Show loading state
+                  if (searchProvider.searchState == SearchState.loading) {
+                    print('🔍 SearchWidget: Showing loading widget');
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFFF6B35),
+                      ),
+                    );
+                  }
+
+                  // Show error state
+                  if (searchProvider.searchState == SearchState.error) {
+                    print('🔍 SearchWidget: Showing error widget');
+                    return _buildErrorWidget(searchProvider);
+                  }
+
+                  // Show search results
+                  if (searchProvider.searchResults.isNotEmpty) {
+                    print('🔍 SearchWidget: Showing results list');
+                    return _buildResultsList(searchProvider.searchResults);
+                  }
+
+                  // Show no results
+                  if (searchProvider.searchState == SearchState.success &&
+                      searchProvider.query.length >= 3) {
+                    print('🔍 SearchWidget: Showing no results widget');
+                    return _buildNoResults();
+                  }
+
+                  // Default empty state
+                  print('🔍 SearchWidget: Showing default empty state');
                   return _buildEmptyState();
-                }
-
-                // Show network error with retry
-                if (searchProvider.showNetworkError) {
-                  print('🔍 SearchWidget: Showing network error widget');
-                  return _buildNetworkErrorWidget(searchProvider);
-                }
-
-                // Show loading state
-                if (searchProvider.searchState == SearchState.loading) {
-                  print('🔍 SearchWidget: Showing loading widget');
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFFFF6B35),
-                    ),
-                  );
-                }
-
-                // Show error state
-                if (searchProvider.searchState == SearchState.error) {
-                  print('🔍 SearchWidget: Showing error widget');
-                  return _buildErrorWidget(searchProvider);
-                }
-
-                // Show search results
-                if (searchProvider.searchResults.isNotEmpty) {
-                  print('🔍 SearchWidget: Showing results list');
-                  return _buildResultsList(searchProvider.searchResults);
-                }
-
-                // Show no results
-                if (searchProvider.searchState == SearchState.success &&
-                    searchProvider.query.length >= 3) {
-                  print('🔍 SearchWidget: Showing no results widget');
-                  return _buildNoResults();
-                }
-
-                // Default empty state
-                print('🔍 SearchWidget: Showing default empty state');
-                return _buildEmptyState();
-              },
+                },
+              ),
             ),
           ),
         ],
@@ -408,6 +416,77 @@ class _SearchActionSheetState extends State<_SearchActionSheet>
               color: Colors.white.withOpacity(0.5),
               fontSize: 14,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showDisplayNameDialog(
+      BuildContext context, String username) async {
+    final TextEditingController displayNameController = TextEditingController();
+    displayNameController.text = username; // Pre-fill with username
+
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF232323),
+        title: const Text(
+          'Add Contact',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter a display name for this contact. This name will be saved and used in notifications, chats, and contact lists.',
+              style: TextStyle(color: Colors.grey, fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: displayNameController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Display Name *',
+                labelStyle: TextStyle(color: Colors.grey),
+                border: OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.grey),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.blue),
+                ),
+                helperText: 'This name will be saved for this contact',
+                helperStyle: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final displayName = displayNameController.text.trim();
+              if (displayName.isNotEmpty) {
+                Navigator.of(context).pop(displayName);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a display name'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Add Contact'),
           ),
         ],
       ),
@@ -835,33 +914,41 @@ class _SearchActionSheetState extends State<_SearchActionSheet>
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () async {
-                          final invitationProvider =
-                              context.read<InvitationProvider>();
+                          Navigator.of(context)
+                              .pop(); // Close action sheet first
 
-                          final success =
-                              await invitationProvider.sendInvitation(user.id);
+                          // Show dialog to enter display name
+                          final displayName = await _showDisplayNameDialog(
+                              context, user.username);
 
-                          if (success && mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Invitation sent to ${user.username}!'),
-                                backgroundColor: Colors.green,
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          } else if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                    'Failed to send invitation: ${invitationProvider.error}'),
-                                backgroundColor: Colors.red,
-                                duration: const Duration(seconds: 3),
-                              ),
-                            );
+                          if (displayName != null && displayName.isNotEmpty) {
+                            final invitationProvider =
+                                context.read<InvitationProvider>();
+
+                            final success =
+                                await invitationProvider.sendInvitation(user.id,
+                                    displayName: displayName);
+
+                            if (success && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content:
+                                      Text('Invitation sent to $displayName!'),
+                                  backgroundColor: Colors.green,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            } else if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                      'Failed to send invitation: ${invitationProvider.error}'),
+                                  backgroundColor: Colors.red,
+                                  duration: const Duration(seconds: 3),
+                                ),
+                              );
+                            }
                           }
-
-                          Navigator.of(context).pop(true);
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF6B35),

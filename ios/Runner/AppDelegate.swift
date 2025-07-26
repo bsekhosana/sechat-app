@@ -10,7 +10,11 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    print("📱 iOS: Application did finish launching")
+    print("📱 iOS: Launch options: \(launchOptions ?? [:])")
+    
     GeneratedPluginRegistrant.register(with: self)
+    print("📱 iOS: Generated plugin registrant registered")
     
     // Set up push notifications
     setupPushNotifications(application)
@@ -26,28 +30,103 @@ import UserNotifications
       self?.handleMethodCall(call, result: result)
     }
     
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // Set up push notifications channel
+    let pushChannel = FlutterMethodChannel(
+      name: "push_notifications",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    print("📱 iOS: Setting up push notifications method channel")
+    
+    pushChannel.setMethodCallHandler { [weak self] (call, result) in
+      print("📱 iOS: Received method call: \(call.method)")
+      switch call.method {
+      case "requestDeviceToken":
+        print("📱 iOS: Flutter requested device token")
+        // The device token will be sent via didRegisterForRemoteNotificationsWithDeviceToken
+        result(nil)
+      case "requestNotificationPermissions":
+        print("📱 iOS: Flutter requested notification permissions")
+        self?.requestNotificationPermissions { granted in
+          result(granted)
+        }
+      case "testMethodChannel":
+        print("📱 iOS: Flutter requested test method channel")
+        result("iOS method channel is working!")
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    
+    let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    print("📱 iOS: Application launch result: \(result)")
+    return result
+  }
+  
+  override func applicationWillTerminate(_ application: UIApplication) {
+    print("📱 iOS: Application will terminate")
+    super.applicationWillTerminate(application)
+  }
+  
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    print("📱 iOS: Application did become active")
+    super.applicationDidBecomeActive(application)
+  }
+  
+  override func applicationWillResignActive(_ application: UIApplication) {
+    print("📱 iOS: Application will resign active")
+    super.applicationWillResignActive(application)
   }
   
   // MARK: - Push Notifications Setup
   private func setupPushNotifications(_ application: UIApplication) {
-    // Request authorization
+    print("📱 iOS: Setting up push notifications...")
+    
+    // Set delegate
+    UNUserNotificationCenter.current().delegate = self
+    
+    // Check current authorization status
+    UNUserNotificationCenter.current().getNotificationSettings { settings in
+      print("📱 iOS: Current notification settings: \(settings.authorizationStatus.rawValue)")
+      print("📱 iOS: Alert setting: \(settings.alertSetting.rawValue)")
+      print("📱 iOS: Badge setting: \(settings.badgeSetting.rawValue)")
+      print("📱 iOS: Sound setting: \(settings.soundSetting.rawValue)")
+    }
+    
+    // Request authorization and register for remote notifications
+    UNUserNotificationCenter.current().requestAuthorization(
+      options: [.alert, .badge, .sound],
+      completionHandler: { granted, error in
+        if granted {
+          print("📱 iOS: ✅ Push notification permission granted")
+          DispatchQueue.main.async {
+            application.registerForRemoteNotifications()
+            print("📱 iOS: ✅ Registered for remote notifications")
+          }
+        } else {
+          print("📱 iOS: ❌ Push notification permission denied: \(error?.localizedDescription ?? "Unknown error")")
+        }
+      }
+    )
+  }
+  
+  // Request notification permissions
+  private func requestNotificationPermissions(completion: @escaping (Bool) -> Void) {
     UNUserNotificationCenter.current().requestAuthorization(
       options: [.alert, .badge, .sound],
       completionHandler: { granted, error in
         if granted {
           print("📱 iOS: Push notification permission granted")
           DispatchQueue.main.async {
-            application.registerForRemoteNotifications()
+            UIApplication.shared.registerForRemoteNotifications()
           }
+          completion(true)
         } else {
           print("📱 iOS: Push notification permission denied: \(error?.localizedDescription ?? "Unknown error")")
+          completion(false)
         }
       }
     )
-    
-    // Set delegate
-    UNUserNotificationCenter.current().delegate = self
   }
   
   private func generateEd25519KeyPair() throws -> [String: String] {
@@ -556,6 +635,67 @@ extension AppDelegate {
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
     print("📱 iOS: Received notification in foreground: \(notification.request.content.title)")
+    
+    // Extract notification data and forward to Flutter
+    let userInfo = notification.request.content.userInfo
+    print("📱 iOS: Foreground notification userInfo: \(userInfo)")
+    print("📱 iOS: Foreground notification keys: \(userInfo.keys)")
+    
+    // Enhanced metadata extraction
+    var enhancedUserInfo = userInfo
+    
+    // Check for encrypted data (handle both bool and string)
+    if let data = userInfo["data"] as? [String: Any] {
+      let encryptedValue = data["encrypted"]
+      let isEncrypted = encryptedValue as? Bool == true || 
+                       encryptedValue as? String == "true" || 
+                       encryptedValue as? String == "1"
+      
+      if isEncrypted {
+        print("📱 iOS: Detected encrypted notification data")
+        
+        // Add encryption flag to userInfo
+        enhancedUserInfo["isEncrypted"] = true
+        
+        // Log encryption details
+        if let checksum = data["checksum"] as? String {
+          print("📱 iOS: Notification checksum: \(checksum)")
+        }
+        if let version = data["version"] as? String {
+          print("📱 iOS: Notification version: \(version)")
+        }
+      }
+    }
+    
+    // Log the structure of the notification
+    if let aps = userInfo["aps"] as? [String: Any] {
+      print("📱 iOS: Foreground APS data: \(aps)")
+      if let alert = aps["alert"] as? [String: Any] {
+        print("📱 iOS: Foreground Alert data: \(alert)")
+      }
+    }
+    
+    if let data = userInfo["data"] as? [String: Any] {
+      print("📱 iOS: Foreground Data field: \(data)")
+    }
+    
+    if let metadata = userInfo["metadata"] as? [String: Any] {
+      print("📱 iOS: Foreground Metadata: \(metadata)")
+    }
+    
+    if let customData = userInfo["custom_data"] as? [String: Any] {
+      print("📱 iOS: Foreground Custom data: \(customData)")
+    }
+    
+    // Send enhanced notification to Flutter
+    let controller = window?.rootViewController as! FlutterViewController
+    let channel = FlutterMethodChannel(
+      name: "push_notifications",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
+    
     completionHandler([.alert, .badge, .sound])
   }
   
@@ -566,6 +706,41 @@ extension AppDelegate {
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     print("📱 iOS: User tapped notification: \(response.notification.request.content.title)")
+    
+    // Extract notification data and forward to Flutter
+    let userInfo = response.notification.request.content.userInfo
+    print("📱 iOS: Notification tap userInfo: \(userInfo)")
+    
+    // Enhanced metadata extraction
+    var enhancedUserInfo = userInfo
+    
+    // Check for encrypted data (handle both bool and string)
+    if let data = userInfo["data"] as? [String: Any] {
+      let encryptedValue = data["encrypted"]
+      let isEncrypted = encryptedValue as? Bool == true || 
+                       encryptedValue as? String == "true" || 
+                       encryptedValue as? String == "1"
+      
+      if isEncrypted {
+        print("📱 iOS: Detected encrypted notification data on tap")
+        enhancedUserInfo["isEncrypted"] = true
+        
+        // Log encryption details
+        if let checksum = data["checksum"] as? String {
+          print("📱 iOS: Tap notification checksum: \(checksum)")
+        }
+      }
+    }
+    
+    // Send enhanced notification to Flutter
+    let controller = window?.rootViewController as! FlutterViewController
+    let channel = FlutterMethodChannel(
+      name: "push_notifications",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
+    
     completionHandler()
   }
 }
@@ -578,7 +753,7 @@ extension AppDelegate {
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
   ) {
     let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-    print("📱 iOS: Device token received: \(tokenString)")
+    print("📱 iOS: ✅ Device token received: \(tokenString)")
     
     // Send token to Flutter
     let controller = window?.rootViewController as! FlutterViewController
@@ -587,7 +762,12 @@ extension AppDelegate {
       binaryMessenger: controller.binaryMessenger
     )
     
-    channel.invokeMethod("onDeviceTokenReceived", arguments: tokenString)
+    do {
+      channel.invokeMethod("onDeviceTokenReceived", arguments: tokenString)
+      print("📱 iOS: ✅ Device token sent to Flutter successfully")
+    } catch {
+      print("📱 iOS: ❌ Error sending device token to Flutter: \(error)")
+    }
   }
   
   // Called when registration fails
@@ -595,7 +775,8 @@ extension AppDelegate {
     _ application: UIApplication,
     didFailToRegisterForRemoteNotificationsWithError error: Error
   ) {
-    print("📱 iOS: Failed to register for remote notifications: \(error.localizedDescription)")
+    print("📱 iOS: ❌ Failed to register for remote notifications: \(error.localizedDescription)")
+    print("📱 iOS: ❌ Error details: \(error)")
     
     // Send error to Flutter
     let controller = window?.rootViewController as! FlutterViewController
@@ -604,7 +785,12 @@ extension AppDelegate {
       binaryMessenger: controller.binaryMessenger
     )
     
-    channel.invokeMethod("onDeviceTokenError", arguments: error.localizedDescription)
+    do {
+      channel.invokeMethod("onDeviceTokenError", arguments: error.localizedDescription)
+      print("📱 iOS: ✅ Error sent to Flutter")
+    } catch {
+      print("📱 iOS: ❌ Error sending error to Flutter: \(error)")
+    }
   }
   
   // Called when remote notification is received
@@ -614,15 +800,53 @@ extension AppDelegate {
     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
     print("📱 iOS: Received remote notification: \(userInfo)")
+    print("📱 iOS: Notification keys: \(userInfo.keys)")
     
-    // Send notification to Flutter
+    // Enhanced metadata extraction
+    var enhancedUserInfo = userInfo
+    
+    // Check for encrypted data (handle both bool and string)
+    if let data = userInfo["data"] as? [String: Any] {
+      let encryptedValue = data["encrypted"]
+      let isEncrypted = encryptedValue as? Bool == true || 
+                       encryptedValue as? String == "true" || 
+                       encryptedValue as? String == "1"
+      
+      if isEncrypted {
+        print("📱 iOS: Detected encrypted notification data in background")
+        enhancedUserInfo["isEncrypted"] = true
+        
+        // Log encryption details
+        if let checksum = data["checksum"] as? String {
+          print("📱 iOS: Background notification checksum: \(checksum)")
+        }
+      }
+    }
+    
+    // Log the structure of the notification
+    if let aps = userInfo["aps"] as? [String: Any] {
+      print("📱 iOS: APS data: \(aps)")
+      if let alert = aps["alert"] as? [String: Any] {
+        print("📱 iOS: Alert data: \(alert)")
+      }
+    }
+    
+    if let data = userInfo["data"] as? [String: Any] {
+      print("📱 iOS: Data field: \(data)")
+    }
+    
+    if let customData = userInfo["custom_data"] as? [String: Any] {
+      print("📱 iOS: Custom data: \(customData)")
+    }
+    
+    // Send enhanced notification to Flutter
     let controller = window?.rootViewController as! FlutterViewController
     let channel = FlutterMethodChannel(
       name: "push_notifications",
       binaryMessenger: controller.binaryMessenger
     )
     
-    channel.invokeMethod("onRemoteNotificationReceived", arguments: userInfo)
+    channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
     completionHandler(.newData)
   }
 }

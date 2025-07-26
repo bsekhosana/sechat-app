@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../shared/providers/auth_provider.dart';
+import '../../../core/services/global_user_service.dart';
 import '../../../core/services/airnotifier_service.dart';
-import '../../../core/services/native_push_service.dart';
+import '../../../core/services/simple_notification_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -34,7 +35,7 @@ class ProfileScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Welcome, ${context.watch<AuthProvider>().currentUser?.username ?? 'User'}!',
+                      'Welcome, ${GlobalUserService.instance.currentUsername ?? 'User'}!',
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 8),
@@ -62,12 +63,12 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Device Token: ${NativePushService.instance.deviceToken ?? 'Not received'}',
+                      'Device Token: ${SimpleNotificationService.instance.deviceToken ?? 'Not received'}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'AirNotifier Registered: ${NativePushService.instance.hasDeviceToken ? 'Yes' : 'No'}',
+                      'AirNotifier Registered: ${SimpleNotificationService.instance.isDeviceTokenRegistered() ? 'Yes' : 'No'}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 16),

@@ -8,7 +8,7 @@ import '../../features/invitations/providers/invitation_provider.dart';
 import '../../features/search/providers/search_provider.dart';
 import 'session_service.dart';
 import 'local_storage_service.dart';
-import 'notification_service.dart';
+import 'simple_notification_service.dart';
 
 class UserExistenceGuard {
   static final UserExistenceGuard _instance = UserExistenceGuard._internal();
@@ -46,7 +46,7 @@ class UserExistenceGuard {
 
       // 4. Cancel all notifications
       print('🔍 UserExistenceGuard: Cancelling notifications');
-      await NotificationService.instance.cancelAllNotifications();
+      await SimpleNotificationService.instance.cancelAllNotifications();
 
       // 5. Reset all providers (this will be done by the app when it detects the logout)
       print('🔍 UserExistenceGuard: Logout process completed');
@@ -117,7 +117,7 @@ class UserExistenceGuard {
 
       // 4. Cancel all notifications
       print('🔍 UserExistenceGuard: Cancelling notifications');
-      await NotificationService.instance.cancelAllNotifications();
+      await SimpleNotificationService.instance.cancelAllNotifications();
 
       // 5. Reset all providers
       print('🔍 UserExistenceGuard: Resetting providers');

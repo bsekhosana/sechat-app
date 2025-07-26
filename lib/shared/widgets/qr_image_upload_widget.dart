@@ -451,8 +451,9 @@ class _QRImageUploadWidgetState extends State<QRImageUploadWidget> {
       await Future.delayed(const Duration(seconds: 2));
 
       // Simulate finding a QR code
+      // TODO: Replace with actual QR code extraction
       final qrData =
-          '{"sessionId":"Fd82sQAceAp8myHMOfzdgeUFjMfuTw4J6qnht9IxmkA","displayName":"TestUser","timestamp":1753156120920}';
+          '{"sessionId":"4FwwxILKeI1PfI272OO7OyU9Ni5KFmsk4LF5I4pRHDg","displayName":"TestUser","timestamp":1753156120920}';
 
       // Call the callback with timeout protection
       try {

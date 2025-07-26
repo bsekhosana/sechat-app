@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:sechat_app/features/invitations/providers/invitation_provider.dart';
 import 'package:sechat_app/shared/providers/auth_provider.dart';
 import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
+import '../../../core/services/global_user_service.dart';
 
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
 import 'package:sechat_app/shared/widgets/user_avatar.dart';

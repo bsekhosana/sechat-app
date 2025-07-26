@@ -7,7 +7,8 @@ import 'package:sechat_app/shared/widgets/qr_image_upload_widget.dart';
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
 import '../../features/invitations/providers/invitation_provider.dart';
 import '../../core/services/session_service.dart';
-import '../../core/services/notification_service.dart';
+import '../../core/services/simple_notification_service.dart';
+import '../../core/services/global_user_service.dart';
 
 class InviteUserWidget extends StatelessWidget {
   const InviteUserWidget({super.key});
@@ -46,8 +47,13 @@ class InviteUserWidget extends StatelessWidget {
 class _InviteOptionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final availableHeight = screenHeight - statusBarHeight - bottomPadding;
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.6,
+      height: availableHeight * 0.95,
       decoration: const BoxDecoration(
         color: Color(0xFF121212),
         borderRadius: BorderRadius.only(
@@ -274,7 +280,7 @@ class _InviteOptionsSheet extends StatelessWidget {
               onQRCodeExtracted: (qrData) async {
                 print('📱 InviteUserWidget: QR code extracted, processing...');
                 // Don't pop here, let the QR screen handle its own navigation
-                await _processQRCode(context, qrData);
+                await _processQRCode(context, qrData, displayName: 'Contact');
               },
               onCancel: () {
                 print('📱 InviteUserWidget: QR screen cancelled');
@@ -354,7 +360,7 @@ class _InviteOptionsSheet extends StatelessWidget {
               onQRCodeExtracted: (qrData) async {
                 print('📱 InviteUserWidget: QR code extracted, processing...');
                 // Don't pop here, let the QR screen handle its own navigation
-                await _processQRCode(context, qrData);
+                await _processQRCode(context, qrData, displayName: 'Contact');
               },
               onCancel: () {
                 print('📱 InviteUserWidget: QR screen cancelled');
@@ -429,7 +435,7 @@ class _InviteOptionsSheet extends StatelessWidget {
               controller: displayNameController,
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                labelText: 'Display Name (Optional)',
+                labelText: 'Display Name *',
                 labelStyle: TextStyle(color: Colors.grey),
                 border: OutlineInputBorder(),
                 enabledBorder: OutlineInputBorder(
@@ -438,6 +444,8 @@ class _InviteOptionsSheet extends StatelessWidget {
                 focusedBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.blue),
                 ),
+                helperText: 'This name will be saved for this contact',
+                helperStyle: TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ),
           ],
@@ -452,10 +460,33 @@ class _InviteOptionsSheet extends StatelessWidget {
               final sessionId = sessionIdController.text.trim();
               final displayName = displayNameController.text.trim();
 
-              if (sessionId.isNotEmpty) {
+              if (sessionId.isNotEmpty && displayName.isNotEmpty) {
+                // Check if trying to invite yourself
+                final currentSessionId =
+                    SessionService.instance.currentSessionId;
+                if (sessionId == currentSessionId) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('You cannot invite yourself'),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  return;
+                }
+
                 Navigator.of(context).pop();
                 await _processQRCode(context, sessionId,
                     displayName: displayName);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content:
+                        Text('Please enter both Session ID and Display Name'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
               }
             },
             style: ElevatedButton.styleFrom(
@@ -470,7 +501,7 @@ class _InviteOptionsSheet extends StatelessWidget {
   }
 
   Future<void> _processQRCode(BuildContext context, String qrData,
-      {String? displayName}) async {
+      {required String displayName}) async {
     print('📱 InviteUserWidget: Starting QR code processing');
     try {
       // Try to parse as JSON first
@@ -486,6 +517,21 @@ class _InviteOptionsSheet extends StatelessWidget {
           data['displayName'] as String? ?? displayName;
 
       if (sessionId != null) {
+        // Check if trying to invite yourself
+        final currentSessionId = SessionService.instance.currentSessionId;
+        if (sessionId == currentSessionId) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('You cannot invite yourself'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+
         // Show loading indicator
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -514,23 +560,7 @@ class _InviteOptionsSheet extends StatelessWidget {
         });
         print('📱 InviteUserWidget: Invitation send result: $success');
 
-        // Show instant notification with timeout (don't block on this)
-        try {
-          NotificationService.instance
-              .showInvitationSentNotification(
-            recipientUsername: extractedDisplayName ?? 'Anonymous',
-            invitationId: sessionId,
-          )
-              .timeout(
-            const Duration(seconds: 3),
-            onTimeout: () {
-              print('Notification timeout - continuing anyway');
-            },
-          );
-        } catch (e) {
-          print('Notification failed: $e');
-          // Don't fail the whole process if notification fails
-        }
+        // No local notification for sender - only recipient should get notification
 
         if (context.mounted) {
           if (success) {
@@ -564,14 +594,21 @@ class _InviteOptionsSheet extends StatelessWidget {
                 ),
               );
             } else {
+              // Show specific error message from InvitationProvider
+              final invitationProvider = context.read<InvitationProvider>();
+              final errorMessage = invitationProvider.error ??
+                  'Failed to send invitation. Recipient may be offline or not registered.';
+
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content:
-                      const Text('Contact added locally (network unavailable)'),
-                  backgroundColor: Colors.orange,
-                  duration: const Duration(seconds: 3),
+                  content: Text(errorMessage),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 4),
                 ),
               );
+
+              // Clear the error after showing it
+              invitationProvider.clearError();
             }
           }
         }

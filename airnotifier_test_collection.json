@@ -1,0 +1,677 @@
+{
+  "info": {
+    "name": "SeChat AirNotifier API Tests",
+    "description": "Comprehensive test collection for SeChat push notifications and invitations via AirNotifier",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://41.76.111.100:8801",
+      "type": "string"
+    },
+    {
+      "key": "appName",
+      "value": "sechat",
+      "type": "string"
+    },
+    {
+      "key": "appKey",
+      "value": "ebea679133a7adfb9c4cd1f8b6a4fdc9",
+      "type": "string"
+    },
+    {
+      "key": "sessionId1",
+      "value": "gc4PvCrQg53LY4Kv10TXC0IISxJsf8uZ9t9THTiw0AA",
+      "type": "string"
+    },
+    {
+      "key": "sessionId2",
+      "value": "F6gfuPIXoCZqbVPxKshGY95bMjny3B3K0HaVeVD4Joo",
+      "type": "string"
+    },
+    {
+      "key": "deviceToken1",
+      "value": "test_device_token_1_123456789",
+      "type": "string"
+    },
+    {
+      "key": "deviceToken2",
+      "value": "test_device_token_2_987654321",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "noauth"
+  },
+  "item": [
+    {
+      "name": "1. Connection & Health Tests",
+      "item": [
+        {
+          "name": "Test AirNotifier Connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/sessions/{{sessionId1}}/tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "sessions", "{{sessionId1}}", "tokens"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test Basic API Endpoint",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "tokens"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Device Token Management",
+      "item": [
+        {
+          "name": "Register Device Token 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{deviceToken1}}\",\n  \"device\": \"android\",\n  \"channel\": \"default\",\n  \"user_id\": \"{{sessionId1}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "tokens"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register Device Token 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{deviceToken2}}\",\n  \"device\": \"ios\",\n  \"channel\": \"default\",\n  \"user_id\": \"{{sessionId2}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "tokens"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Link Token 1 to Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{deviceToken1}}\",\n  \"session_id\": \"{{sessionId1}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/sessions/link",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "sessions", "link"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Link Token 2 to Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{deviceToken2}}\",\n  \"session_id\": \"{{sessionId2}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/sessions/link",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "sessions", "link"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tokens for Session 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/sessions/{{sessionId1}}/tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "sessions", "{{sessionId1}}", "tokens"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tokens for Session 2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/sessions/{{sessionId2}}/tokens",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "sessions", "{{sessionId2}}", "tokens"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Push Notifications",
+      "item": [
+        {
+          "name": "Send Simple Push Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{sessionId1}}\",\n  \"title\": \"Test Notification\",\n  \"body\": \"This is a test push notification\",\n  \"data\": {\n    \"type\": \"test\",\n    \"message\": \"Hello from AirNotifier!\"\n  },\n  \"sound\": \"default\",\n  \"badge\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/notifications/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "notifications", "session"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Encrypted Push Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{sessionId1}}\",\n  \"title\": \"Encrypted Message\",\n  \"body\": \"You have received an encrypted message\",\n  \"data\": {\n    \"encrypted\": true,\n    \"data\": \"eyJ0eXBlIjoibWVzc2FnZSIsIm1lc3NhZ2UiOiJFbmNyeXB0ZWQgbWVzc2FnZSBjb250ZW50IiwidGltZXN0YW1wIjoxNzMwNzI4MDAwMH0=\",\n    \"checksum\": \"abc123def456\"\n  },\n  \"sound\": \"message.wav\",\n  \"badge\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/notifications/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "notifications", "session"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Invitation Notifications",
+      "item": [
+        {
+          "name": "Send Invitation Notification (Simple)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{sessionId2}}\",\n  \"title\": \"New Contact Invitation\",\n  \"body\": \"John Doe would like to connect with you\",\n  \"data\": {\n    \"type\": \"invitation\",\n    \"invitationId\": \"inv_123456789\",\n    \"senderName\": \"John Doe\",\n    \"senderId\": \"{{sessionId1}}\",\n    \"message\": \"Would you like to connect?\",\n    \"timestamp\": 1730728000000\n  },\n  \"sound\": \"invitation.wav\",\n  \"badge\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/notifications/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "notifications", "session"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Invitation Notification (Encrypted)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{sessionId2}}\",\n  \"title\": \"New Contact Invitation\",\n  \"body\": \"Jane Smith would like to connect with you\",\n  \"data\": {\n    \"encrypted\": true,\n    \"data\": \"eyJ0eXBlIjoiaW52aXRhdGlvbiIsImludml0YXRpb25JZCI6Imludl85ODc2NTQzMjEiLCJzZW5kZXJOYW1lIjoiSmFuZSBTbWl0aCIsInNlbmRlcklkIjoiZ2M0UHZDclFnNTNMWTRLdjEwVFhDMElJU3hKc2Y4dVo5dDlUSFRpd0FBbWVzc2FnZSI6IldvdWxkIHlvdSBsaWtlIHRvIGNvbm5lY3Q/IiwidGltZXN0YW1wIjoxNzMwNzI4MDAwMH0=\",\n    \"checksum\": \"xyz789abc123\"\n  },\n  \"sound\": \"invitation.wav\",\n  \"badge\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/notifications/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "notifications", "session"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Invitation Response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{sessionId1}}\",\n  \"title\": \"Invitation Accepted\",\n  \"body\": \"Your invitation has been accepted\",\n  \"data\": {\n    \"type\": \"invitation_response\",\n    \"invitationId\": \"inv_123456789\",\n    \"responderName\": \"Jane Smith\",\n    \"responderId\": \"{{sessionId2}}\",\n    \"status\": \"accepted\",\n    \"timestamp\": 1730728000000\n  },\n  \"sound\": \"accept.wav\",\n  \"badge\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/notifications/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "notifications", "session"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Chat Messages",
+      "item": [
+        {
+          "name": "Send Chat Message (Simple)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{sessionId2}}\",\n  \"title\": \"New Message\",\n  \"body\": \"John Doe: Hello! How are you?\",\n  \"data\": {\n    \"type\": \"message\",\n    \"messageId\": \"msg_123456789\",\n    \"senderName\": \"John Doe\",\n    \"senderId\": \"{{sessionId1}}\",\n    \"message\": \"Hello! How are you?\",\n    \"timestamp\": 1730728000000\n  },\n  \"sound\": \"message.wav\",\n  \"badge\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/notifications/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "notifications", "session"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send Chat Message (Encrypted)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{sessionId2}}\",\n  \"title\": \"New Message\",\n  \"body\": \"Jane Smith sent you a message\",\n  \"data\": {\n    \"encrypted\": true,\n    \"data\": \"eyJ0eXBlIjoibWVzc2FnZSIsIm1lc3NhZ2VJZCI6Im1zZ185ODc2NTQzMjEiLCJzZW5kZXJOYW1lIjoiSmFuZSBTbWl0aCIsInNlbmRlcklkIjoiRjZnZnVQSVhPY1pxYlZQeEtzZ0dZOTViTWpueTNCazBIYVZlVkQ0Sm9vIiwibWVzc2FnZSI6IkVuY3J5cHRlZCBtZXNzYWdlIGNvbnRlbnQiLCJ0aW1lc3RhbXAiOjE3MzA3MjgwMDAwfQ==\",\n    \"checksum\": \"def456ghi789\"\n  },\n  \"sound\": \"message.wav\",\n  \"badge\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/notifications/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "notifications", "session"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Broadcast Notifications",
+      "item": [
+        {
+          "name": "Send Broadcast to All Users",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"System Maintenance\",\n  \"body\": \"SeChat will be under maintenance tonight\",\n  \"data\": {\n    \"type\": \"broadcast\",\n    \"message\": \"System maintenance scheduled for tonight at 2 AM UTC\",\n    \"timestamp\": 1730728000000\n  },\n  \"sound\": \"system.wav\",\n  \"badge\": 0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "broadcast"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Cleanup & Management",
+      "item": [
+        {
+          "name": "Unlink Token 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{deviceToken1}}\",\n  \"session_id\": \"{{sessionId1}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/sessions/unlink",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "sessions", "unlink"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unlink Token 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{deviceToken2}}\",\n  \"session_id\": \"{{sessionId2}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/sessions/unlink",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "sessions", "unlink"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Token 1",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/tokens/{{deviceToken1}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "tokens", "{{deviceToken1}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Token 2",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-An-App-Name",
+                "value": "{{appName}}"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "{{appKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v2/tokens/{{deviceToken2}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v2", "tokens", "{{deviceToken2}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Add timestamp to requests",
+          "pm.globals.set('timestamp', Date.now());",
+          "",
+          "// Log request details",
+          "console.log('Request:', pm.request.method, pm.request.url);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Test response status",
+          "pm.test('Status code is 200 or 201', function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+          "});",
+          "",
+          "// Test response time",
+          "pm.test('Response time is less than 5000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});",
+          "",
+          "// Test response has JSON body",
+          "pm.test('Response has JSON body', function () {",
+          "    pm.response.to.have.jsonBody();",
+          "});",
+          "",
+          "// Log response details",
+          "console.log('Response:', pm.response.code, pm.response.responseTime + 'ms');",
+          "console.log('Response body:', pm.response.json());"
+        ]
+      }
+    }
+  ]
+} 

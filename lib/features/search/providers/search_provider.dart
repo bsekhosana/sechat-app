@@ -9,6 +9,7 @@ import '../../../core/services/api_service.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/services/local_storage_service.dart';
+import '../../../core/services/global_user_service.dart';
 
 // Search state enum
 enum SearchState { idle, loading, success, error, noResults }
@@ -67,7 +68,7 @@ class SearchProvider extends ChangeNotifier {
       // Check if this is the current user's Session ID
       final currentSessionId = SessionService.instance.currentSessionId;
       if (sessionId == currentSessionId) {
-        _error = 'This is your own Session ID';
+        _error = 'This is your own Session ID - you cannot invite yourself';
         _searchResults = [];
         return;
       }

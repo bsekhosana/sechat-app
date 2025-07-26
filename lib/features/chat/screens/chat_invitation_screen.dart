@@ -47,7 +47,10 @@ class _ChatInvitationScreenState extends State<ChatInvitationScreen> {
       }
 
       final invitationProvider = context.read<InvitationProvider>();
-      await invitationProvider.sendInvitation(widget.recipient.id);
+      await invitationProvider.sendInvitation(
+        widget.recipient.id,
+        displayName: widget.recipient.username,
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

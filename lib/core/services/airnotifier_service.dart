@@ -24,6 +24,53 @@ class AirNotifierService {
   String? _currentUserId;
   String? _currentDeviceToken;
 
+  // Test AirNotifier connectivity
+  Future<bool> testAirNotifierConnection() async {
+    try {
+      print('📱 AirNotifierService: Testing connection to AirNotifier...');
+
+      // Try to get tokens for current session to test connectivity
+      if (_currentSessionId != null) {
+        final response = await http.get(
+          Uri.parse('$_baseUrl/api/v2/sessions/$_currentSessionId/tokens'),
+          headers: {
+            'Content-Type': 'application/json',
+            'X-An-App-Name': _appName,
+            'X-An-App-Key': _appKey,
+          },
+        );
+
+        print(
+            '📱 AirNotifierService: Connection test status: ${response.statusCode}');
+        print('📱 AirNotifierService: Connection test body: ${response.body}');
+
+        // 200 = success, 404 = no tokens (but connection works), 401/403 = auth issues
+        return response.statusCode == 200 || response.statusCode == 404;
+      } else {
+        // If no session ID, just test basic connectivity with a simple request
+        final response = await http.get(
+          Uri.parse('$_baseUrl/api/v2/tokens'),
+          headers: {
+            'Content-Type': 'application/json',
+            'X-An-App-Name': _appName,
+            'X-An-App-Key': _appKey,
+          },
+        );
+
+        print(
+            '📱 AirNotifierService: Basic connection test status: ${response.statusCode}');
+        print(
+            '📱 AirNotifierService: Basic connection test body: ${response.body}');
+
+        // 405 = Method Not Allowed (endpoint exists but wrong method) = connection works
+        return response.statusCode == 405;
+      }
+    } catch (e) {
+      print('📱 AirNotifierService: ❌ Connection test failed: $e');
+      return false;
+    }
+  }
+
   // Session ID management
   String? get currentSessionId => _currentSessionId;
   String? get currentUserId => _currentUserId;
@@ -51,6 +98,13 @@ class AirNotifierService {
           print(
               '📱 AirNotifierService: Restored session ID: $_currentSessionId');
         }
+      }
+
+      // Test AirNotifier connectivity first
+      final connectionTest = await testAirNotifierConnection();
+      if (!connectionTest) {
+        print(
+            '📱 AirNotifierService: ⚠️ Warning: AirNotifier connection test failed');
       }
 
       // Get or generate device token
@@ -90,11 +144,14 @@ class AirNotifierService {
       {required String deviceToken, String? sessionId}) async {
     try {
       print('📱 AirNotifierService: Registering device token: $deviceToken');
+      print('📱 AirNotifierService: Current session ID: $_currentSessionId');
+      print('📱 AirNotifierService: Provided session ID: $sessionId');
 
       _currentDeviceToken = deviceToken;
       await _storage.write(key: 'device_token', value: deviceToken);
 
       final url = Uri.parse('$_baseUrl/api/v2/tokens');
+      print('📱 AirNotifierService: Registration URL: $url');
 
       // Detect platform based on token format
       final deviceType = _detectDeviceType(deviceToken);
@@ -317,7 +374,7 @@ class AirNotifierService {
           },
           'sound': sound,
           'badge': badge,
-          'extra': data ?? {},
+          'data': data ?? {}, // Use data field for FCM compatibility
         }),
       );
 
@@ -372,7 +429,7 @@ class AirNotifierService {
           },
           'sound': sound,
           'badge': badge,
-          'extra': data ?? {},
+          'data': data ?? {}, // Use data field for FCM compatibility
         }),
       );
 
@@ -440,23 +497,24 @@ class AirNotifierService {
     );
   }
 
-  // Send invitation notification (updated for session-based API)
+  // [STEP 4] Send invitation notification (updated for session-based API)
   Future<bool> sendInvitationNotification({
     required String recipientId,
     required String senderName,
     required String invitationId,
     String? message,
   }) async {
-    print('📱 AirNotifierService: Sending invitation notification');
+    print('📱 AirNotifierService: [STEP 4] Sending invitation notification');
     print('📱 AirNotifierService: Recipient ID: $recipientId');
     print('📱 AirNotifierService: Sender Name: $senderName');
     print('📱 AirNotifierService: Invitation ID: $invitationId');
     print('📱 AirNotifierService: Current User ID: $_currentUserId');
 
+    // [STEP 4A] Send push notification to recipient via AirNotifier server with complete invitation metadata
     return await sendNotificationToSession(
       sessionId: recipientId,
       title: 'New Contact Invitation',
-      body: '$senderName wants to connect with you',
+      body: '$senderName would like to connect with you',
       data: {
         'type': 'invitation',
         'invitationId': invitationId,
@@ -465,6 +523,29 @@ class AirNotifierService {
         'message': message ?? '',
         'action': 'invitation_received',
         'timestamp': DateTime.now().millisecondsSinceEpoch,
+        // [STEP 4B] Complete invitation metadata for recipient's local database
+        'invitation': {
+          'id': invitationId,
+          'senderId': _currentUserId,
+          'recipientId': recipientId,
+          'senderUsername': senderName,
+          'recipientUsername': '', // Will be set by recipient
+          'message': message ?? 'Contact request',
+          'status': 'pending',
+          'createdAt': DateTime.now().millisecondsSinceEpoch,
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
+          'isReceived': true,
+        },
+        // [STEP 4C] Sender user data for recipient's local database
+        'senderUser': {
+          'id': _currentUserId,
+          'username': senderName,
+          'profilePicture': null,
+          'isOnline': false,
+          'lastSeen': DateTime.now().millisecondsSinceEpoch,
+          'alreadyInvited': false,
+          'invitationStatus': 'pending',
+        },
       },
       sound: 'invitation.wav',
     );

@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/services/session_service.dart';
 import '../../core/services/airnotifier_service.dart';
-import '../../core/services/native_push_service.dart';
+import '../../core/services/simple_notification_service.dart';
 import '../models/user.dart';
 import 'dart:convert';
 
@@ -61,13 +61,12 @@ class AuthProvider extends ChangeNotifier {
         await AirNotifierService.instance.initialize(sessionId: _sessionId!);
         print('🔐 Auth: AirNotifier service initialized');
 
-        // Register device token with Session ID if available
+        // Set session ID and register device token
         try {
-          await NativePushService.instance
-              .registerStoredDeviceToken(_sessionId!);
-          print('🔐 Auth: Device token registered with Session ID');
+          await SimpleNotificationService.instance.setSessionId(_sessionId!);
+          print('🔐 Auth: Session ID set in notification service');
         } catch (e) {
-          print('🔐 Auth: Error registering device token: $e');
+          print('🔐 Auth: Error setting session ID: $e');
         }
 
         // Create user object from Session identity
@@ -150,12 +149,12 @@ class AuthProvider extends ChangeNotifier {
       await AirNotifierService.instance.initialize(sessionId: _sessionId!);
       print('🔐 Auth: AirNotifier service initialized');
 
-      // Register device token with Session ID if available
+      // Set session ID and register device token
       try {
-        await NativePushService.instance.registerStoredDeviceToken(_sessionId!);
-        print('🔐 Auth: Device token registered with Session ID');
+        await SimpleNotificationService.instance.setSessionId(_sessionId!);
+        print('🔐 Auth: Session ID set in notification service');
       } catch (e) {
-        print('🔐 Auth: Error registering device token: $e');
+        print('🔐 Auth: Error setting session ID: $e');
       }
 
       print('🔐 Auth: Session identity created successfully: $_sessionId');
@@ -234,12 +233,12 @@ class AuthProvider extends ChangeNotifier {
       await AirNotifierService.instance.initialize(sessionId: _sessionId!);
       print('🔐 Auth: AirNotifier service initialized');
 
-      // Register device token with Session ID if available
+      // Set session ID and register device token
       try {
-        await NativePushService.instance.registerStoredDeviceToken(_sessionId!);
-        print('🔐 Auth: Device token registered with Session ID');
+        await SimpleNotificationService.instance.setSessionId(_sessionId!);
+        print('🔐 Auth: Session ID set in notification service');
       } catch (e) {
-        print('🔐 Auth: Error registering device token: $e');
+        print('🔐 Auth: Error setting session ID: $e');
       }
 
       print('🔐 Auth: Session identity imported successfully: $sessionId');

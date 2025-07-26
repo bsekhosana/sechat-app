@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../shared/providers/auth_provider.dart';
+import '../../../core/services/global_user_service.dart';
 import '../providers/search_provider.dart';
 import '../../../shared/models/user.dart';
 import '../../invitations/providers/invitation_provider.dart';
@@ -45,7 +46,7 @@ class _SearchScreenState extends State<SearchScreen> {
       final invitationProvider = context.read<InvitationProvider>();
       final authProvider = context.read<AuthProvider>();
       final currentUsername =
-          authProvider.currentUser?.username ?? 'Unknown User';
+          GlobalUserService.instance.currentUsername ?? 'Unknown User';
 
       final success = await searchProvider.sendInvitation(user.id);
 

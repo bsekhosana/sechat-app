@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
 import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
-import 'package:sechat_app/core/services/notification_service.dart';
+import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:sechat_app/features/notifications/providers/notification_provider.dart';
 import 'package:sechat_app/features/notifications/models/local_notification.dart';
 
