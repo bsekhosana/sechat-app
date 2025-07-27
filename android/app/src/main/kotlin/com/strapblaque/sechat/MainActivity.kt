@@ -54,7 +54,12 @@ class MainActivity : FlutterActivity() {
         sessionApiImpl = SessionApiImpl(this)
         
         // Set up Pigeon-generated SessionApi
-        SessionApi.SessionApiHandler.setUp(flutterEngine.dartExecutor.binaryMessenger, sessionApiImpl)
+        try {
+            SessionApi.SessionApiHandler.setUp(flutterEngine.dartExecutor.binaryMessenger, sessionApiImpl)
+            Log.d("MainActivity", "SessionApi.SessionApiHandler.setUp called successfully")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error setting up SessionApi: ${e.message}")
+        }
         
         // Set up legacy Session Protocol channel
         setupSessionProtocolChannel(flutterEngine)

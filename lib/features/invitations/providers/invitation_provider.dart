@@ -3,12 +3,15 @@ import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
 import '../../../shared/models/invitation.dart';
 import '../../../shared/models/user.dart';
+import '../../../shared/models/chat.dart';
+import '../../../shared/models/message.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/simple_notification_service.dart';
 import '../../../core/services/global_user_service.dart';
+import '../../../core/utils/guid_generator.dart';
 import 'dart:async';
 
 class InvitationProvider extends ChangeNotifier {
@@ -69,53 +72,58 @@ class InvitationProvider extends ChangeNotifier {
     print(
         '📱 InvitationProvider: Received invitation from $senderName ($senderId) with ID: $invitationId');
 
-    // Create invitation record
-    final invitation = Invitation(
-      id: invitationId,
-      senderId: senderId,
-      recipientId: SessionService.instance.currentSessionId ?? '',
-      senderUsername: senderName,
-      recipientUsername: GlobalUserService.instance.currentUsername ?? '',
-      message: 'Contact request',
-      status: 'pending',
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      isReceived: true, // This is a received invitation
-    );
-
-    print(
-        '📱 InvitationProvider: Created invitation object: ${invitation.toJson()}');
-
     // Check if invitation already exists
-    final existingInvitation =
-        _invitations.any((inv) => inv.id == invitationId);
+    final existingInvitationIndex =
+        _invitations.indexWhere((inv) => inv.id == invitationId);
     print(
-        '📱 InvitationProvider: Invitation already exists: $existingInvitation');
+        '📱 InvitationProvider: Existing invitation index: $existingInvitationIndex');
 
-    // Add to list if not already present
-    if (!existingInvitation) {
+    if (existingInvitationIndex != -1) {
+      // Update existing invitation instead of creating a new one
+      final existingInvitation = _invitations[existingInvitationIndex];
+      final updatedInvitation = existingInvitation.copyWith(
+        senderUsername: senderName,
+        updatedAt: DateTime.now(),
+      );
+
+      _invitations[existingInvitationIndex] = updatedInvitation;
+      print(
+          '📱 InvitationProvider: Updated existing invitation: $invitationId');
+    } else {
+      // Create new invitation record
+      final invitation = Invitation(
+        id: invitationId,
+        senderId: senderId,
+        recipientId: SessionService.instance.currentSessionId ?? '',
+        senderUsername: senderName,
+        recipientUsername: GlobalUserService.instance.currentUsername ?? '',
+        message: 'Contact request',
+        status: 'pending',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        isReceived: true, // This is a received invitation
+      );
+
+      print(
+          '📱 InvitationProvider: Created new invitation object: ${invitation.toJson()}');
+
       // Add new invitation at the top (index 0) for real-time updates
       _invitations.insert(0, invitation);
 
-      // Sort by creation time (newest first) to ensure proper ordering
-      _invitations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
       print(
-          '📱 InvitationProvider: Added invitation to list. Total invitations: ${_invitations.length}');
-
-      // Save to local storage
-      await LocalStorageService.instance
-          .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
-
-      notifyListeners();
-      print(
-          '📱 InvitationProvider: ✅ Added incoming invitation: $invitationId and notified listeners');
-    } else {
-      // TODO: show a message that the invitation already exists
-
-      print(
-          '📱 InvitationProvider: Invitation already exists, skipping: $invitationId');
+          '📱 InvitationProvider: Added new invitation to list. Total invitations: ${_invitations.length}');
     }
+
+    // Sort by creation time (newest first) to ensure proper ordering
+    _invitations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    // Save to local storage
+    await LocalStorageService.instance
+        .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+
+    notifyListeners();
+    print(
+        '📱 InvitationProvider: ✅ Processed invitation: $invitationId and notified listeners');
   }
 
   // Handle invitation response notification
@@ -124,21 +132,16 @@ class InvitationProvider extends ChangeNotifier {
     print(
         '📱 InvitationProvider: Received invitation response from $responderName ($responderId): $status');
 
-    // Find and update the invitation
-    final invitationIndex = _invitations.indexWhere(
-        (inv) => inv.recipientId == responderId && inv.status == 'pending');
+    // Find and update the invitation (look for sent invitations that are pending)
+    final invitationIndex = _invitations.indexWhere((inv) =>
+        inv.senderId == responderId &&
+        inv.status == 'pending' &&
+        !inv.isReceived);
 
     if (invitationIndex != -1) {
       final oldInvitation = _invitations[invitationIndex];
-      final updatedInvitation = Invitation(
-        id: oldInvitation.id,
-        senderId: oldInvitation.senderId,
-        recipientId: oldInvitation.recipientId,
-        senderUsername: oldInvitation.senderUsername,
-        recipientUsername: oldInvitation.recipientUsername,
-        message: oldInvitation.message,
+      final updatedInvitation = oldInvitation.copyWith(
         status: status,
-        createdAt: oldInvitation.createdAt,
         updatedAt: DateTime.now(),
       );
 
@@ -148,8 +151,90 @@ class InvitationProvider extends ChangeNotifier {
       await LocalStorageService.instance
           .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
 
+      // If invitation was accepted, create conversation for the sender
+      if (status == 'accepted') {
+        await _createConversationForSender(
+            oldInvitation, responderId, responderName);
+      }
+
       notifyListeners();
       print('📱 InvitationProvider: Updated invitation status to: $status');
+    } else {
+      print(
+          '📱 InvitationProvider: No pending invitation found for responder: $responderId');
+    }
+  }
+
+  // Create conversation for the sender when invitation is accepted
+  Future<void> _createConversationForSender(
+      Invitation invitation, String responderId, String responderName) async {
+    try {
+      print(
+          '📱 InvitationProvider: Creating conversation for sender after acceptance');
+
+      // Generate conversation GUID (should match the one from the accepter)
+      final conversationGuid = GuidGenerator.generateGuid();
+
+      final currentUserId = SessionService.instance.currentSessionId ?? '';
+      final otherUserId = responderId;
+
+      // Create new conversation for the sender
+      final newChat = Chat(
+        id: conversationGuid,
+        user1Id: currentUserId,
+        user2Id: otherUserId,
+        status: 'active',
+        lastMessageAt: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        otherUser: {
+          'id': otherUserId,
+          'username': responderName,
+          'profile_picture': _invitationUsers[otherUserId]?.profilePicture,
+        },
+        lastMessage: {
+          'content': 'You are now connected with $responderName',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Save conversation to local storage
+      await LocalStorageService.instance.saveChat(newChat);
+      print(
+          '📱 InvitationProvider: ✅ Conversation created for sender: $conversationGuid');
+
+      // Create initial message for the conversation
+      final initialMessage = Message(
+        id: GuidGenerator.generateShortId(),
+        chatId: conversationGuid,
+        senderId: 'system',
+        content: 'You are now connected with $responderName',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        status: 'sent',
+      );
+
+      // Save initial message to local storage
+      await LocalStorageService.instance.saveMessage(initialMessage);
+      print(
+          '📱 InvitationProvider: ✅ Initial message created for sender: ${initialMessage.id}');
+
+      // Add local notification for the sender
+      await SimpleNotificationService.instance.showLocalNotification(
+        title: 'Invitation Accepted',
+        body: '$responderName accepted your invitation',
+        type: 'invitation_response',
+        data: {
+          'invitationId': invitation.id,
+          'response': 'accepted',
+          'conversationGuid': conversationGuid,
+          'otherUserId': otherUserId,
+          'otherUserName': responderName,
+        },
+      );
+    } catch (e) {
+      print(
+          '📱 InvitationProvider: Error creating conversation for sender: $e');
     }
   }
 
@@ -802,8 +887,14 @@ class InvitationProvider extends ChangeNotifier {
   // Accept invitation (Session Protocol equivalent)
   Future<bool> acceptInvitation(String invitationId) async {
     try {
+      print('📱 InvitationProvider: Accepting invitation: $invitationId');
+
       final invitation =
           _invitations.firstWhere((inv) => inv.id == invitationId);
+      final currentUserId = SessionService.instance.currentSessionId ?? '';
+      final otherUserId =
+          invitation.senderId; // The person who sent the invitation
+      final otherUserName = invitation.senderUsername ?? 'Unknown User';
 
       // Update invitation status
       final updatedInvitation = invitation.copyWith(
@@ -816,18 +907,112 @@ class InvitationProvider extends ChangeNotifier {
         _invitations[index] = updatedInvitation;
       }
 
+      // Save updated invitation to local storage
+      await LocalStorageService.instance
+          .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+
       // Add as contact in Session Protocol
-      await SessionService.instance.addContact(
-        sessionId: invitation.recipientId,
-        name: _invitationUsers[invitation.recipientId]?.username,
-        profilePicture:
-            _invitationUsers[invitation.recipientId]?.profilePicture,
+      try {
+        await SessionService.instance.addContact(
+          sessionId: otherUserId,
+          name: otherUserName,
+          profilePicture: _invitationUsers[otherUserId]?.profilePicture,
+        );
+        print(
+            '📱 InvitationProvider: ✅ Contact added via Session Protocol: $otherUserId');
+      } catch (e) {
+        print(
+            '📱 InvitationProvider: ⚠️ Session Protocol addContact failed: $e');
+        // Continue anyway - we've already accepted locally
+      }
+
+      // Generate GUID for the new conversation
+      final conversationGuid = GuidGenerator.generateGuid();
+      print(
+          '📱 InvitationProvider: Generated conversation GUID: $conversationGuid');
+
+      // Create new conversation for the accepter
+      final newChat = Chat(
+        id: conversationGuid,
+        user1Id: currentUserId,
+        user2Id: otherUserId,
+        status: 'active',
+        lastMessageAt: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        otherUser: {
+          'id': otherUserId,
+          'username': otherUserName,
+          'profile_picture': _invitationUsers[otherUserId]?.profilePicture,
+        },
+        lastMessage: {
+          'content': 'You are now connected with $otherUserName',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Save conversation to local storage
+      await LocalStorageService.instance.saveChat(newChat);
+      print(
+          '📱 InvitationProvider: ✅ Conversation saved to local storage: $conversationGuid');
+
+      // Create initial message for the conversation
+      final initialMessage = Message(
+        id: GuidGenerator.generateShortId(),
+        chatId: conversationGuid,
+        senderId: 'system',
+        content: 'You are now connected with $otherUserName',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        status: 'sent',
+      );
+
+      // Save initial message to local storage
+      await LocalStorageService.instance.saveMessage(initialMessage);
+      print(
+          '📱 InvitationProvider: ✅ Initial message saved: ${initialMessage.id}');
+
+      // Send invitation response notification to the original sender
+      final responseSuccess =
+          await SimpleNotificationService.instance.sendInvitationResponse(
+        recipientId: otherUserId,
+        senderName:
+            GlobalUserService.instance.currentUsername ?? 'Unknown User',
+        invitationId: invitationId,
+        response: 'accepted',
+        conversationGuid: conversationGuid,
+      );
+
+      if (responseSuccess) {
+        print(
+            '📱 InvitationProvider: ✅ Invitation response notification sent to: $otherUserId');
+      } else {
+        print(
+            '📱 InvitationProvider: ⚠️ Failed to send invitation response notification');
+      }
+
+      // Add local notification for the accepter
+      await SimpleNotificationService.instance.showLocalNotification(
+        title: 'Invitation Accepted',
+        body: 'You are now connected with $otherUserName',
+        type: 'invitation_response',
+        data: {
+          'invitationId': invitationId,
+          'response': 'accepted',
+          'conversationGuid': conversationGuid,
+          'otherUserId': otherUserId,
+          'otherUserName': otherUserName,
+        },
       );
 
       notifyListeners();
+      print(
+          '📱 InvitationProvider: ✅ Invitation accepted successfully: $invitationId');
       return true;
     } catch (e) {
       print('📱 InvitationProvider: Error accepting invitation: $e');
+      _error = 'Failed to accept invitation: $e';
+      notifyListeners();
       return false;
     }
   }
@@ -835,8 +1020,13 @@ class InvitationProvider extends ChangeNotifier {
   // Decline invitation
   Future<bool> declineInvitation(String invitationId) async {
     try {
+      print('📱 InvitationProvider: Declining invitation: $invitationId');
+
       final invitation =
           _invitations.firstWhere((inv) => inv.id == invitationId);
+      final otherUserId =
+          invitation.senderId; // The person who sent the invitation
+      final otherUserName = invitation.senderUsername ?? 'Unknown User';
 
       // Update invitation status
       final updatedInvitation = invitation.copyWith(
@@ -849,10 +1039,49 @@ class InvitationProvider extends ChangeNotifier {
         _invitations[index] = updatedInvitation;
       }
 
+      // Save updated invitation to local storage
+      await LocalStorageService.instance
+          .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+
+      // Send invitation response notification to the original sender
+      final responseSuccess =
+          await SimpleNotificationService.instance.sendInvitationResponse(
+        recipientId: otherUserId,
+        senderName:
+            GlobalUserService.instance.currentUsername ?? 'Unknown User',
+        invitationId: invitationId,
+        response: 'declined',
+      );
+
+      if (responseSuccess) {
+        print(
+            '📱 InvitationProvider: ✅ Invitation response notification sent to: $otherUserId');
+      } else {
+        print(
+            '📱 InvitationProvider: ⚠️ Failed to send invitation response notification');
+      }
+
+      // Add local notification for the decliner
+      await SimpleNotificationService.instance.showLocalNotification(
+        title: 'Invitation Declined',
+        body: 'You declined the invitation from $otherUserName',
+        type: 'invitation_response',
+        data: {
+          'invitationId': invitationId,
+          'response': 'declined',
+          'otherUserId': otherUserId,
+          'otherUserName': otherUserName,
+        },
+      );
+
       notifyListeners();
+      print(
+          '📱 InvitationProvider: ✅ Invitation declined successfully: $invitationId');
       return true;
     } catch (e) {
       print('📱 InvitationProvider: Error declining invitation: $e');
+      _error = 'Failed to decline invitation: $e';
+      notifyListeners();
       return false;
     }
   }

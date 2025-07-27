@@ -65,42 +65,69 @@ public class SessionApi {
   /** Generated class from Pigeon that represents data sent in messages. */
   public static final class SessionIdentity {
     private @Nullable String publicKey;
+
+    public @Nullable String getPublicKey() {
+      return publicKey;
+    }
+
+    public void setPublicKey(@Nullable String setterArg) {
+      this.publicKey = setterArg;
+    }
+
     private @Nullable String privateKey;
+
+    public @Nullable String getPrivateKey() {
+      return privateKey;
+    }
+
+    public void setPrivateKey(@Nullable String setterArg) {
+      this.privateKey = setterArg;
+    }
+
     private @Nullable String sessionId;
+
+    public @Nullable String getSessionId() {
+      return sessionId;
+    }
+
+    public void setSessionId(@Nullable String setterArg) {
+      this.sessionId = setterArg;
+    }
+
     private @Nullable String createdAt;
 
-    public @Nullable String getPublicKey() { return publicKey; }
-    public void setPublicKey(@Nullable String setterArg) { this.publicKey = setterArg; }
+    public @Nullable String getCreatedAt() {
+      return createdAt;
+    }
 
-    public @Nullable String getPrivateKey() { return privateKey; }
-    public void setPrivateKey(@Nullable String setterArg) { this.privateKey = setterArg; }
-
-    public @Nullable String getSessionId() { return sessionId; }
-    public void setSessionId(@Nullable String setterArg) { this.sessionId = setterArg; }
-
-    public @Nullable String getCreatedAt() { return createdAt; }
-    public void setCreatedAt(@Nullable String setterArg) { this.createdAt = setterArg; }
+    public void setCreatedAt(@Nullable String setterArg) {
+      this.createdAt = setterArg;
+    }
 
     public static final class Builder {
+
       private @Nullable String publicKey;
-      private @Nullable String privateKey;
-      private @Nullable String sessionId;
-      private @Nullable String createdAt;
 
       public @NonNull Builder setPublicKey(@Nullable String setterArg) {
         this.publicKey = setterArg;
         return this;
       }
 
+      private @Nullable String privateKey;
+
       public @NonNull Builder setPrivateKey(@Nullable String setterArg) {
         this.privateKey = setterArg;
         return this;
       }
 
+      private @Nullable String sessionId;
+
       public @NonNull Builder setSessionId(@Nullable String setterArg) {
         this.sessionId = setterArg;
         return this;
       }
+
+      private @Nullable String createdAt;
 
       public @NonNull Builder setCreatedAt(@Nullable String setterArg) {
         this.createdAt = setterArg;
@@ -141,6 +168,661 @@ public class SessionApi {
     }
   }
 
+  /** Generated class from Pigeon that represents data sent in messages. */
+  public static final class SessionMessage {
+    private @Nullable String id;
+
+    public @Nullable String getId() {
+      return id;
+    }
+
+    public void setId(@Nullable String setterArg) {
+      this.id = setterArg;
+    }
+
+    private @Nullable String senderId;
+
+    public @Nullable String getSenderId() {
+      return senderId;
+    }
+
+    public void setSenderId(@Nullable String setterArg) {
+      this.senderId = setterArg;
+    }
+
+    private @Nullable String receiverId;
+
+    public @Nullable String getReceiverId() {
+      return receiverId;
+    }
+
+    public void setReceiverId(@Nullable String setterArg) {
+      this.receiverId = setterArg;
+    }
+
+    private @Nullable String content;
+
+    public @Nullable String getContent() {
+      return content;
+    }
+
+    public void setContent(@Nullable String setterArg) {
+      this.content = setterArg;
+    }
+
+    private @Nullable String messageType;
+
+    public @Nullable String getMessageType() {
+      return messageType;
+    }
+
+    public void setMessageType(@Nullable String setterArg) {
+      this.messageType = setterArg;
+    }
+
+    private @Nullable String timestamp;
+
+    public @Nullable String getTimestamp() {
+      return timestamp;
+    }
+
+    public void setTimestamp(@Nullable String setterArg) {
+      this.timestamp = setterArg;
+    }
+
+    private @Nullable String status;
+
+    public @Nullable String getStatus() {
+      return status;
+    }
+
+    public void setStatus(@Nullable String setterArg) {
+      this.status = setterArg;
+    }
+
+    private @Nullable Boolean isOutgoing;
+
+    public @Nullable Boolean getIsOutgoing() {
+      return isOutgoing;
+    }
+
+    public void setIsOutgoing(@Nullable Boolean setterArg) {
+      this.isOutgoing = setterArg;
+    }
+
+    public static final class Builder {
+
+      private @Nullable String id;
+
+      public @NonNull Builder setId(@Nullable String setterArg) {
+        this.id = setterArg;
+        return this;
+      }
+
+      private @Nullable String senderId;
+
+      public @NonNull Builder setSenderId(@Nullable String setterArg) {
+        this.senderId = setterArg;
+        return this;
+      }
+
+      private @Nullable String receiverId;
+
+      public @NonNull Builder setReceiverId(@Nullable String setterArg) {
+        this.receiverId = setterArg;
+        return this;
+      }
+
+      private @Nullable String content;
+
+      public @NonNull Builder setContent(@Nullable String setterArg) {
+        this.content = setterArg;
+        return this;
+      }
+
+      private @Nullable String messageType;
+
+      public @NonNull Builder setMessageType(@Nullable String setterArg) {
+        this.messageType = setterArg;
+        return this;
+      }
+
+      private @Nullable String timestamp;
+
+      public @NonNull Builder setTimestamp(@Nullable String setterArg) {
+        this.timestamp = setterArg;
+        return this;
+      }
+
+      private @Nullable String status;
+
+      public @NonNull Builder setStatus(@Nullable String setterArg) {
+        this.status = setterArg;
+        return this;
+      }
+
+      private @Nullable Boolean isOutgoing;
+
+      public @NonNull Builder setIsOutgoing(@Nullable Boolean setterArg) {
+        this.isOutgoing = setterArg;
+        return this;
+      }
+
+      public @NonNull SessionMessage build() {
+        SessionMessage pigeonReturn = new SessionMessage();
+        pigeonReturn.setId(id);
+        pigeonReturn.setSenderId(senderId);
+        pigeonReturn.setReceiverId(receiverId);
+        pigeonReturn.setContent(content);
+        pigeonReturn.setMessageType(messageType);
+        pigeonReturn.setTimestamp(timestamp);
+        pigeonReturn.setStatus(status);
+        pigeonReturn.setIsOutgoing(isOutgoing);
+        return pigeonReturn;
+      }
+    }
+
+    @NonNull
+    ArrayList<Object> toList() {
+      ArrayList<Object> toListResult = new ArrayList<Object>(8);
+      toListResult.add(id);
+      toListResult.add(senderId);
+      toListResult.add(receiverId);
+      toListResult.add(content);
+      toListResult.add(messageType);
+      toListResult.add(timestamp);
+      toListResult.add(status);
+      toListResult.add(isOutgoing);
+      return toListResult;
+    }
+
+    static @NonNull SessionMessage fromList(@NonNull ArrayList<Object> list) {
+      SessionMessage pigeonResult = new SessionMessage();
+      Object id = list.get(0);
+      pigeonResult.setId((String) id);
+      Object senderId = list.get(1);
+      pigeonResult.setSenderId((String) senderId);
+      Object receiverId = list.get(2);
+      pigeonResult.setReceiverId((String) receiverId);
+      Object content = list.get(3);
+      pigeonResult.setContent((String) content);
+      Object messageType = list.get(4);
+      pigeonResult.setMessageType((String) messageType);
+      Object timestamp = list.get(5);
+      pigeonResult.setTimestamp((String) timestamp);
+      Object status = list.get(6);
+      pigeonResult.setStatus((String) status);
+      Object isOutgoing = list.get(7);
+      pigeonResult.setIsOutgoing((Boolean) isOutgoing);
+      return pigeonResult;
+    }
+  }
+
+  /** Generated class from Pigeon that represents data sent in messages. */
+  public static final class SessionContact {
+    private @Nullable String sessionId;
+
+    public @Nullable String getSessionId() {
+      return sessionId;
+    }
+
+    public void setSessionId(@Nullable String setterArg) {
+      this.sessionId = setterArg;
+    }
+
+    private @Nullable String name;
+
+    public @Nullable String getName() {
+      return name;
+    }
+
+    public void setName(@Nullable String setterArg) {
+      this.name = setterArg;
+    }
+
+    private @Nullable String profilePicture;
+
+    public @Nullable String getProfilePicture() {
+      return profilePicture;
+    }
+
+    public void setProfilePicture(@Nullable String setterArg) {
+      this.profilePicture = setterArg;
+    }
+
+    private @Nullable String lastSeen;
+
+    public @Nullable String getLastSeen() {
+      return lastSeen;
+    }
+
+    public void setLastSeen(@Nullable String setterArg) {
+      this.lastSeen = setterArg;
+    }
+
+    private @Nullable Boolean isOnline;
+
+    public @Nullable Boolean getIsOnline() {
+      return isOnline;
+    }
+
+    public void setIsOnline(@Nullable Boolean setterArg) {
+      this.isOnline = setterArg;
+    }
+
+    private @Nullable Boolean isBlocked;
+
+    public @Nullable Boolean getIsBlocked() {
+      return isBlocked;
+    }
+
+    public void setIsBlocked(@Nullable Boolean setterArg) {
+      this.isBlocked = setterArg;
+    }
+
+    public static final class Builder {
+
+      private @Nullable String sessionId;
+
+      public @NonNull Builder setSessionId(@Nullable String setterArg) {
+        this.sessionId = setterArg;
+        return this;
+      }
+
+      private @Nullable String name;
+
+      public @NonNull Builder setName(@Nullable String setterArg) {
+        this.name = setterArg;
+        return this;
+      }
+
+      private @Nullable String profilePicture;
+
+      public @NonNull Builder setProfilePicture(@Nullable String setterArg) {
+        this.profilePicture = setterArg;
+        return this;
+      }
+
+      private @Nullable String lastSeen;
+
+      public @NonNull Builder setLastSeen(@Nullable String setterArg) {
+        this.lastSeen = setterArg;
+        return this;
+      }
+
+      private @Nullable Boolean isOnline;
+
+      public @NonNull Builder setIsOnline(@Nullable Boolean setterArg) {
+        this.isOnline = setterArg;
+        return this;
+      }
+
+      private @Nullable Boolean isBlocked;
+
+      public @NonNull Builder setIsBlocked(@Nullable Boolean setterArg) {
+        this.isBlocked = setterArg;
+        return this;
+      }
+
+      public @NonNull SessionContact build() {
+        SessionContact pigeonReturn = new SessionContact();
+        pigeonReturn.setSessionId(sessionId);
+        pigeonReturn.setName(name);
+        pigeonReturn.setProfilePicture(profilePicture);
+        pigeonReturn.setLastSeen(lastSeen);
+        pigeonReturn.setIsOnline(isOnline);
+        pigeonReturn.setIsBlocked(isBlocked);
+        return pigeonReturn;
+      }
+    }
+
+    @NonNull
+    ArrayList<Object> toList() {
+      ArrayList<Object> toListResult = new ArrayList<Object>(6);
+      toListResult.add(sessionId);
+      toListResult.add(name);
+      toListResult.add(profilePicture);
+      toListResult.add(lastSeen);
+      toListResult.add(isOnline);
+      toListResult.add(isBlocked);
+      return toListResult;
+    }
+
+    static @NonNull SessionContact fromList(@NonNull ArrayList<Object> list) {
+      SessionContact pigeonResult = new SessionContact();
+      Object sessionId = list.get(0);
+      pigeonResult.setSessionId((String) sessionId);
+      Object name = list.get(1);
+      pigeonResult.setName((String) name);
+      Object profilePicture = list.get(2);
+      pigeonResult.setProfilePicture((String) profilePicture);
+      Object lastSeen = list.get(3);
+      pigeonResult.setLastSeen((String) lastSeen);
+      Object isOnline = list.get(4);
+      pigeonResult.setIsOnline((Boolean) isOnline);
+      Object isBlocked = list.get(5);
+      pigeonResult.setIsBlocked((Boolean) isBlocked);
+      return pigeonResult;
+    }
+  }
+
+  /** Generated class from Pigeon that represents data sent in messages. */
+  public static final class SessionGroup {
+    private @Nullable String groupId;
+
+    public @Nullable String getGroupId() {
+      return groupId;
+    }
+
+    public void setGroupId(@Nullable String setterArg) {
+      this.groupId = setterArg;
+    }
+
+    private @Nullable String name;
+
+    public @Nullable String getName() {
+      return name;
+    }
+
+    public void setName(@Nullable String setterArg) {
+      this.name = setterArg;
+    }
+
+    private @Nullable String description;
+
+    public @Nullable String getDescription() {
+      return description;
+    }
+
+    public void setDescription(@Nullable String setterArg) {
+      this.description = setterArg;
+    }
+
+    private @Nullable String avatar;
+
+    public @Nullable String getAvatar() {
+      return avatar;
+    }
+
+    public void setAvatar(@Nullable String setterArg) {
+      this.avatar = setterArg;
+    }
+
+    private @Nullable List<String> members;
+
+    public @Nullable List<String> getMembers() {
+      return members;
+    }
+
+    public void setMembers(@Nullable List<String> setterArg) {
+      this.members = setterArg;
+    }
+
+    private @Nullable String adminId;
+
+    public @Nullable String getAdminId() {
+      return adminId;
+    }
+
+    public void setAdminId(@Nullable String setterArg) {
+      this.adminId = setterArg;
+    }
+
+    private @Nullable String createdAt;
+
+    public @Nullable String getCreatedAt() {
+      return createdAt;
+    }
+
+    public void setCreatedAt(@Nullable String setterArg) {
+      this.createdAt = setterArg;
+    }
+
+    public static final class Builder {
+
+      private @Nullable String groupId;
+
+      public @NonNull Builder setGroupId(@Nullable String setterArg) {
+        this.groupId = setterArg;
+        return this;
+      }
+
+      private @Nullable String name;
+
+      public @NonNull Builder setName(@Nullable String setterArg) {
+        this.name = setterArg;
+        return this;
+      }
+
+      private @Nullable String description;
+
+      public @NonNull Builder setDescription(@Nullable String setterArg) {
+        this.description = setterArg;
+        return this;
+      }
+
+      private @Nullable String avatar;
+
+      public @NonNull Builder setAvatar(@Nullable String setterArg) {
+        this.avatar = setterArg;
+        return this;
+      }
+
+      private @Nullable List<String> members;
+
+      public @NonNull Builder setMembers(@Nullable List<String> setterArg) {
+        this.members = setterArg;
+        return this;
+      }
+
+      private @Nullable String adminId;
+
+      public @NonNull Builder setAdminId(@Nullable String setterArg) {
+        this.adminId = setterArg;
+        return this;
+      }
+
+      private @Nullable String createdAt;
+
+      public @NonNull Builder setCreatedAt(@Nullable String setterArg) {
+        this.createdAt = setterArg;
+        return this;
+      }
+
+      public @NonNull SessionGroup build() {
+        SessionGroup pigeonReturn = new SessionGroup();
+        pigeonReturn.setGroupId(groupId);
+        pigeonReturn.setName(name);
+        pigeonReturn.setDescription(description);
+        pigeonReturn.setAvatar(avatar);
+        pigeonReturn.setMembers(members);
+        pigeonReturn.setAdminId(adminId);
+        pigeonReturn.setCreatedAt(createdAt);
+        return pigeonReturn;
+      }
+    }
+
+    @NonNull
+    ArrayList<Object> toList() {
+      ArrayList<Object> toListResult = new ArrayList<Object>(7);
+      toListResult.add(groupId);
+      toListResult.add(name);
+      toListResult.add(description);
+      toListResult.add(avatar);
+      toListResult.add(members);
+      toListResult.add(adminId);
+      toListResult.add(createdAt);
+      return toListResult;
+    }
+
+    static @NonNull SessionGroup fromList(@NonNull ArrayList<Object> list) {
+      SessionGroup pigeonResult = new SessionGroup();
+      Object groupId = list.get(0);
+      pigeonResult.setGroupId((String) groupId);
+      Object name = list.get(1);
+      pigeonResult.setName((String) name);
+      Object description = list.get(2);
+      pigeonResult.setDescription((String) description);
+      Object avatar = list.get(3);
+      pigeonResult.setAvatar((String) avatar);
+      Object members = list.get(4);
+      pigeonResult.setMembers((List<String>) members);
+      Object adminId = list.get(5);
+      pigeonResult.setAdminId((String) adminId);
+      Object createdAt = list.get(6);
+      pigeonResult.setCreatedAt((String) createdAt);
+      return pigeonResult;
+    }
+  }
+
+  /** Generated class from Pigeon that represents data sent in messages. */
+  public static final class SessionAttachment {
+    private @Nullable String id;
+
+    public @Nullable String getId() {
+      return id;
+    }
+
+    public void setId(@Nullable String setterArg) {
+      this.id = setterArg;
+    }
+
+    private @Nullable String fileName;
+
+    public @Nullable String getFileName() {
+      return fileName;
+    }
+
+    public void setFileName(@Nullable String setterArg) {
+      this.fileName = setterArg;
+    }
+
+    private @Nullable String filePath;
+
+    public @Nullable String getFilePath() {
+      return filePath;
+    }
+
+    public void setFilePath(@Nullable String setterArg) {
+      this.filePath = setterArg;
+    }
+
+    private @Nullable Long fileSize;
+
+    public @Nullable Long getFileSize() {
+      return fileSize;
+    }
+
+    public void setFileSize(@Nullable Long setterArg) {
+      this.fileSize = setterArg;
+    }
+
+    private @Nullable String mimeType;
+
+    public @Nullable String getMimeType() {
+      return mimeType;
+    }
+
+    public void setMimeType(@Nullable String setterArg) {
+      this.mimeType = setterArg;
+    }
+
+    private @Nullable String url;
+
+    public @Nullable String getUrl() {
+      return url;
+    }
+
+    public void setUrl(@Nullable String setterArg) {
+      this.url = setterArg;
+    }
+
+    public static final class Builder {
+
+      private @Nullable String id;
+
+      public @NonNull Builder setId(@Nullable String setterArg) {
+        this.id = setterArg;
+        return this;
+      }
+
+      private @Nullable String fileName;
+
+      public @NonNull Builder setFileName(@Nullable String setterArg) {
+        this.fileName = setterArg;
+        return this;
+      }
+
+      private @Nullable String filePath;
+
+      public @NonNull Builder setFilePath(@Nullable String setterArg) {
+        this.filePath = setterArg;
+        return this;
+      }
+
+      private @Nullable Long fileSize;
+
+      public @NonNull Builder setFileSize(@Nullable Long setterArg) {
+        this.fileSize = setterArg;
+        return this;
+      }
+
+      private @Nullable String mimeType;
+
+      public @NonNull Builder setMimeType(@Nullable String setterArg) {
+        this.mimeType = setterArg;
+        return this;
+      }
+
+      private @Nullable String url;
+
+      public @NonNull Builder setUrl(@Nullable String setterArg) {
+        this.url = setterArg;
+        return this;
+      }
+
+      public @NonNull SessionAttachment build() {
+        SessionAttachment pigeonReturn = new SessionAttachment();
+        pigeonReturn.setId(id);
+        pigeonReturn.setFileName(fileName);
+        pigeonReturn.setFilePath(filePath);
+        pigeonReturn.setFileSize(fileSize);
+        pigeonReturn.setMimeType(mimeType);
+        pigeonReturn.setUrl(url);
+        return pigeonReturn;
+      }
+    }
+
+    @NonNull
+    ArrayList<Object> toList() {
+      ArrayList<Object> toListResult = new ArrayList<Object>(6);
+      toListResult.add(id);
+      toListResult.add(fileName);
+      toListResult.add(filePath);
+      toListResult.add(fileSize);
+      toListResult.add(mimeType);
+      toListResult.add(url);
+      return toListResult;
+    }
+
+    static @NonNull SessionAttachment fromList(@NonNull ArrayList<Object> list) {
+      SessionAttachment pigeonResult = new SessionAttachment();
+      Object id = list.get(0);
+      pigeonResult.setId((String) id);
+      Object fileName = list.get(1);
+      pigeonResult.setFileName((String) fileName);
+      Object filePath = list.get(2);
+      pigeonResult.setFilePath((String) filePath);
+      Object fileSize = list.get(3);
+      pigeonResult.setFileSize((fileSize == null) ? null : ((fileSize instanceof Integer) ? (Integer) fileSize : (Long) fileSize));
+      Object mimeType = list.get(4);
+      pigeonResult.setMimeType((String) mimeType);
+      Object url = list.get(5);
+      pigeonResult.setUrl((String) url);
+      return pigeonResult;
+    }
+  }
+
   /** Asynchronous error handling return type for non-nullable API method returns. */
   public interface Result<T> {
     /** Success case callback method for handling returns. */
@@ -149,7 +831,6 @@ public class SessionApi {
     /** Failure case callback method for handling errors. */
     void error(@NonNull Throwable error);
   }
-
   /** Asynchronous error handling return type for nullable API method returns. */
   public interface NullableResult<T> {
     /** Success case callback method for handling returns. */
@@ -159,16 +840,24 @@ public class SessionApi {
     void error(@NonNull Throwable error);
   }
 
-  private static class SessionApiCodec extends StandardMessageCodec {
-    public static final SessionApiCodec INSTANCE = new SessionApiCodec();
+  private static class SessionApiHandlerCodec extends StandardMessageCodec {
+    public static final SessionApiHandlerCodec INSTANCE = new SessionApiHandlerCodec();
 
-    private SessionApiCodec() {}
+    private SessionApiHandlerCodec() {}
 
     @Override
     protected Object readValueOfType(byte type, @NonNull ByteBuffer buffer) {
       switch (type) {
         case (byte) 128:
+          return SessionAttachment.fromList((ArrayList<Object>) readValue(buffer));
+        case (byte) 129:
+          return SessionContact.fromList((ArrayList<Object>) readValue(buffer));
+        case (byte) 130:
+          return SessionGroup.fromList((ArrayList<Object>) readValue(buffer));
+        case (byte) 131:
           return SessionIdentity.fromList((ArrayList<Object>) readValue(buffer));
+        case (byte) 132:
+          return SessionMessage.fromList((ArrayList<Object>) readValue(buffer));
         default:
           return super.readValueOfType(type, buffer);
       }
@@ -176,9 +865,21 @@ public class SessionApi {
 
     @Override
     protected void writeValue(@NonNull ByteArrayOutputStream stream, Object value) {
-      if (value instanceof SessionIdentity) {
+      if (value instanceof SessionAttachment) {
         stream.write(128);
+        writeValue(stream, ((SessionAttachment) value).toList());
+      } else if (value instanceof SessionContact) {
+        stream.write(129);
+        writeValue(stream, ((SessionContact) value).toList());
+      } else if (value instanceof SessionGroup) {
+        stream.write(130);
+        writeValue(stream, ((SessionGroup) value).toList());
+      } else if (value instanceof SessionIdentity) {
+        stream.write(131);
         writeValue(stream, ((SessionIdentity) value).toList());
+      } else if (value instanceof SessionMessage) {
+        stream.write(132);
+        writeValue(stream, ((SessionMessage) value).toList());
       } else {
         super.writeValue(stream, value);
       }
@@ -196,6 +897,34 @@ public class SessionApi {
 
     void disconnect(@NonNull Result<Void> result);
 
+    void sendMessage(@NonNull SessionMessage message, @NonNull Result<Void> result);
+
+    void sendTypingIndicator(@NonNull String sessionId, @NonNull Boolean isTyping, @NonNull Result<Void> result);
+
+    void addContact(@NonNull SessionContact contact, @NonNull Result<Void> result);
+
+    void removeContact(@NonNull String sessionId, @NonNull Result<Void> result);
+
+    void updateContact(@NonNull SessionContact contact, @NonNull Result<Void> result);
+
+    void createGroup(@NonNull SessionGroup group, @NonNull Result<String> result);
+
+    void addMemberToGroup(@NonNull String groupId, @NonNull String memberId, @NonNull Result<Void> result);
+
+    void removeMemberFromGroup(@NonNull String groupId, @NonNull String memberId, @NonNull Result<Void> result);
+
+    void leaveGroup(@NonNull String groupId, @NonNull Result<Void> result);
+
+    void uploadAttachment(@NonNull SessionAttachment attachment, @NonNull Result<String> result);
+
+    void downloadAttachment(@NonNull String attachmentId, @NonNull Result<SessionAttachment> result);
+
+    void encryptMessage(@NonNull String message, @NonNull String recipientId, @NonNull Result<String> result);
+
+    void decryptMessage(@NonNull String encryptedMessage, @NonNull String senderId, @NonNull Result<String> result);
+
+    void configureOnionRouting(@NonNull Boolean enabled, @Nullable String proxyUrl, @NonNull Result<Void> result);
+
     void saveToStorage(@NonNull String key, @NonNull String value, @NonNull Result<Void> result);
 
     void loadFromStorage(@NonNull String key, @NonNull Result<String> result);
@@ -204,22 +933,21 @@ public class SessionApi {
 
     void validateSessionId(@NonNull String sessionId, @NonNull Result<Boolean> result);
 
-    /** The codec used by SessionApi. */
+    /** The codec used by SessionApiHandler. */
     static @NonNull MessageCodec<Object> getCodec() {
-      return SessionApiCodec.INSTANCE;
+      return SessionApiHandlerCodec.INSTANCE;
     }
-
     /**Sets up an instance of `SessionApiHandler` to handle messages through the `binaryMessenger`. */
     static void setUp(@NonNull BinaryMessenger binaryMessenger, @Nullable SessionApiHandler api) {
       {
         BasicMessageChannel<Object> channel =
             new BasicMessageChannel<>(
-                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApi.generateEd25519KeyPair", getCodec());
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.generateEd25519KeyPair", getCodec());
         if (api != null) {
           channel.setMessageHandler(
               (message, reply) -> {
                 ArrayList<Object> wrapped = new ArrayList<Object>();
-                api.generateEd25519KeyPair(
+                Result<Map<String, String>> resultCallback =
                     new Result<Map<String, String>>() {
                       public void success(Map<String, String> result) {
                         wrapped.add(0, result);
@@ -230,7 +958,9 @@ public class SessionApi {
                         ArrayList<Object> wrappedError = wrapError(error);
                         reply.reply(wrappedError);
                       }
-                    });
+                    };
+
+                api.generateEd25519KeyPair(resultCallback);
               });
         } else {
           channel.setMessageHandler(null);
@@ -239,14 +969,14 @@ public class SessionApi {
       {
         BasicMessageChannel<Object> channel =
             new BasicMessageChannel<>(
-                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApi.initializeSession", getCodec());
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.initializeSession", getCodec());
         if (api != null) {
           channel.setMessageHandler(
               (message, reply) -> {
                 ArrayList<Object> wrapped = new ArrayList<Object>();
                 ArrayList<Object> args = (ArrayList<Object>) message;
                 SessionIdentity identityArg = (SessionIdentity) args.get(0);
-                api.initializeSession(identityArg,
+                Result<Void> resultCallback =
                     new Result<Void>() {
                       public void success(Void result) {
                         wrapped.add(0, null);
@@ -257,7 +987,9 @@ public class SessionApi {
                         ArrayList<Object> wrappedError = wrapError(error);
                         reply.reply(wrappedError);
                       }
-                    });
+                    };
+
+                api.initializeSession(identityArg, resultCallback);
               });
         } else {
           channel.setMessageHandler(null);
@@ -266,12 +998,12 @@ public class SessionApi {
       {
         BasicMessageChannel<Object> channel =
             new BasicMessageChannel<>(
-                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApi.connect", getCodec());
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.connect", getCodec());
         if (api != null) {
           channel.setMessageHandler(
               (message, reply) -> {
                 ArrayList<Object> wrapped = new ArrayList<Object>();
-                api.connect(
+                Result<Void> resultCallback =
                     new Result<Void>() {
                       public void success(Void result) {
                         wrapped.add(0, null);
@@ -282,7 +1014,9 @@ public class SessionApi {
                         ArrayList<Object> wrappedError = wrapError(error);
                         reply.reply(wrappedError);
                       }
-                    });
+                    };
+
+                api.connect(resultCallback);
               });
         } else {
           channel.setMessageHandler(null);
@@ -291,12 +1025,12 @@ public class SessionApi {
       {
         BasicMessageChannel<Object> channel =
             new BasicMessageChannel<>(
-                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApi.disconnect", getCodec());
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.disconnect", getCodec());
         if (api != null) {
           channel.setMessageHandler(
               (message, reply) -> {
                 ArrayList<Object> wrapped = new ArrayList<Object>();
-                api.disconnect(
+                Result<Void> resultCallback =
                     new Result<Void>() {
                       public void success(Void result) {
                         wrapped.add(0, null);
@@ -307,7 +1041,9 @@ public class SessionApi {
                         ArrayList<Object> wrappedError = wrapError(error);
                         reply.reply(wrappedError);
                       }
-                    });
+                    };
+
+                api.disconnect(resultCallback);
               });
         } else {
           channel.setMessageHandler(null);
@@ -316,7 +1052,419 @@ public class SessionApi {
       {
         BasicMessageChannel<Object> channel =
             new BasicMessageChannel<>(
-                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApi.saveToStorage", getCodec());
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.sendMessage", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                SessionMessage messageArg = (SessionMessage) args.get(0);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.sendMessage(messageArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.sendTypingIndicator", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                String sessionIdArg = (String) args.get(0);
+                Boolean isTypingArg = (Boolean) args.get(1);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.sendTypingIndicator(sessionIdArg, isTypingArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.addContact", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                SessionContact contactArg = (SessionContact) args.get(0);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.addContact(contactArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.removeContact", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                String sessionIdArg = (String) args.get(0);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.removeContact(sessionIdArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.updateContact", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                SessionContact contactArg = (SessionContact) args.get(0);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.updateContact(contactArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.createGroup", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                SessionGroup groupArg = (SessionGroup) args.get(0);
+                Result<String> resultCallback =
+                    new Result<String>() {
+                      public void success(String result) {
+                        wrapped.add(0, result);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.createGroup(groupArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.addMemberToGroup", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                String groupIdArg = (String) args.get(0);
+                String memberIdArg = (String) args.get(1);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.addMemberToGroup(groupIdArg, memberIdArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.removeMemberFromGroup", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                String groupIdArg = (String) args.get(0);
+                String memberIdArg = (String) args.get(1);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.removeMemberFromGroup(groupIdArg, memberIdArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.leaveGroup", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                String groupIdArg = (String) args.get(0);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.leaveGroup(groupIdArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.uploadAttachment", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                SessionAttachment attachmentArg = (SessionAttachment) args.get(0);
+                Result<String> resultCallback =
+                    new Result<String>() {
+                      public void success(String result) {
+                        wrapped.add(0, result);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.uploadAttachment(attachmentArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.downloadAttachment", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                String attachmentIdArg = (String) args.get(0);
+                Result<SessionAttachment> resultCallback =
+                    new Result<SessionAttachment>() {
+                      public void success(SessionAttachment result) {
+                        wrapped.add(0, result);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.downloadAttachment(attachmentIdArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.encryptMessage", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                String messageArg = (String) args.get(0);
+                String recipientIdArg = (String) args.get(1);
+                Result<String> resultCallback =
+                    new Result<String>() {
+                      public void success(String result) {
+                        wrapped.add(0, result);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.encryptMessage(messageArg, recipientIdArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.decryptMessage", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                String encryptedMessageArg = (String) args.get(0);
+                String senderIdArg = (String) args.get(1);
+                Result<String> resultCallback =
+                    new Result<String>() {
+                      public void success(String result) {
+                        wrapped.add(0, result);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.decryptMessage(encryptedMessageArg, senderIdArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.configureOnionRouting", getCodec());
+        if (api != null) {
+          channel.setMessageHandler(
+              (message, reply) -> {
+                ArrayList<Object> wrapped = new ArrayList<Object>();
+                ArrayList<Object> args = (ArrayList<Object>) message;
+                Boolean enabledArg = (Boolean) args.get(0);
+                String proxyUrlArg = (String) args.get(1);
+                Result<Void> resultCallback =
+                    new Result<Void>() {
+                      public void success(Void result) {
+                        wrapped.add(0, null);
+                        reply.reply(wrapped);
+                      }
+
+                      public void error(Throwable error) {
+                        ArrayList<Object> wrappedError = wrapError(error);
+                        reply.reply(wrappedError);
+                      }
+                    };
+
+                api.configureOnionRouting(enabledArg, proxyUrlArg, resultCallback);
+              });
+        } else {
+          channel.setMessageHandler(null);
+        }
+      }
+      {
+        BasicMessageChannel<Object> channel =
+            new BasicMessageChannel<>(
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.saveToStorage", getCodec());
         if (api != null) {
           channel.setMessageHandler(
               (message, reply) -> {
@@ -324,7 +1472,7 @@ public class SessionApi {
                 ArrayList<Object> args = (ArrayList<Object>) message;
                 String keyArg = (String) args.get(0);
                 String valueArg = (String) args.get(1);
-                api.saveToStorage(keyArg, valueArg,
+                Result<Void> resultCallback =
                     new Result<Void>() {
                       public void success(Void result) {
                         wrapped.add(0, null);
@@ -335,7 +1483,9 @@ public class SessionApi {
                         ArrayList<Object> wrappedError = wrapError(error);
                         reply.reply(wrappedError);
                       }
-                    });
+                    };
+
+                api.saveToStorage(keyArg, valueArg, resultCallback);
               });
         } else {
           channel.setMessageHandler(null);
@@ -344,14 +1494,14 @@ public class SessionApi {
       {
         BasicMessageChannel<Object> channel =
             new BasicMessageChannel<>(
-                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApi.loadFromStorage", getCodec());
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.loadFromStorage", getCodec());
         if (api != null) {
           channel.setMessageHandler(
               (message, reply) -> {
                 ArrayList<Object> wrapped = new ArrayList<Object>();
                 ArrayList<Object> args = (ArrayList<Object>) message;
                 String keyArg = (String) args.get(0);
-                api.loadFromStorage(keyArg,
+                Result<String> resultCallback =
                     new Result<String>() {
                       public void success(String result) {
                         wrapped.add(0, result);
@@ -362,7 +1512,9 @@ public class SessionApi {
                         ArrayList<Object> wrappedError = wrapError(error);
                         reply.reply(wrappedError);
                       }
-                    });
+                    };
+
+                api.loadFromStorage(keyArg, resultCallback);
               });
         } else {
           channel.setMessageHandler(null);
@@ -371,14 +1523,14 @@ public class SessionApi {
       {
         BasicMessageChannel<Object> channel =
             new BasicMessageChannel<>(
-                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApi.generateSessionId", getCodec());
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.generateSessionId", getCodec());
         if (api != null) {
           channel.setMessageHandler(
               (message, reply) -> {
                 ArrayList<Object> wrapped = new ArrayList<Object>();
                 ArrayList<Object> args = (ArrayList<Object>) message;
                 String publicKeyArg = (String) args.get(0);
-                api.generateSessionId(publicKeyArg,
+                Result<String> resultCallback =
                     new Result<String>() {
                       public void success(String result) {
                         wrapped.add(0, result);
@@ -389,7 +1541,9 @@ public class SessionApi {
                         ArrayList<Object> wrappedError = wrapError(error);
                         reply.reply(wrappedError);
                       }
-                    });
+                    };
+
+                api.generateSessionId(publicKeyArg, resultCallback);
               });
         } else {
           channel.setMessageHandler(null);
@@ -398,14 +1552,14 @@ public class SessionApi {
       {
         BasicMessageChannel<Object> channel =
             new BasicMessageChannel<>(
-                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApi.validateSessionId", getCodec());
+                binaryMessenger, "dev.flutter.pigeon.sechat_app.SessionApiHandler.validateSessionId", getCodec());
         if (api != null) {
           channel.setMessageHandler(
               (message, reply) -> {
                 ArrayList<Object> wrapped = new ArrayList<Object>();
                 ArrayList<Object> args = (ArrayList<Object>) message;
                 String sessionIdArg = (String) args.get(0);
-                api.validateSessionId(sessionIdArg,
+                Result<Boolean> resultCallback =
                     new Result<Boolean>() {
                       public void success(Boolean result) {
                         wrapped.add(0, result);
@@ -416,12 +1570,410 @@ public class SessionApi {
                         ArrayList<Object> wrappedError = wrapError(error);
                         reply.reply(wrappedError);
                       }
-                    });
+                    };
+
+                api.validateSessionId(sessionIdArg, resultCallback);
               });
         } else {
           channel.setMessageHandler(null);
         }
       }
+    }
+  }
+
+  private static class SessionCallbackApiCodec extends StandardMessageCodec {
+    public static final SessionCallbackApiCodec INSTANCE = new SessionCallbackApiCodec();
+
+    private SessionCallbackApiCodec() {}
+
+    @Override
+    protected Object readValueOfType(byte type, @NonNull ByteBuffer buffer) {
+      switch (type) {
+        case (byte) 128:
+          return SessionAttachment.fromList((ArrayList<Object>) readValue(buffer));
+        case (byte) 129:
+          return SessionContact.fromList((ArrayList<Object>) readValue(buffer));
+        case (byte) 130:
+          return SessionGroup.fromList((ArrayList<Object>) readValue(buffer));
+        case (byte) 131:
+          return SessionMessage.fromList((ArrayList<Object>) readValue(buffer));
+        default:
+          return super.readValueOfType(type, buffer);
+      }
+    }
+
+    @Override
+    protected void writeValue(@NonNull ByteArrayOutputStream stream, Object value) {
+      if (value instanceof SessionAttachment) {
+        stream.write(128);
+        writeValue(stream, ((SessionAttachment) value).toList());
+      } else if (value instanceof SessionContact) {
+        stream.write(129);
+        writeValue(stream, ((SessionContact) value).toList());
+      } else if (value instanceof SessionGroup) {
+        stream.write(130);
+        writeValue(stream, ((SessionGroup) value).toList());
+      } else if (value instanceof SessionMessage) {
+        stream.write(131);
+        writeValue(stream, ((SessionMessage) value).toList());
+      } else {
+        super.writeValue(stream, value);
+      }
+    }
+  }
+
+  /** Generated class from Pigeon that represents Flutter messages that can be called from Java. */
+  public static class SessionCallbackApi {
+    private final @NonNull BinaryMessenger binaryMessenger;
+
+    public SessionCallbackApi(@NonNull BinaryMessenger argBinaryMessenger) {
+      this.binaryMessenger = argBinaryMessenger;
+    }
+
+    /** Public interface for sending reply. */ 
+    /** The codec used by SessionCallbackApi. */
+    static @NonNull MessageCodec<Object> getCodec() {
+      return SessionCallbackApiCodec.INSTANCE;
+    }
+    public void onMessageReceived(@NonNull SessionMessage messageArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onMessageReceived";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(messageArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onContactAdded(@NonNull SessionContact contactArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onContactAdded";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(contactArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onContactUpdated(@NonNull SessionContact contactArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onContactUpdated";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(contactArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onContactRemoved(@NonNull String sessionIdArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onContactRemoved";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(sessionIdArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onTypingReceived(@NonNull String sessionIdArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onTypingReceived";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(sessionIdArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onTypingStopped(@NonNull String sessionIdArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onTypingStopped";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(sessionIdArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onMessageStatusUpdated(@NonNull String messageIdArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onMessageStatusUpdated";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(messageIdArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onConnected(@NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onConnected";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          null,
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onDisconnected(@NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onDisconnected";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          null,
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onError(@NonNull String errorArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onError";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(errorArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onGroupCreated(@NonNull String groupIdArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onGroupCreated";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(groupIdArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onGroupUpdated(@NonNull SessionGroup groupArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onGroupUpdated";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(groupArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onGroupDeleted(@NonNull String groupIdArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onGroupDeleted";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(groupIdArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onMemberAdded(@NonNull String groupIdArg, @NonNull String memberIdArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onMemberAdded";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Arrays.asList(groupIdArg, memberIdArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onMemberRemoved(@NonNull String groupIdArg, @NonNull String memberIdArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onMemberRemoved";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Arrays.asList(groupIdArg, memberIdArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onAttachmentUploaded(@NonNull SessionAttachment attachmentArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onAttachmentUploaded";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(attachmentArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
+    }
+    public void onAttachmentDownloaded(@NonNull SessionAttachment attachmentArg, @NonNull Result<Void> result) {
+      final String channelName = "dev.flutter.pigeon.sechat_app.SessionCallbackApi.onAttachmentDownloaded";
+      BasicMessageChannel<Object> channel =
+          new BasicMessageChannel<>(
+              binaryMessenger, channelName, getCodec());
+      channel.send(
+          new ArrayList<Object>(Collections.singletonList(attachmentArg)),
+          channelReply -> {
+            if (channelReply instanceof List) {
+              List<Object> listReply = (List<Object>) channelReply;
+              if (listReply.size() > 1) {
+                result.error(new FlutterError((String) listReply.get(0), (String) listReply.get(1), (String) listReply.get(2)));
+              } else {
+                result.success(null);
+              }
+            }  else {
+              result.error(createConnectionError(channelName));
+            } 
+          });
     }
   }
 }

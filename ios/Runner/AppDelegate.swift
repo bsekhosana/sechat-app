@@ -4,8 +4,30 @@ import CryptoKit
 import CommonCrypto
 import UserNotifications
 
+class NotificationStreamHandler: NSObject, FlutterStreamHandler {
+  private var eventSink: FlutterEventSink?
+  
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    print("📱 iOS: EventChannel listener attached")
+    eventSink = events
+    return nil
+  }
+  
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    print("📱 iOS: EventChannel listener detached")
+    eventSink = nil
+    return nil
+  }
+  
+  func sendEvent(_ event: Any) {
+    eventSink?(event)
+  }
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+  private var notificationEventSink: FlutterEventSink?
+  private let notificationStreamHandler = NotificationStreamHandler()
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -16,17 +38,22 @@ import UserNotifications
     GeneratedPluginRegistrant.register(with: self)
     print("📱 iOS: Generated plugin registrant registered")
     
+    // Set up SessionApi implementation
+    let controller = window?.rootViewController as! FlutterViewController
+    let sessionApiImpl = SessionApiImpl()
+    SetUpSessionApiHandler(controller.binaryMessenger, sessionApiImpl)
+    print("📱 iOS: SessionApi implementation registered")
+    
     // Set up push notifications
     setupPushNotifications(application)
     
     // Set up method channel for Session Protocol
-    let controller = window?.rootViewController as! FlutterViewController
     let sessionChannel = FlutterMethodChannel(
       name: "session_protocol",
       binaryMessenger: controller.binaryMessenger
     )
     
-    sessionChannel.setMethodCallHandler { [weak self] (call, result) in
+    sessionChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       self?.handleMethodCall(call, result: result)
     }
     
@@ -42,26 +69,11 @@ import UserNotifications
       binaryMessenger: controller.binaryMessenger
     )
     
-    // Store event sink for notifications
-    var notificationEventSink: FlutterEventSink?
-    
-    eventChannel.setStreamHandler(object: FlutterStreamHandler {
-      func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-        print("📱 iOS: EventChannel listener attached")
-        notificationEventSink = events
-        return nil
-      }
-      
-      func onCancel(withArguments arguments: Any?) -> FlutterError? {
-        print("📱 iOS: EventChannel listener detached")
-        notificationEventSink = nil
-        return nil
-      }
-    })
+    eventChannel.setStreamHandler(notificationStreamHandler)
     
     print("📱 iOS: Setting up push notifications method channel")
     
-    pushChannel.setMethodCallHandler { [weak self] (call, result) in
+    pushChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       print("📱 iOS: Received method call: \(call.method)")
       switch call.method {
       case "requestDeviceToken":
@@ -888,21 +900,8 @@ extension AppDelegate {
     let controller = window?.rootViewController as! FlutterViewController
     
     // Try EventChannel first (most reliable)
-    if let eventSink = notificationEventSink {
-      eventSink(enhancedUserInfo)
-      print("📱 iOS: ✅ Notification sent via EventChannel")
-    } else {
-      print("📱 iOS: EventChannel not available, trying MethodChannel")
-      
-      // Fallback to MethodChannel
-      let channel = FlutterMethodChannel(
-        name: "push_notifications",
-        binaryMessenger: controller.binaryMessenger
-      )
-      
-      channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
-      print("📱 iOS: ✅ Notification sent via MethodChannel")
-    }
+    notificationStreamHandler.sendEvent(enhancedUserInfo)
+    print("📱 iOS: ✅ Notification sent via EventChannel")
     completionHandler(.newData)
   }
 }

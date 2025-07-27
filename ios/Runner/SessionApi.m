@@ -270,9 +270,9 @@ static id GetNullableObjectAtIndex(NSArray *array, NSInteger key) {
 }
 @end
 
-@interface SessionApiCodecReader : FlutterStandardReader
+@interface SessionApiHandlerCodecReader : FlutterStandardReader
 @end
-@implementation SessionApiCodecReader
+@implementation SessionApiHandlerCodecReader
 - (nullable id)readValueOfType:(UInt8)type {
   switch (type) {
     case 128: 
@@ -291,9 +291,9 @@ static id GetNullableObjectAtIndex(NSArray *array, NSInteger key) {
 }
 @end
 
-@interface SessionApiCodecWriter : FlutterStandardWriter
+@interface SessionApiHandlerCodecWriter : FlutterStandardWriter
 @end
-@implementation SessionApiCodecWriter
+@implementation SessionApiHandlerCodecWriter
 - (void)writeValue:(id)value {
   if ([value isKindOfClass:[SessionAttachment class]]) {
     [self writeByte:128];
@@ -316,36 +316,36 @@ static id GetNullableObjectAtIndex(NSArray *array, NSInteger key) {
 }
 @end
 
-@interface SessionApiCodecReaderWriter : FlutterStandardReaderWriter
+@interface SessionApiHandlerCodecReaderWriter : FlutterStandardReaderWriter
 @end
-@implementation SessionApiCodecReaderWriter
+@implementation SessionApiHandlerCodecReaderWriter
 - (FlutterStandardWriter *)writerWithData:(NSMutableData *)data {
-  return [[SessionApiCodecWriter alloc] initWithData:data];
+  return [[SessionApiHandlerCodecWriter alloc] initWithData:data];
 }
 - (FlutterStandardReader *)readerWithData:(NSData *)data {
-  return [[SessionApiCodecReader alloc] initWithData:data];
+  return [[SessionApiHandlerCodecReader alloc] initWithData:data];
 }
 @end
 
-NSObject<FlutterMessageCodec> *SessionApiGetCodec(void) {
+NSObject<FlutterMessageCodec> *SessionApiHandlerGetCodec(void) {
   static FlutterStandardMessageCodec *sSharedObject = nil;
   static dispatch_once_t sPred = 0;
   dispatch_once(&sPred, ^{
-    SessionApiCodecReaderWriter *readerWriter = [[SessionApiCodecReaderWriter alloc] init];
+    SessionApiHandlerCodecReaderWriter *readerWriter = [[SessionApiHandlerCodecReaderWriter alloc] init];
     sSharedObject = [FlutterStandardMessageCodec codecWithReaderWriter:readerWriter];
   });
   return sSharedObject;
 }
 
-void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<SessionApi> *api) {
+void SetUpSessionApiHandler(id<FlutterBinaryMessenger> binaryMessenger, NSObject<SessionApiHandler> *api) {
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.generateEd25519KeyPair"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.generateEd25519KeyPair"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(generateEd25519KeyPairWithCompletion:)], @"SessionApi api (%@) doesn't respond to @selector(generateEd25519KeyPairWithCompletion:)", api);
+      NSCAssert([api respondsToSelector:@selector(generateEd25519KeyPairWithCompletion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(generateEd25519KeyPairWithCompletion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         [api generateEd25519KeyPairWithCompletion:^(NSDictionary<NSString *, NSString *> *_Nullable output, FlutterError *_Nullable error) {
           callback(wrapResult(output, error));
@@ -358,11 +358,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.initializeSession"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.initializeSession"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(initializeSessionIdentity:completion:)], @"SessionApi api (%@) doesn't respond to @selector(initializeSessionIdentity:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(initializeSessionIdentity:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(initializeSessionIdentity:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         SessionIdentity *arg_identity = GetNullableObjectAtIndex(args, 0);
@@ -377,11 +377,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.connect"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.connect"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(connectWithCompletion:)], @"SessionApi api (%@) doesn't respond to @selector(connectWithCompletion:)", api);
+      NSCAssert([api respondsToSelector:@selector(connectWithCompletion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(connectWithCompletion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         [api connectWithCompletion:^(FlutterError *_Nullable error) {
           callback(wrapResult(nil, error));
@@ -394,11 +394,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.disconnect"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.disconnect"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(disconnectWithCompletion:)], @"SessionApi api (%@) doesn't respond to @selector(disconnectWithCompletion:)", api);
+      NSCAssert([api respondsToSelector:@selector(disconnectWithCompletion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(disconnectWithCompletion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         [api disconnectWithCompletion:^(FlutterError *_Nullable error) {
           callback(wrapResult(nil, error));
@@ -411,11 +411,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.sendMessage"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.sendMessage"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(sendMessageMessage:completion:)], @"SessionApi api (%@) doesn't respond to @selector(sendMessageMessage:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(sendMessageMessage:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(sendMessageMessage:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         SessionMessage *arg_message = GetNullableObjectAtIndex(args, 0);
@@ -430,11 +430,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.sendTypingIndicator"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.sendTypingIndicator"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(sendTypingIndicatorSessionId:isTyping:completion:)], @"SessionApi api (%@) doesn't respond to @selector(sendTypingIndicatorSessionId:isTyping:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(sendTypingIndicatorSessionId:isTyping:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(sendTypingIndicatorSessionId:isTyping:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_sessionId = GetNullableObjectAtIndex(args, 0);
@@ -450,11 +450,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.addContact"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.addContact"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(addContactContact:completion:)], @"SessionApi api (%@) doesn't respond to @selector(addContactContact:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(addContactContact:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(addContactContact:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         SessionContact *arg_contact = GetNullableObjectAtIndex(args, 0);
@@ -469,11 +469,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.removeContact"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.removeContact"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(removeContactSessionId:completion:)], @"SessionApi api (%@) doesn't respond to @selector(removeContactSessionId:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(removeContactSessionId:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(removeContactSessionId:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_sessionId = GetNullableObjectAtIndex(args, 0);
@@ -488,11 +488,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.updateContact"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.updateContact"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(updateContactContact:completion:)], @"SessionApi api (%@) doesn't respond to @selector(updateContactContact:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(updateContactContact:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(updateContactContact:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         SessionContact *arg_contact = GetNullableObjectAtIndex(args, 0);
@@ -507,11 +507,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.createGroup"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.createGroup"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(createGroupGroup:completion:)], @"SessionApi api (%@) doesn't respond to @selector(createGroupGroup:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(createGroupGroup:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(createGroupGroup:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         SessionGroup *arg_group = GetNullableObjectAtIndex(args, 0);
@@ -526,11 +526,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.addMemberToGroup"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.addMemberToGroup"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(addMemberToGroupGroupId:memberId:completion:)], @"SessionApi api (%@) doesn't respond to @selector(addMemberToGroupGroupId:memberId:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(addMemberToGroupGroupId:memberId:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(addMemberToGroupGroupId:memberId:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_groupId = GetNullableObjectAtIndex(args, 0);
@@ -546,11 +546,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.removeMemberFromGroup"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.removeMemberFromGroup"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(removeMemberFromGroupGroupId:memberId:completion:)], @"SessionApi api (%@) doesn't respond to @selector(removeMemberFromGroupGroupId:memberId:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(removeMemberFromGroupGroupId:memberId:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(removeMemberFromGroupGroupId:memberId:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_groupId = GetNullableObjectAtIndex(args, 0);
@@ -566,11 +566,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.leaveGroup"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.leaveGroup"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(leaveGroupGroupId:completion:)], @"SessionApi api (%@) doesn't respond to @selector(leaveGroupGroupId:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(leaveGroupGroupId:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(leaveGroupGroupId:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_groupId = GetNullableObjectAtIndex(args, 0);
@@ -585,11 +585,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.uploadAttachment"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.uploadAttachment"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(uploadAttachmentAttachment:completion:)], @"SessionApi api (%@) doesn't respond to @selector(uploadAttachmentAttachment:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(uploadAttachmentAttachment:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(uploadAttachmentAttachment:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         SessionAttachment *arg_attachment = GetNullableObjectAtIndex(args, 0);
@@ -604,11 +604,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.downloadAttachment"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.downloadAttachment"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(downloadAttachmentAttachmentId:completion:)], @"SessionApi api (%@) doesn't respond to @selector(downloadAttachmentAttachmentId:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(downloadAttachmentAttachmentId:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(downloadAttachmentAttachmentId:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_attachmentId = GetNullableObjectAtIndex(args, 0);
@@ -623,11 +623,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.encryptMessage"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.encryptMessage"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(encryptMessageMessage:recipientId:completion:)], @"SessionApi api (%@) doesn't respond to @selector(encryptMessageMessage:recipientId:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(encryptMessageMessage:recipientId:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(encryptMessageMessage:recipientId:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_message = GetNullableObjectAtIndex(args, 0);
@@ -643,11 +643,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.decryptMessage"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.decryptMessage"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(decryptMessageEncryptedMessage:senderId:completion:)], @"SessionApi api (%@) doesn't respond to @selector(decryptMessageEncryptedMessage:senderId:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(decryptMessageEncryptedMessage:senderId:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(decryptMessageEncryptedMessage:senderId:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_encryptedMessage = GetNullableObjectAtIndex(args, 0);
@@ -663,11 +663,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.configureOnionRouting"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.configureOnionRouting"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(configureOnionRoutingEnabled:proxyUrl:completion:)], @"SessionApi api (%@) doesn't respond to @selector(configureOnionRoutingEnabled:proxyUrl:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(configureOnionRoutingEnabled:proxyUrl:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(configureOnionRoutingEnabled:proxyUrl:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         BOOL arg_enabled = [GetNullableObjectAtIndex(args, 0) boolValue];
@@ -683,11 +683,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.saveToStorage"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.saveToStorage"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(saveToStorageKey:value:completion:)], @"SessionApi api (%@) doesn't respond to @selector(saveToStorageKey:value:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(saveToStorageKey:value:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(saveToStorageKey:value:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_key = GetNullableObjectAtIndex(args, 0);
@@ -703,11 +703,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.loadFromStorage"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.loadFromStorage"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(loadFromStorageKey:completion:)], @"SessionApi api (%@) doesn't respond to @selector(loadFromStorageKey:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(loadFromStorageKey:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(loadFromStorageKey:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_key = GetNullableObjectAtIndex(args, 0);
@@ -722,11 +722,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.generateSessionId"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.generateSessionId"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(generateSessionIdPublicKey:completion:)], @"SessionApi api (%@) doesn't respond to @selector(generateSessionIdPublicKey:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(generateSessionIdPublicKey:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(generateSessionIdPublicKey:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_publicKey = GetNullableObjectAtIndex(args, 0);
@@ -741,11 +741,11 @@ void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<Sessio
   {
     FlutterBasicMessageChannel *channel =
       [[FlutterBasicMessageChannel alloc]
-        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApi.validateSessionId"
+        initWithName:@"dev.flutter.pigeon.sechat_app.SessionApiHandler.validateSessionId"
         binaryMessenger:binaryMessenger
-        codec:SessionApiGetCodec()];
+        codec:SessionApiHandlerGetCodec()];
     if (api) {
-      NSCAssert([api respondsToSelector:@selector(validateSessionIdSessionId:completion:)], @"SessionApi api (%@) doesn't respond to @selector(validateSessionIdSessionId:completion:)", api);
+      NSCAssert([api respondsToSelector:@selector(validateSessionIdSessionId:completion:)], @"SessionApiHandler api (%@) doesn't respond to @selector(validateSessionIdSessionId:completion:)", api);
       [channel setMessageHandler:^(id _Nullable message, FlutterReply callback) {
         NSArray *args = message;
         NSString *arg_sessionId = GetNullableObjectAtIndex(args, 0);

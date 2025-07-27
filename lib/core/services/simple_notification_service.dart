@@ -13,6 +13,9 @@ import 'session_service.dart';
 import 'global_user_service.dart';
 import 'encryption_service.dart';
 import 'local_storage_service.dart';
+import '../../shared/models/chat.dart';
+import '../../shared/models/message.dart' as app_message;
+import '../utils/guid_generator.dart';
 
 /// Simple, consolidated notification service with end-to-end encryption
 class SimpleNotificationService {
@@ -167,6 +170,74 @@ class SimpleNotificationService {
       }
     } catch (e) {
       print('🔔 SimpleNotificationService: Error sending invitation: $e');
+      return false;
+    }
+  }
+
+  /// Send invitation response notification
+  Future<bool> sendInvitationResponse({
+    required String recipientId,
+    required String senderName,
+    required String invitationId,
+    required String response, // 'accepted' or 'declined'
+    String? conversationGuid, // Only for accepted invitations
+  }) async {
+    try {
+      print('🔔 SimpleNotificationService: Sending invitation response');
+
+      // Create invitation response data
+      final responseData = {
+        'type': 'invitation_response',
+        'invitationId': invitationId,
+        'responderId': SessionService.instance.currentSessionId,
+        'responderName': senderName,
+        'response': response, // 'accepted' or 'declined'
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'version': '1.0',
+      };
+
+      // Add conversation GUID if invitation was accepted
+      if (response == 'accepted' && conversationGuid != null) {
+        responseData['conversationGuid'] = conversationGuid;
+      }
+
+      // Encrypt the response data
+      final encryptedData = await _encryptData(responseData, recipientId);
+      final checksum = _generateChecksum(responseData);
+
+      // Determine notification content based on response
+      final title = response == 'accepted'
+          ? 'Invitation Accepted'
+          : 'Invitation Declined';
+      final body = response == 'accepted'
+          ? '$senderName accepted your invitation'
+          : '$senderName declined your invitation';
+
+      // Send via AirNotifier with encryption
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
+        sessionId: recipientId,
+        title: title,
+        body: body,
+        data: {
+          'encrypted': true,
+          'data': encryptedData,
+          'checksum': checksum,
+        },
+        sound: response == 'accepted' ? 'accept.wav' : 'decline.wav',
+      );
+
+      if (success) {
+        print('🔔 SimpleNotificationService: ✅ Invitation response sent');
+        return true;
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ❌ Failed to send invitation response');
+        return false;
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error sending invitation response: $e');
       return false;
     }
   }
@@ -423,24 +494,100 @@ class SimpleNotificationService {
       Map<String, dynamic> data) async {
     final responderId = data['responderId'] as String?;
     final responderName = data['responderName'] as String?;
-    final status = data['status'] as String?;
+    final response = data['response'] as String?; // 'accepted' or 'declined'
+    final conversationGuid = data['conversationGuid'] as String?;
 
-    if (responderId == null || responderName == null || status == null) {
+    if (responderId == null || responderName == null || response == null) {
       print(
           '🔔 SimpleNotificationService: Invalid invitation response notification data');
       return;
     }
 
+    print(
+        '🔔 SimpleNotificationService: Processing invitation response: $response from $responderName ($responderId)');
+
     // Show local notification
+    final title =
+        response == 'accepted' ? 'Invitation Accepted' : 'Invitation Declined';
+    final body = response == 'accepted'
+        ? '$responderName accepted your invitation'
+        : '$responderName declined your invitation';
+
     await showLocalNotification(
-      title: 'Invitation Response',
-      body: '$responderName $status your invitation',
+      title: title,
+      body: body,
       type: 'invitation_response',
-      data: data,
+      data: {
+        ...data,
+        'conversationGuid': conversationGuid, // Include GUID if available
+      },
     );
 
+    // If accepted and conversation GUID is provided, create conversation for sender
+    if (response == 'accepted' && conversationGuid != null) {
+      await _createConversationForSender(
+          responderId, responderName, conversationGuid);
+    }
+
     // Trigger callback
-    _onInvitationResponse?.call(responderId, responderName, status);
+    _onInvitationResponse?.call(responderId, responderName, response);
+  }
+
+  /// Create conversation for sender when invitation is accepted
+  Future<void> _createConversationForSender(
+      String responderId, String responderName, String conversationGuid) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Creating conversation for sender with GUID: $conversationGuid');
+
+      final currentUserId = SessionService.instance.currentSessionId ?? '';
+      final currentUserName =
+          GlobalUserService.instance.currentUsername ?? 'Unknown User';
+
+      // Create new conversation for the sender
+      final newChat = Chat(
+        id: conversationGuid,
+        user1Id: currentUserId,
+        user2Id: responderId,
+        status: 'active',
+        lastMessageAt: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        otherUser: {
+          'id': responderId,
+          'username': responderName,
+          'profile_picture': null,
+        },
+        lastMessage: {
+          'content': 'You are now connected with $responderName',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Save conversation to local storage
+      await LocalStorageService.instance.saveChat(newChat);
+      print(
+          '🔔 SimpleNotificationService: ✅ Conversation created for sender: $conversationGuid');
+
+      // Create initial message for the conversation
+      final initialMessage = app_message.Message(
+        id: GuidGenerator.generateShortId(),
+        chatId: conversationGuid,
+        senderId: 'system',
+        content: 'You are now connected with $responderName',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        status: 'sent',
+      );
+
+      // Save initial message to local storage
+      await LocalStorageService.instance.saveMessage(initialMessage);
+      print(
+          '🔔 SimpleNotificationService: ✅ Initial message created for sender: ${initialMessage.id}');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error creating conversation for sender: $e');
+    }
   }
 
   /// Handle message notification

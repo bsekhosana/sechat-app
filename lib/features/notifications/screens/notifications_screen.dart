@@ -225,6 +225,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         icon = Icons.person_add;
         color = Colors.green;
         break;
+      case NotificationType.invitationResponse:
+        icon = Icons.check_circle;
+        color = Colors.teal;
+        break;
       case NotificationType.system:
         icon = Icons.info;
         color = Colors.orange;
@@ -279,6 +283,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         break;
       case NotificationType.invitation:
         // Navigate to invitations tab
+        _navigateToInvitations();
+        break;
+      case NotificationType.invitationResponse:
+        // Navigate to invitations tab to see updated status
         _navigateToInvitations();
         break;
       case NotificationType.system:

@@ -1,6 +1,7 @@
 enum NotificationType {
   message,
   invitation,
+  invitationResponse,
   system,
 }
 

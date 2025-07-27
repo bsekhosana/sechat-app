@@ -260,8 +260,8 @@ class SessionAttachment {
   }
 }
 
-class _SessionApiCodec extends StandardMessageCodec {
-  const _SessionApiCodec();
+class _SessionApiHandlerCodec extends StandardMessageCodec {
+  const _SessionApiHandlerCodec();
   @override
   void writeValue(WriteBuffer buffer, Object? value) {
     if (value is SessionAttachment) {
@@ -303,18 +303,18 @@ class _SessionApiCodec extends StandardMessageCodec {
   }
 }
 
-class SessionApi {
-  /// Constructor for [SessionApi].  The [binaryMessenger] named argument is
+class SessionApiHandler {
+  /// Constructor for [SessionApiHandler].  The [binaryMessenger] named argument is
   /// available for dependency injection.  If it is left null, the default
   /// BinaryMessenger will be used which routes to the host platform.
-  SessionApi({BinaryMessenger? binaryMessenger})
+  SessionApiHandler({BinaryMessenger? binaryMessenger})
       : _binaryMessenger = binaryMessenger;
   final BinaryMessenger? _binaryMessenger;
 
-  static const MessageCodec<Object?> codec = _SessionApiCodec();
+  static const MessageCodec<Object?> codec = _SessionApiHandlerCodec();
 
   Future<Map<String?, String?>> generateEd25519KeyPair() async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.generateEd25519KeyPair';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.generateEd25519KeyPair';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -341,7 +341,7 @@ class SessionApi {
   }
 
   Future<void> initializeSession(SessionIdentity arg_identity) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.initializeSession';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.initializeSession';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -363,7 +363,7 @@ class SessionApi {
   }
 
   Future<void> connect() async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.connect';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.connect';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -385,7 +385,7 @@ class SessionApi {
   }
 
   Future<void> disconnect() async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.disconnect';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.disconnect';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -407,7 +407,7 @@ class SessionApi {
   }
 
   Future<void> sendMessage(SessionMessage arg_message) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.sendMessage';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.sendMessage';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -429,7 +429,7 @@ class SessionApi {
   }
 
   Future<void> sendTypingIndicator(String arg_sessionId, bool arg_isTyping) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.sendTypingIndicator';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.sendTypingIndicator';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -451,7 +451,7 @@ class SessionApi {
   }
 
   Future<void> addContact(SessionContact arg_contact) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.addContact';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.addContact';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -473,7 +473,7 @@ class SessionApi {
   }
 
   Future<void> removeContact(String arg_sessionId) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.removeContact';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.removeContact';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -495,7 +495,7 @@ class SessionApi {
   }
 
   Future<void> updateContact(SessionContact arg_contact) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.updateContact';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.updateContact';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -517,7 +517,7 @@ class SessionApi {
   }
 
   Future<String> createGroup(SessionGroup arg_group) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.createGroup';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.createGroup';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -544,7 +544,7 @@ class SessionApi {
   }
 
   Future<void> addMemberToGroup(String arg_groupId, String arg_memberId) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.addMemberToGroup';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.addMemberToGroup';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -566,7 +566,7 @@ class SessionApi {
   }
 
   Future<void> removeMemberFromGroup(String arg_groupId, String arg_memberId) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.removeMemberFromGroup';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.removeMemberFromGroup';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -588,7 +588,7 @@ class SessionApi {
   }
 
   Future<void> leaveGroup(String arg_groupId) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.leaveGroup';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.leaveGroup';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -610,7 +610,7 @@ class SessionApi {
   }
 
   Future<String> uploadAttachment(SessionAttachment arg_attachment) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.uploadAttachment';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.uploadAttachment';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -637,7 +637,7 @@ class SessionApi {
   }
 
   Future<SessionAttachment> downloadAttachment(String arg_attachmentId) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.downloadAttachment';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.downloadAttachment';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -664,7 +664,7 @@ class SessionApi {
   }
 
   Future<String> encryptMessage(String arg_message, String arg_recipientId) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.encryptMessage';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.encryptMessage';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -691,7 +691,7 @@ class SessionApi {
   }
 
   Future<String> decryptMessage(String arg_encryptedMessage, String arg_senderId) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.decryptMessage';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.decryptMessage';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -718,7 +718,7 @@ class SessionApi {
   }
 
   Future<void> configureOnionRouting(bool arg_enabled, String? arg_proxyUrl) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.configureOnionRouting';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.configureOnionRouting';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -740,7 +740,7 @@ class SessionApi {
   }
 
   Future<void> saveToStorage(String arg_key, String arg_value) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.saveToStorage';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.saveToStorage';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -762,7 +762,7 @@ class SessionApi {
   }
 
   Future<String> loadFromStorage(String arg_key) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.loadFromStorage';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.loadFromStorage';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -789,7 +789,7 @@ class SessionApi {
   }
 
   Future<String> generateSessionId(String arg_publicKey) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.generateSessionId';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.generateSessionId';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,
@@ -816,7 +816,7 @@ class SessionApi {
   }
 
   Future<bool> validateSessionId(String arg_sessionId) async {
-    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApi.validateSessionId';
+    const String channelName = 'dev.flutter.pigeon.sechat_app.SessionApiHandler.validateSessionId';
     final BasicMessageChannel<Object?> channel = BasicMessageChannel<Object?>(
       channelName,
       codec,

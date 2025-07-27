@@ -93,10 +93,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, nullable) NSString * url;
 @end
 
-/// The codec used by SessionApi.
-NSObject<FlutterMessageCodec> *SessionApiGetCodec(void);
+/// The codec used by SessionApiHandler.
+NSObject<FlutterMessageCodec> *SessionApiHandlerGetCodec(void);
 
-@protocol SessionApi
+@protocol SessionApiHandler
 - (void)generateEd25519KeyPairWithCompletion:(void (^)(NSDictionary<NSString *, NSString *> *_Nullable, FlutterError *_Nullable))completion;
 - (void)initializeSessionIdentity:(SessionIdentity *)identity completion:(void (^)(FlutterError *_Nullable))completion;
 - (void)connectWithCompletion:(void (^)(FlutterError *_Nullable))completion;
@@ -121,7 +121,7 @@ NSObject<FlutterMessageCodec> *SessionApiGetCodec(void);
 - (void)validateSessionIdSessionId:(NSString *)sessionId completion:(void (^)(NSNumber *_Nullable, FlutterError *_Nullable))completion;
 @end
 
-extern void SetUpSessionApi(id<FlutterBinaryMessenger> binaryMessenger, NSObject<SessionApi> *_Nullable api);
+extern void SetUpSessionApiHandler(id<FlutterBinaryMessenger> binaryMessenger, NSObject<SessionApiHandler> *_Nullable api);
 
 /// The codec used by SessionCallbackApi.
 NSObject<FlutterMessageCodec> *SessionCallbackApiGetCodec(void);

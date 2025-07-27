@@ -59,7 +59,7 @@ class SessionAttachment {
 
 // Session Protocol API
 @HostApi()
-abstract class SessionApi {
+abstract class SessionApiHandler {
   // Identity Management
   @async
   Map<String, String> generateEd25519KeyPair();

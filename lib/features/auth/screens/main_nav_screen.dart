@@ -44,6 +44,18 @@ class _MainNavScreenState extends State<MainNavScreen> {
     _selectedIndex = widget.initialIndex;
     _handleNotificationDeepLink();
     _setupNotificationHandler();
+    _loadAllData();
+  }
+
+  void _loadAllData() {
+    print('📱 MainNavScreen: Loading all local data on app startup...');
+
+    // Load all data - these methods handle their own async operations
+    context.read<InvitationProvider>().loadInvitations();
+    context.read<NotificationProvider>().loadNotifications();
+    context.read<ChatProvider>().loadChats();
+
+    print('📱 MainNavScreen: ✅ All local data loading initiated');
   }
 
   void _handleNotificationDeepLink() {
