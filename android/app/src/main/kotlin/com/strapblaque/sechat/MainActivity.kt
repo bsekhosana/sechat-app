@@ -22,10 +22,18 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        private const val CHANNEL = "push_notifications"
+        private const val SESSION_CHANNEL = "session_protocol"
+        
+        // Static instance for FCM service to access
+        var instance: MainActivity? = null
+            private set
+    }
+    
     private lateinit var sessionApiImpl: SessionApiImpl
-    private val CHANNEL = "push_notifications"
-    private val SESSION_CHANNEL = "session_protocol"
     private lateinit var notificationReceiver: BroadcastReceiver
+    private var notificationEventSink: io.flutter.plugin.common.EventChannel.EventSink? = null
 
     init {
         Log.d("MainActivity", "MainActivity constructor called")
@@ -34,6 +42,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d("MainActivity", "MainActivity onCreate called")
+        instance = this
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -133,6 +142,20 @@ class MainActivity : FlutterActivity() {
     private fun setupPushNotifications(flutterEngine: FlutterEngine) {
         Log.d("MainActivity", "Setting up push notifications channel...")
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        
+        // Set up EventChannel for real-time notifications
+        val eventChannel = io.flutter.plugin.common.EventChannel(flutterEngine.dartExecutor.binaryMessenger, "push_notifications_events")
+        eventChannel.setStreamHandler(object : io.flutter.plugin.common.EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: io.flutter.plugin.common.EventChannel.EventSink?) {
+                Log.d("MainActivity", "EventChannel listener attached")
+                notificationEventSink = events
+            }
+            
+            override fun onCancel(arguments: Any?) {
+                Log.d("MainActivity", "EventChannel listener detached")
+                notificationEventSink = null
+            }
+        })
         
         // Set up method call handler for Flutter requests
         channel.setMethodCallHandler { call, result ->
@@ -330,13 +353,24 @@ class MainActivity : FlutterActivity() {
         notificationReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 if (intent?.action == "FORWARD_NOTIFICATION_TO_FLUTTER") {
+                    Log.d("MainActivity", "Received FORWARD_NOTIFICATION_TO_FLUTTER broadcast")
                     val notificationData = intent.getSerializableExtra("notification_data") as? HashMap<String, Any>
                     if (notificationData != null) {
                         Log.d("MainActivity", "Received notification data from FCM service: $notificationData")
                         
-                        // Forward to Flutter
-                        val channel = MethodChannel(flutterEngine?.dartExecutor?.binaryMessenger ?: return, CHANNEL)
-                        channel.invokeMethod("onRemoteNotificationReceived", notificationData)
+                        // Ensure we're on the main thread for Flutter method calls
+                        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                            // Already on main thread
+                            forwardNotificationToFlutter(notificationData)
+                        } else {
+                            // Switch to main thread using Handler (more reliable than runOnUiThread)
+                            val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                            mainHandler.post {
+                                forwardNotificationToFlutter(notificationData)
+                            }
+                        }
+                    } else {
+                        Log.e("MainActivity", "❌ Notification data is null")
                     }
                 }
             }
@@ -345,15 +379,57 @@ class MainActivity : FlutterActivity() {
         // Register the receiver with explicit export flag for Android 14+
         val filter = IntentFilter("FORWARD_NOTIFICATION_TO_FLUTTER")
         registerReceiver(notificationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        Log.d("MainActivity", "✅ Notification receiver registered")
+    }
+    
+    private fun forwardNotificationToFlutter(notificationData: HashMap<String, Any>) {
+        try {
+            // Try EventChannel first (most reliable)
+            sendNotificationViaEventChannel(notificationData)
+            
+            // Also try MethodChannel as backup
+            val channel = MethodChannel(flutterEngine?.dartExecutor?.binaryMessenger ?: return, CHANNEL)
+            channel.invokeMethod("onRemoteNotificationReceived", notificationData)
+            Log.d("MainActivity", "✅ Successfully forwarded notification to Flutter via both channels")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "❌ Error forwarding notification to Flutter: ${e.message}")
+        }
     }
     
     override fun onDestroy() {
         super.onDestroy()
+        // Clear static instance
+        instance = null
+        
         // Unregister the receiver
         try {
             unregisterReceiver(notificationReceiver)
         } catch (e: Exception) {
             Log.e("MainActivity", "Error unregistering receiver: ${e.message}")
+        }
+    }
+    
+    // Method to send notification via EventChannel
+    fun sendNotificationViaEventChannel(notificationData: Map<String, Any>) {
+        try {
+            // This method should only be called from the main thread
+            // The FCM service now handles thread switching before calling this method
+            sendNotificationToEventChannel(notificationData)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error sending notification via EventChannel: ${e.message}")
+        }
+    }
+    
+    private fun sendNotificationToEventChannel(notificationData: Map<String, Any>) {
+        try {
+            if (notificationEventSink != null) {
+                notificationEventSink!!.success(notificationData)
+                Log.d("MainActivity", "✅ Notification sent via EventChannel")
+            } else {
+                Log.d("MainActivity", "EventChannel sink not available")
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error in sendNotificationToEventChannel: ${e.message}")
         }
     }
 } 

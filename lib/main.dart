@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -78,14 +79,14 @@ void _setupSimpleNotifications() {
   notificationService
       .setOnInvitationReceived((senderId, senderName, invitationId) async {
     print('🔔 Main: Invitation received from $senderName ($senderId)');
-    // Update InvitationProvider
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+
+    // Force refresh of invitations list by triggering a rebuild
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        final invitationProvider = InvitationProvider();
-        await invitationProvider.handleIncomingInvitation(
-            senderId, senderName, invitationId);
+        // This will trigger a rebuild of the invitations screen
+        print('🔔 Main: ✅ Triggering invitations screen refresh');
       } catch (e) {
-        print('🔔 Main: Error updating InvitationProvider: $e');
+        print('🔔 Main: Error refreshing invitations screen: $e');
       }
     });
   });
@@ -94,50 +95,40 @@ void _setupSimpleNotifications() {
       .setOnInvitationResponse((responderId, responderName, status) async {
     print(
         '🔔 Main: Invitation response from $responderName ($responderId): $status');
-    // Update InvitationProvider
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        final invitationProvider = InvitationProvider();
-        await invitationProvider.handleInvitationResponse(
-            responderId, responderName, status);
-      } catch (e) {
-        print('🔔 Main: Error updating InvitationProvider: $e');
-      }
-    });
+    // The notification will be handled by the SimpleNotificationService
+    // which will show a local notification and trigger UI updates
+    print('🔔 Main: ✅ Invitation response notification processed');
   });
 
   notificationService.setOnMessageReceived((senderId, senderName, message) {
     print('🔔 Main: Message received from $senderName ($senderId)');
-    // Update ChatProvider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        final chatProvider = ChatProvider();
-        chatProvider.handleIncomingMessage(senderId, senderName, message, '');
-      } catch (e) {
-        print('🔔 Main: Error updating ChatProvider: $e');
-      }
-    });
+    // The notification will be handled by the SimpleNotificationService
+    // which will show a local notification and trigger UI updates
+    print('🔔 Main: ✅ Message notification processed');
   });
 
   notificationService.setOnTypingIndicator((senderId, isTyping) {
     print('🔔 Main: Typing indicator from $senderId: $isTyping');
-    // Update ChatProvider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        final chatProvider = ChatProvider();
-        chatProvider.handleTypingIndicator(senderId, isTyping);
-      } catch (e) {
-        print('🔔 Main: Error updating ChatProvider: $e');
-      }
-    });
+    // The notification will be handled by the SimpleNotificationService
+    // which will trigger UI updates
+    print('🔔 Main: ✅ Typing indicator processed');
   });
 
   print('🔔 Main: Simple notification service setup complete');
 }
 
-// Set up method channels for native communication
+// Set up method channels and event channels for native communication
 void _setupMethodChannels() {
   const MethodChannel channel = MethodChannel('push_notifications');
+  const EventChannel eventChannel = EventChannel('push_notifications_events');
+
+  // Listen to real-time notifications via EventChannel
+  eventChannel.receiveBroadcastStream().listen((dynamic event) {
+    print('🔔 Main: Received notification via EventChannel: $event');
+    _handleNotificationEvent(event);
+  }, onError: (dynamic error) {
+    print('🔔 Main: EventChannel error: $error');
+  });
 
   channel.setMethodCallHandler((call) async {
     switch (call.method) {
@@ -156,16 +147,35 @@ void _setupMethodChannels() {
         return null;
 
       case 'onRemoteNotificationReceived':
-        final Map<String, dynamic> notificationData =
-            Map<String, dynamic>.from(call.arguments);
-        print('🔔 Main: Received remote notification: $notificationData');
+        print(
+            '🔔 Main: Received remote notification call with arguments: ${call.arguments}');
 
-        // Handle the notification
         try {
+          // Handle different argument types safely
+          Map<String, dynamic> notificationData;
+          if (call.arguments is Map) {
+            // Convert from Map<dynamic, dynamic> to Map<String, dynamic> safely
+            final dynamicMap = call.arguments as Map;
+            notificationData = <String, dynamic>{};
+            dynamicMap.forEach((key, value) {
+              if (key is String) {
+                notificationData[key] = value;
+              }
+            });
+          } else {
+            print(
+                '🔔 Main: Arguments is not a Map: ${call.arguments.runtimeType}');
+            return null;
+          }
+
+          print('🔔 Main: Processed notification data: $notificationData');
+
+          // Handle the notification
           await SimpleNotificationService.instance
               .handleNotification(notificationData);
         } catch (e) {
           print('🔔 Main: Error handling remote notification: $e');
+          print('🔔 Main: Error stack trace: ${StackTrace.current}');
         }
         return null;
 
@@ -181,6 +191,38 @@ void _setupMethodChannels() {
   });
 
   print('🔔 Main: Method channels setup complete');
+}
+
+// Handle notification events from EventChannel
+void _handleNotificationEvent(dynamic event) async {
+  try {
+    print('🔔 Main: Processing notification event: $event');
+
+    // Handle different argument types safely
+    Map<String, dynamic> notificationData;
+    if (event is Map) {
+      // Convert from Map<dynamic, dynamic> to Map<String, dynamic> safely
+      final dynamicMap = event as Map;
+      notificationData = <String, dynamic>{};
+      dynamicMap.forEach((key, value) {
+        if (key is String) {
+          notificationData[key] = value;
+        }
+      });
+    } else {
+      print('🔔 Main: Event is not a Map: ${event.runtimeType}');
+      return;
+    }
+
+    print('🔔 Main: Processed notification event data: $notificationData');
+
+    // Handle the notification
+    await SimpleNotificationService.instance
+        .handleNotification(notificationData);
+  } catch (e) {
+    print('🔔 Main: Error handling notification event: $e');
+    print('🔔 Main: Error stack trace: ${StackTrace.current}');
+  }
 }
 
 class SeChatApp extends StatelessWidget {

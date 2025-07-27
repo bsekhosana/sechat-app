@@ -289,29 +289,37 @@ Download now and let's chat securely!
   }
 
   void _blockUserFromInvitation(Invitation invitation) async {
-    final otherUserId = invitation.senderId;
+    // Get the Session ID of the user to block
+    final sessionId =
+        invitation.isReceived ? invitation.senderId : invitation.recipientId;
     final otherUser =
-        context.read<InvitationProvider>().getInvitationUser(otherUserId);
-    final username = otherUser?.username ?? 'Unknown User';
+        context.read<InvitationProvider>().getInvitationUser(sessionId);
+    final username = otherUser?.username ??
+        invitation.senderUsername ??
+        invitation.recipientUsername ??
+        'Unknown User';
 
     final confirmed = await _showBlockUserActionSheet(context, username);
 
     if (confirmed == true) {
       try {
-        final response = await ApiService.blockUser(otherUserId);
-        if (response['success'] == true) {
+        // Block user via Session ID using InvitationProvider
+        final success =
+            await context.read<InvitationProvider>().blockUser(sessionId);
+
+        if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response['message'] ?? 'User blocked successfully'),
+            const SnackBar(
+              content: Text('User blocked successfully'),
               backgroundColor: Colors.red,
             ),
           );
-          // Refresh invitations
-          context.read<InvitationProvider>().loadInvitations();
+          // No need to refresh invitations - the blocking method already updates the UI
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(response['message'] ?? 'Failed to block user'),
+              content: Text(
+                  'Failed to block user: ${context.read<InvitationProvider>().error}'),
               backgroundColor: Colors.red,
             ),
           );
@@ -566,7 +574,8 @@ Download now and let's chat securely!
                           ElevatedButton(
                             onPressed: () {
                               invitationProvider.clearError();
-                              invitationProvider.loadInvitations();
+                              invitationProvider.loadInvitations(
+                                  forceRefresh: true);
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFFF6B35),
@@ -579,14 +588,31 @@ Download now and let's chat securely!
                     );
                   }
                   final invitations = invitationProvider.invitations;
+                  print(
+                      '📱 InvitationsScreen: Total invitations: ${invitations.length}');
+
+                  // Debug: Print each invitation
+                  for (int i = 0; i < invitations.length; i++) {
+                    final inv = invitations[i];
+                    print(
+                        '📱 InvitationsScreen: Invitation $i: id=${inv.id}, isReceived=${inv.isReceived}, senderUsername=${inv.senderUsername}, recipientUsername=${inv.recipientUsername}');
+                  }
+
                   List<Invitation> filtered;
                   if (_tabIndex == 0) {
                     // Received
                     filtered = invitations.where((i) => i.isReceived).toList();
+                    print(
+                        '📱 InvitationsScreen: Received tab - filtered invitations: ${filtered.length}');
                   } else {
                     // Sent
                     filtered = invitations.where((i) => !i.isReceived).toList();
+                    print(
+                        '📱 InvitationsScreen: Sent tab - filtered invitations: ${filtered.length}');
                   }
+
+                  // Sort by creation time (newest first) to ensure latest invitations at top
+                  filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
                   if (filtered.isEmpty) {
                     return Center(
                       child: Column(

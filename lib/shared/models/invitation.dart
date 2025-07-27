@@ -51,8 +51,10 @@ class Invitation {
           ? DateTime.parse(json['declined_at'])
           : null,
       isReceived: json['is_received'] ?? false,
-      senderUsername: json['sender_username'] as String?,
-      recipientUsername: json['recipient_username'] as String?,
+      senderUsername: json['sender_username'] as String? ??
+          json['senderUsername'] as String?,
+      recipientUsername: json['recipient_username'] as String? ??
+          json['recipientUsername'] as String?,
     );
   }
 

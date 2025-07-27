@@ -12,6 +12,7 @@ import 'airnotifier_service.dart';
 import 'session_service.dart';
 import 'global_user_service.dart';
 import 'encryption_service.dart';
+import 'local_storage_service.dart';
 
 /// Simple, consolidated notification service with end-to-end encryption
 class SimpleNotificationService {
@@ -282,7 +283,35 @@ class SimpleNotificationService {
       print(
           '🔔 SimpleNotificationService: Handling notification: $notificationData');
 
-      final decryptedData = await processNotification(notificationData);
+      // Extract the actual data from the notification
+      Map<String, dynamic>? actualData;
+
+      // Check if data is nested under 'data' field (from Android logs)
+      if (notificationData.containsKey('data')) {
+        final dataField = notificationData['data'];
+        if (dataField is Map) {
+          // Convert to Map<String, dynamic> safely
+          actualData = <String, dynamic>{};
+          dataField.forEach((key, value) {
+            if (key is String) {
+              actualData![key] = value;
+            }
+          });
+          print(
+              '🔔 SimpleNotificationService: Found data in nested field: $actualData');
+        } else {
+          print(
+              '🔔 SimpleNotificationService: Data field is not a Map: $dataField');
+          actualData = notificationData;
+        }
+      } else {
+        // Check if data is at top level
+        actualData = notificationData;
+        print(
+            '🔔 SimpleNotificationService: Using top-level data: $actualData');
+      }
+
+      final decryptedData = await processNotification(actualData);
       if (decryptedData == null) {
         print('🔔 SimpleNotificationService: ❌ No decrypted data available');
         return;
@@ -318,6 +347,8 @@ class SimpleNotificationService {
       }
     } catch (e) {
       print('🔔 SimpleNotificationService: Error handling notification: $e');
+      print(
+          '🔔 SimpleNotificationService: Error stack trace: ${StackTrace.current}');
     }
   }
 
@@ -333,6 +364,9 @@ class SimpleNotificationService {
       return;
     }
 
+    print(
+        '🔔 SimpleNotificationService: Processing invitation from $senderName ($senderId)');
+
     // Show local notification
     await showLocalNotification(
       title: 'New Contact Invitation',
@@ -341,8 +375,47 @@ class SimpleNotificationService {
       data: data,
     );
 
-    // Trigger callback
-    _onInvitationReceived?.call(senderId, senderName, invitationId);
+    // Create invitation record and save to local storage
+    try {
+      final invitation = {
+        'id': invitationId,
+        'senderId': senderId,
+        'recipientId': SessionService.instance.currentSessionId ?? '',
+        'senderUsername': senderName,
+        'recipientUsername': GlobalUserService.instance.currentUsername ?? '',
+        'message': 'Contact request',
+        'status': 'pending',
+        'createdAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+        'is_received': true, // This is a received invitation
+      };
+
+      print(
+          '🔔 SimpleNotificationService: Saving invitation with data: $invitation');
+
+      // Save to local storage
+      await LocalStorageService.instance.saveInvitation(invitation);
+      print(
+          '🔔 SimpleNotificationService: ✅ Invitation saved to local storage');
+
+      // Verify the invitation was saved by reading it back
+      final savedInvitation =
+          LocalStorageService.instance.getInvitation(invitationId);
+      if (savedInvitation != null) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Invitation verified in storage: ${savedInvitation['senderUsername']}');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ❌ Invitation not found in storage after saving');
+      }
+
+      // Trigger callback for UI updates (this will update invitations screen in real-time)
+      _onInvitationReceived?.call(senderId, senderName, invitationId);
+      print(
+          '🔔 SimpleNotificationService: ✅ Invitation callback triggered - UI will update in real-time');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error saving invitation: $e');
+    }
   }
 
   /// Handle invitation response notification

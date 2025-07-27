@@ -149,6 +149,36 @@ Download now and let's chat securely!
             );
           }
         }
+      }
+
+      // Test invitation notification processing
+      print('🧪 Settings: Testing invitation notification processing...');
+      final testNotificationData = {
+        'data': {
+          'type': 'invitation',
+          'invitationId':
+              'test_manual_${DateTime.now().millisecondsSinceEpoch}',
+          'senderName': 'Manual Test User',
+          'senderId':
+              'manual_test_sender_${DateTime.now().millisecondsSinceEpoch}',
+          'message': 'Manual test invitation',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        }
+      };
+
+      await SimpleNotificationService.instance
+          .handleNotification(testNotificationData);
+      print('🧪 Settings: Manual invitation notification test completed');
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                '✅ Manual notification test completed! Check logs for details.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

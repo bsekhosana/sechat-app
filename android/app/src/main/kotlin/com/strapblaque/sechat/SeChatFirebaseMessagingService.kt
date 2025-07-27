@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import android.util.Log
+import io.flutter.plugin.common.MethodChannel
 
 class SeChatFirebaseMessagingService : FirebaseMessagingService() {
     
@@ -148,12 +149,40 @@ class SeChatFirebaseMessagingService : FirebaseMessagingService() {
             // Convert Map<String, String> to Map<String, Any> for Flutter
             val flutterData = data.mapValues { it.value as Any }
             
-            // Try to send to Flutter via MainActivity
+            // Wrap the data in the correct structure that Flutter expects
+            val wrappedData = HashMap<String, Any>()
+            wrappedData["data"] = HashMap(flutterData)
+            
+            Log.d("SeChatFCM", "Wrapped notification data for Flutter: $wrappedData")
+            
+            // Method 1: Try EventChannel first (most reliable)
+            try {
+                val mainActivity = MainActivity.instance
+                if (mainActivity != null) {
+                    // Use Handler to post to main thread from service context
+                    val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                    mainHandler.post {
+                        try {
+                            mainActivity.sendNotificationViaEventChannel(wrappedData)
+                            Log.d("SeChatFCM", "✅ EventChannel call successful")
+                        } catch (e: Exception) {
+                            Log.e("SeChatFCM", "EventChannel call failed: ${e.message}")
+                        }
+                    }
+                    return
+                } else {
+                    Log.d("SeChatFCM", "MainActivity not available for EventChannel")
+                }
+            } catch (e: Exception) {
+                Log.e("SeChatFCM", "EventChannel call failed: ${e.message}")
+            }
+            
+            // Method 2: Fallback to broadcast (this is already thread-safe)
             val intent = Intent("FORWARD_NOTIFICATION_TO_FLUTTER")
-            intent.putExtra("notification_data", HashMap(flutterData))
+            intent.putExtra("notification_data", wrappedData)
             sendBroadcast(intent)
             
-            Log.d("SeChatFCM", "Notification data forwarded to Flutter")
+            Log.d("SeChatFCM", "Fallback broadcast sent to MainActivity")
         } catch (e: Exception) {
             Log.e("SeChatFCM", "Error forwarding notification to Flutter: ${e.message}")
         }

@@ -141,7 +141,8 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  void _updateOrCreateChat(String userId, String userName, Message message) {
+  void _updateOrCreateChat(
+      String userId, String userName, Message message) async {
     final currentUserId = SessionService.instance.currentSessionId ?? '';
 
     // Find existing chat
@@ -167,6 +168,16 @@ class ChatProvider extends ChangeNotifier {
         },
       );
       _chats[existingChatIndex] = updatedChat;
+
+      // Save updated chat to local storage for persistence
+      try {
+        await LocalStorageService.instance.saveChat(updatedChat);
+        print(
+            '📱 ChatProvider: ✅ Updated chat saved to local storage: ${updatedChat.id}');
+      } catch (e) {
+        print(
+            '📱 ChatProvider: Error saving updated chat to local storage: $e');
+      }
     } else {
       // Create new chat
       final newChat = Chat(
@@ -197,6 +208,15 @@ class ChatProvider extends ChangeNotifier {
         isOnline: true,
         lastSeen: DateTime.now(),
       );
+
+      // Save new chat to local storage for persistence
+      try {
+        await LocalStorageService.instance.saveChat(newChat);
+        print(
+            '📱 ChatProvider: ✅ New chat saved to local storage: ${newChat.id}');
+      } catch (e) {
+        print('📱 ChatProvider: Error saving new chat to local storage: $e');
+      }
     }
   }
 
@@ -229,8 +249,17 @@ class ChatProvider extends ChangeNotifier {
     });
   }
 
-  void addMessageToChat(String chatId, Message message) {
+  void addMessageToChat(String chatId, Message message) async {
     _messages[chatId] = [...(_messages[chatId] ?? []), message];
+
+    // Save message to local storage for persistence
+    try {
+      await LocalStorageService.instance.saveMessage(message);
+      print('📱 ChatProvider: ✅ Message saved to local storage: ${message.id}');
+    } catch (e) {
+      print('📱 ChatProvider: Error saving message to local storage: $e');
+    }
+
     try {
       notifyListeners();
     } catch (e) {
@@ -239,12 +268,23 @@ class ChatProvider extends ChangeNotifier {
   }
 
   void updateMessageInChat(
-      String chatId, String messageId, Message updatedMessage) {
+      String chatId, String messageId, Message updatedMessage) async {
     final messages = _messages[chatId];
     if (messages != null) {
       final index = messages.indexWhere((m) => m.id == messageId);
       if (index != -1) {
         messages[index] = updatedMessage;
+
+        // Save updated message to local storage for persistence
+        try {
+          await LocalStorageService.instance.saveMessage(updatedMessage);
+          print(
+              '📱 ChatProvider: ✅ Updated message saved to local storage: ${updatedMessage.id}');
+        } catch (e) {
+          print(
+              '📱 ChatProvider: Error saving updated message to local storage: $e');
+        }
+
         try {
           notifyListeners();
         } catch (e) {
@@ -829,6 +869,10 @@ class ChatProvider extends ChangeNotifier {
         if (deleteType == 'for_everyone') {
           // Remove message from the list
           _messages[chatId] = messages.where((m) => m.id != messageId).toList();
+
+          // Delete from local storage
+          await LocalStorageService.instance
+              .deleteMessage(chatId, messageId, deleteForEveryone: true);
         } else {
           // Mark as deleted for me
           final messageIndex = messages.indexWhere((m) => m.id == messageId);
@@ -838,9 +882,18 @@ class ChatProvider extends ChangeNotifier {
               isDeleted: true,
             );
             messages[messageIndex] = updatedMessage;
+
+            // Update in local storage
+            await LocalStorageService.instance.saveMessage(updatedMessage);
           }
         }
+
+        // Save updated messages to local storage for persistence
+        await LocalStorageService.instance.saveMessages(_messages[chatId]!);
+
         notifyListeners();
+        print(
+            '📱 ChatProvider: ✅ Deleted message $messageId ($deleteType) and saved to local storage');
       }
     } catch (e) {
       print('📱 ChatProvider: Error deleting message: $e');

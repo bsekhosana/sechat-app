@@ -36,6 +36,29 @@ import UserNotifications
       binaryMessenger: controller.binaryMessenger
     )
     
+    // Set up EventChannel for real-time notifications
+    let eventChannel = FlutterEventChannel(
+      name: "push_notifications_events",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    // Store event sink for notifications
+    var notificationEventSink: FlutterEventSink?
+    
+    eventChannel.setStreamHandler(object: FlutterStreamHandler {
+      func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        print("📱 iOS: EventChannel listener attached")
+        notificationEventSink = events
+        return nil
+      }
+      
+      func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        print("📱 iOS: EventChannel listener detached")
+        notificationEventSink = nil
+        return nil
+      }
+    })
+    
     print("📱 iOS: Setting up push notifications method channel")
     
     pushChannel.setMethodCallHandler { [weak self] (call, result) in
@@ -687,14 +710,25 @@ extension AppDelegate {
       print("📱 iOS: Foreground Custom data: \(customData)")
     }
     
-    // Send enhanced notification to Flutter
+    // Send enhanced notification to Flutter via EventChannel first, then MethodChannel
     let controller = window?.rootViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(
-      name: "push_notifications",
-      binaryMessenger: controller.binaryMessenger
-    )
     
-    channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
+    // Try EventChannel first (most reliable)
+    if let eventSink = notificationEventSink {
+      eventSink(enhancedUserInfo)
+      print("📱 iOS: ✅ Notification sent via EventChannel")
+    } else {
+      print("📱 iOS: EventChannel not available, trying MethodChannel")
+      
+      // Fallback to MethodChannel
+      let channel = FlutterMethodChannel(
+        name: "push_notifications",
+        binaryMessenger: controller.binaryMessenger
+      )
+      
+      channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
+      print("📱 iOS: ✅ Notification sent via MethodChannel")
+    }
     
     completionHandler([.alert, .badge, .sound])
   }
@@ -732,14 +766,25 @@ extension AppDelegate {
       }
     }
     
-    // Send enhanced notification to Flutter
+    // Send enhanced notification to Flutter via EventChannel first, then MethodChannel
     let controller = window?.rootViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(
-      name: "push_notifications",
-      binaryMessenger: controller.binaryMessenger
-    )
     
-    channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
+    // Try EventChannel first (most reliable)
+    if let eventSink = notificationEventSink {
+      eventSink(enhancedUserInfo)
+      print("📱 iOS: ✅ Notification sent via EventChannel")
+    } else {
+      print("📱 iOS: EventChannel not available, trying MethodChannel")
+      
+      // Fallback to MethodChannel
+      let channel = FlutterMethodChannel(
+        name: "push_notifications",
+        binaryMessenger: controller.binaryMessenger
+      )
+      
+      channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
+      print("📱 iOS: ✅ Notification sent via MethodChannel")
+    }
     
     completionHandler()
   }
@@ -839,14 +884,25 @@ extension AppDelegate {
       print("📱 iOS: Custom data: \(customData)")
     }
     
-    // Send enhanced notification to Flutter
+    // Send enhanced notification to Flutter via EventChannel first, then MethodChannel
     let controller = window?.rootViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(
-      name: "push_notifications",
-      binaryMessenger: controller.binaryMessenger
-    )
     
-    channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
+    // Try EventChannel first (most reliable)
+    if let eventSink = notificationEventSink {
+      eventSink(enhancedUserInfo)
+      print("📱 iOS: ✅ Notification sent via EventChannel")
+    } else {
+      print("📱 iOS: EventChannel not available, trying MethodChannel")
+      
+      // Fallback to MethodChannel
+      let channel = FlutterMethodChannel(
+        name: "push_notifications",
+        binaryMessenger: controller.binaryMessenger
+      )
+      
+      channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
+      print("📱 iOS: ✅ Notification sent via MethodChannel")
+    }
     completionHandler(.newData)
   }
 }

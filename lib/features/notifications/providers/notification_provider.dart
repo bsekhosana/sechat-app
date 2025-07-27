@@ -114,6 +114,8 @@ class NotificationProvider extends ChangeNotifier {
         await _saveNotifications();
       } else {
         _notifications = notificationsList;
+        // Sort by timestamp (newest first) to ensure proper ordering
+        _notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       }
     } catch (e) {
       print('Error loading notifications: $e');
@@ -166,7 +168,12 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   void addNotification(LocalNotification notification) {
+    // Add new notification at the top (index 0)
     _notifications.insert(0, notification);
+
+    // Sort by timestamp (newest first) to ensure proper ordering
+    _notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
     _saveNotifications();
     notifyListeners();
   }
