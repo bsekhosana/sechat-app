@@ -730,57 +730,88 @@ class ChatProvider extends ChangeNotifier {
 
   // Public methods for UI compatibility
 
-  // Load chats from Session contacts
+  // Load chats from Session contacts and local storage
   Future<void> loadChats() async {
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      print('📱 ChatProvider: Loading chats from Session contacts...');
+      print(
+          '📱 ChatProvider: Loading chats from local storage and Session contacts...');
+
+      // First, load chats from local storage
+      final localChats = await LocalStorageService.instance.getChats();
+      print(
+          '📱 ChatProvider: Loaded ${localChats.length} chats from local storage');
 
       // Get contacts from Session Service
       final contacts = SessionService.instance.contacts;
+      print('📱 ChatProvider: Found ${contacts.length} Session contacts');
 
-      // Convert contacts to chats
-      _chats = contacts.values.map((contact) {
-        // Create a chat for each contact
-        final currentUserId =
-            SessionService.instance.currentIdentity?.sessionId ?? '';
-        final chat = Chat(
-          id: contact.sessionId,
-          user1Id: currentUserId,
-          user2Id: contact.sessionId,
-          lastMessageAt: contact.lastSeen,
-          createdAt: contact.lastSeen,
-          updatedAt: contact.lastSeen,
-          otherUser: {
-            'id': contact.sessionId,
-            'username': contact.name ?? 'Anonymous User',
-            'profile_picture': contact.profilePicture,
-            'is_online': contact.isOnline,
-            'last_seen': contact.lastSeen.toIso8601String(),
-          },
-        );
+      // Create a map of existing chats by user ID for easy lookup
+      final existingChatsMap = <String, Chat>{};
+      for (final chat in localChats) {
+        // For chats created from invitations, use the other user's ID as key
+        if (chat.user2Id != null) {
+          existingChatsMap[chat.user2Id!] = chat;
+        }
+      }
 
-        // Create user object for the contact
-        _chatUsers[contact.sessionId] = User(
-          id: contact.sessionId,
-          username: contact.name ?? 'Anonymous User',
-          profilePicture: contact.profilePicture,
-          isOnline: contact.isOnline,
-          lastSeen: contact.lastSeen,
-        );
+      // Merge Session contacts with existing chats
+      final mergedChats = <Chat>[];
 
-        return chat;
-      }).toList();
+      // Add existing local chats first
+      mergedChats.addAll(localChats);
+
+      // Add Session contacts that don't have existing chats
+      for (final contact in contacts.values) {
+        if (!existingChatsMap.containsKey(contact.sessionId)) {
+          // Create a new chat for this contact
+          final currentUserId =
+              SessionService.instance.currentIdentity?.sessionId ?? '';
+          final chat = Chat(
+            id: contact.sessionId,
+            user1Id: currentUserId,
+            user2Id: contact.sessionId,
+            lastMessageAt: contact.lastSeen,
+            createdAt: contact.lastSeen,
+            updatedAt: contact.lastSeen,
+            otherUser: {
+              'id': contact.sessionId,
+              'username': contact.name ?? 'Anonymous User',
+              'profile_picture': contact.profilePicture,
+              'is_online': contact.isOnline,
+              'last_seen': contact.lastSeen.toIso8601String(),
+            },
+          );
+
+          // Create user object for the contact
+          _chatUsers[contact.sessionId] = User(
+            id: contact.sessionId,
+            username: contact.name ?? 'Anonymous User',
+            profilePicture: contact.profilePicture,
+            isOnline: contact.isOnline,
+            lastSeen: contact.lastSeen,
+          );
+
+          mergedChats.add(chat);
+          print('📱 ChatProvider: Added new chat for contact: ${contact.name}');
+        }
+      }
+
+      // Sort chats by last message time (newest first)
+      mergedChats.sort((a, b) => (b.lastMessageAt ?? DateTime.now())
+          .compareTo(a.lastMessageAt ?? DateTime.now()));
+
+      _chats = mergedChats;
 
       // Load messages for each chat
       for (final chat in _chats) {
         await _loadMessagesForChat(chat.id);
       }
 
-      print('📱 ChatProvider: Loaded ${_chats.length} chats');
+      print('📱 ChatProvider: Loaded ${_chats.length} total chats');
     } catch (e) {
       print('📱 ChatProvider: Error loading chats: $e');
       _error = 'Failed to load chats: $e';
@@ -826,6 +857,61 @@ class ChatProvider extends ChangeNotifier {
   void setUserInactiveInChat(String chatId) {
     _activeChatScreens.remove(chatId);
     notifyListeners();
+  }
+
+  // Add a new chat to the provider (for when invitations are accepted)
+  Future<void> addNewChat(Chat chat) async {
+    try {
+      print('📱 ChatProvider: Adding new chat: ${chat.id}');
+
+      // Check if chat already exists
+      final existingIndex = _chats.indexWhere((c) => c.id == chat.id);
+      if (existingIndex != -1) {
+        print('📱 ChatProvider: Chat already exists, updating: ${chat.id}');
+        _chats[existingIndex] = chat;
+      } else {
+        print('📱 ChatProvider: Adding new chat to list: ${chat.id}');
+        _chats.add(chat);
+      }
+
+      // Sort chats by last message time (newest first)
+      _chats.sort((a, b) => (b.lastMessageAt ?? DateTime.now())
+          .compareTo(a.lastMessageAt ?? DateTime.now()));
+
+      // Load messages for this chat
+      await _loadMessagesForChat(chat.id);
+
+      notifyListeners();
+      print('📱 ChatProvider: ✅ New chat added successfully: ${chat.id}');
+    } catch (e) {
+      print('📱 ChatProvider: Error adding new chat: $e');
+    }
+  }
+
+  // Clear all data (for account deletion)
+  Future<void> clearAllData() async {
+    try {
+      print('📱 ChatProvider: Clearing all chat data...');
+
+      _chats.clear();
+      _messages.clear();
+      _chatUsers.clear();
+      _unreadCounts.clear();
+      _activeChatScreens.clear();
+      _isLoading = false;
+      _error = null;
+
+      // Cancel all message status timers
+      for (final timer in _messageStatusTimers.values) {
+        timer.cancel();
+      }
+      _messageStatusTimers.clear();
+
+      notifyListeners();
+      print('📱 ChatProvider: ✅ All chat data cleared');
+    } catch (e) {
+      print('📱 ChatProvider: Error clearing all data: $e');
+    }
   }
 
   // Refresh user online status

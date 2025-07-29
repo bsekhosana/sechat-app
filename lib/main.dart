@@ -41,6 +41,23 @@ Future<void> main() async {
   // Initialize simple notification service (without session ID - will be set later)
   await SimpleNotificationService.instance.initialize();
 
+  // Restore session data if it exists
+  print('🔔 Main: Checking for existing session data...');
+  final hasExistingSession = await SessionService.instance.hasExistingSession();
+  if (hasExistingSession) {
+    print('🔔 Main: Found existing session, restoring...');
+    try {
+      await SessionService.instance.restoreSession();
+      print('🔔 Main: ✅ Session restored successfully');
+    } catch (e) {
+      print('🔔 Main: ❌ Failed to restore session: $e');
+      print('🔔 Main: Will create new session on first use');
+    }
+  } else {
+    print(
+        '🔔 Main: No existing session found, will create new one on first use');
+  }
+
   // Set up notification callbacks
   _setupSimpleNotifications();
 
@@ -91,10 +108,13 @@ void _setupSimpleNotifications() {
     });
   });
 
-  notificationService
-      .setOnInvitationResponse((responderId, responderName, status) async {
+  notificationService.setOnInvitationResponse(
+      (responderId, responderName, status, {conversationGuid}) async {
     print(
         '🔔 Main: Invitation response from $responderName ($responderId): $status');
+    if (conversationGuid != null) {
+      print('🔔 Main: Conversation GUID provided: $conversationGuid');
+    }
     // The notification will be handled by the SimpleNotificationService
     // which will show a local notification and trigger UI updates
     print('🔔 Main: ✅ Invitation response notification processed');

@@ -12,6 +12,7 @@ import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/simple_notification_service.dart';
 import '../../../core/services/global_user_service.dart';
 import '../../../core/utils/guid_generator.dart';
+import '../../chat/providers/chat_provider.dart';
 import 'dart:async';
 
 class InvitationProvider extends ChangeNotifier {
@@ -128,7 +129,8 @@ class InvitationProvider extends ChangeNotifier {
 
   // Handle invitation response notification
   Future<void> handleInvitationResponse(
-      String responderId, String responderName, String status) async {
+      String responderId, String responderName, String status,
+      {String? conversationGuid}) async {
     print(
         '📱 InvitationProvider: Received invitation response from $responderName ($responderId): $status');
 
@@ -143,6 +145,10 @@ class InvitationProvider extends ChangeNotifier {
       final updatedInvitation = oldInvitation.copyWith(
         status: status,
         updatedAt: DateTime.now(),
+        // Add a flag to indicate this invitation has been processed
+        message: status == 'accepted'
+            ? 'Invitation accepted - conversation created'
+            : 'Invitation declined',
       );
 
       _invitations[invitationIndex] = updatedInvitation;
@@ -154,7 +160,7 @@ class InvitationProvider extends ChangeNotifier {
       // If invitation was accepted, create conversation for the sender
       if (status == 'accepted') {
         await _createConversationForSender(
-            oldInvitation, responderId, responderName);
+            oldInvitation, responderId, responderName, conversationGuid);
       }
 
       notifyListeners();
@@ -167,20 +173,24 @@ class InvitationProvider extends ChangeNotifier {
 
   // Create conversation for the sender when invitation is accepted
   Future<void> _createConversationForSender(
-      Invitation invitation, String responderId, String responderName) async {
+      Invitation invitation,
+      String responderId,
+      String responderName,
+      String? conversationGuid) async {
     try {
       print(
           '📱 InvitationProvider: Creating conversation for sender after acceptance');
 
-      // Generate conversation GUID (should match the one from the accepter)
-      final conversationGuid = GuidGenerator.generateGuid();
+      // Use provided conversation GUID or generate a new one
+      final finalConversationGuid =
+          conversationGuid ?? GuidGenerator.generateGuid();
 
       final currentUserId = SessionService.instance.currentSessionId ?? '';
       final otherUserId = responderId;
 
       // Create new conversation for the sender
       final newChat = Chat(
-        id: conversationGuid,
+        id: finalConversationGuid,
         user1Id: currentUserId,
         user2Id: otherUserId,
         status: 'active',
@@ -201,12 +211,12 @@ class InvitationProvider extends ChangeNotifier {
       // Save conversation to local storage
       await LocalStorageService.instance.saveChat(newChat);
       print(
-          '📱 InvitationProvider: ✅ Conversation created for sender: $conversationGuid');
+          '📱 InvitationProvider: ✅ Conversation created for sender: $finalConversationGuid');
 
       // Create initial message for the conversation
       final initialMessage = Message(
         id: GuidGenerator.generateShortId(),
-        chatId: conversationGuid,
+        chatId: finalConversationGuid,
         senderId: 'system',
         content: 'You are now connected with $responderName',
         createdAt: DateTime.now(),
@@ -972,6 +982,13 @@ class InvitationProvider extends ChangeNotifier {
       print(
           '📱 InvitationProvider: ✅ Initial message saved: ${initialMessage.id}');
 
+      // Note: The new chat will be loaded by ChatProvider.loadChats()
+      // which now merges local storage chats with Session contacts
+      // The chat is already saved to local storage above, so it will appear
+      // when the chat screen is refreshed or when loadChats() is called
+      print(
+          '📱 InvitationProvider: ✅ New chat ready for ChatProvider to load: $conversationGuid');
+
       // Send invitation response notification to the original sender
       final responseSuccess =
           await SimpleNotificationService.instance.sendInvitationResponse(
@@ -1004,6 +1021,25 @@ class InvitationProvider extends ChangeNotifier {
           'otherUserName': otherUserName,
         },
       );
+
+      // Update the invitation status to prevent duplication
+      // This ensures that when the response notification is received,
+      // it won't create a duplicate invitation
+      final finalUpdatedInvitation = updatedInvitation.copyWith(
+        status: 'accepted',
+        updatedAt: DateTime.now(),
+        // Add a flag to indicate this invitation has been processed
+        message: 'Invitation accepted - conversation created',
+      );
+
+      final finalIndex =
+          _invitations.indexWhere((inv) => inv.id == invitationId);
+      if (finalIndex != -1) {
+        _invitations[finalIndex] = finalUpdatedInvitation;
+        // Save the final updated invitation
+        await LocalStorageService.instance
+            .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+      }
 
       notifyListeners();
       print(
@@ -1102,6 +1138,24 @@ class InvitationProvider extends ChangeNotifier {
     } catch (e) {
       print('📱 InvitationProvider: Error deleting invitation: $e');
       return false;
+    }
+  }
+
+  // Clear all data (for account deletion)
+  Future<void> clearAllData() async {
+    try {
+      print('📱 InvitationProvider: Clearing all invitation data...');
+
+      _invitations.clear();
+      _invitationUsers.clear();
+      _isLoading = false;
+      _error = null;
+      _isSyncingPendingInvitations = false;
+
+      notifyListeners();
+      print('📱 InvitationProvider: ✅ All invitation data cleared');
+    } catch (e) {
+      print('📱 InvitationProvider: Error clearing all data: $e');
     }
   }
 

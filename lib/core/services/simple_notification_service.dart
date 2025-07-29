@@ -35,7 +35,8 @@ class SimpleNotificationService {
 
   // Callbacks for notification handling
   Function(String, String, String)? _onInvitationReceived;
-  Function(String, String, String)? _onInvitationResponse;
+  Function(String, String, String, {String? conversationGuid})?
+      _onInvitationResponse;
   Function(String, String, String)? _onMessageReceived;
   Function(String, bool)? _onTypingIndicator;
 
@@ -529,8 +530,9 @@ class SimpleNotificationService {
           responderId, responderName, conversationGuid);
     }
 
-    // Trigger callback
-    _onInvitationResponse?.call(responderId, responderName, response);
+    // Trigger callback with conversation GUID if available
+    _onInvitationResponse?.call(responderId, responderName, response,
+        conversationGuid: conversationGuid);
   }
 
   /// Create conversation for sender when invitation is accepted
@@ -873,7 +875,8 @@ class SimpleNotificationService {
 
   /// Set invitation response callback
   void setOnInvitationResponse(
-      Function(String responderId, String responderName, String status)
+      Function(String responderId, String responderName, String status,
+              {String? conversationGuid})
           callback) {
     _onInvitationResponse = callback;
   }

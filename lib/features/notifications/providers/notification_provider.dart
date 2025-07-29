@@ -190,6 +190,24 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Clear all data (for account deletion)
+  Future<void> clearAllData() async {
+    try {
+      print('📱 NotificationProvider: Clearing all notification data...');
+
+      _notifications.clear();
+      _isLoading = false;
+
+      // Clear from Hive storage as well
+      await _notificationsBox.clear();
+
+      notifyListeners();
+      print('📱 NotificationProvider: ✅ All notification data cleared');
+    } catch (e) {
+      print('📱 NotificationProvider: Error clearing all data: $e');
+    }
+  }
+
   // Add message notification
   void addMessageNotification({
     required String senderId,

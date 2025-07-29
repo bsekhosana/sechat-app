@@ -716,11 +716,11 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF2C2C2C),
         title: const Text(
-          'Clear All Data',
+          'Delete Account & Clear All Data',
           style: TextStyle(color: Colors.red),
         ),
         content: const Text(
-          'This will delete ALL your chats, messages, and files. This action cannot be undone.',
+          'This will permanently delete your account and ALL your data including:\n\n• Session identity and keys\n• All contacts and conversations\n• All messages and files\n• All invitations and notifications\n\nThis action cannot be undone.',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -732,7 +732,7 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Clear All'),
+            child: const Text('Delete Account'),
           ),
         ],
       ),
@@ -740,22 +740,48 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
 
     if (confirmed == true) {
       try {
+        print('🗑️ Settings: Starting account deletion process...');
+
+        // Clear all session data first
+        await SessionService.instance.clearAllData();
+        print('🗑️ Settings: ✅ Session data cleared');
+
+        // Clear all local storage data
         await LocalStorageService.instance.clearAllData();
+        print('🗑️ Settings: ✅ Local storage data cleared');
+
+        // Clear all provider data
+        context.read<ChatProvider>().clearAllData();
+        context.read<InvitationProvider>().clearAllData();
+        context.read<NotificationProvider>().clearAllData();
+        print('🗑️ Settings: ✅ Provider data cleared');
+
         await _loadStorageStats();
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('All data cleared successfully'),
+              content:
+                  Text('Account deleted and all data cleared successfully'),
               backgroundColor: Color(0xFF4CAF50),
+              duration: Duration(seconds: 3),
             ),
+          );
+
+          // Navigate to welcome screen after account deletion
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            '/welcome',
+            (route) => false,
           );
         }
       } catch (e) {
+        print('🗑️ Settings: Error during account deletion: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error clearing data: $e'),
+              content: Text('Error deleting account: $e'),
               backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
             ),
           );
         }

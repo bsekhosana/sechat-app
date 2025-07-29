@@ -177,6 +177,90 @@ class SessionService {
     }
   }
 
+  // Restore session from persistent storage
+  Future<void> restoreSession() async {
+    try {
+      print('🔐 Session: Restoring session from persistent storage...');
+
+      // Check if session data exists
+      final hasIdentity = await _storage.containsKey(key: 'session_identity');
+      if (!hasIdentity) {
+        print('🔐 Session: No existing session found, will create new one');
+        return;
+      }
+
+      // Load existing identity
+      await _loadOrCreateIdentity();
+
+      // Load contacts and conversations
+      await _loadContacts();
+      await _loadConversations();
+
+      // Initialize native SDK with restored data
+      await _initializeNativeSDK();
+
+      _isInitialized = true;
+      print('🔐 Session: Session restored successfully');
+      print('🔐 Session: Identity: ${_currentIdentity?.sessionId}');
+      print('🔐 Session: Contacts: ${_contacts.length}');
+      print('🔐 Session: Conversations: ${_conversations.length}');
+    } catch (e) {
+      print('🔐 Session: Error restoring session: $e');
+      // If restoration fails, clear corrupted data and start fresh
+      await _clearCorruptedData();
+      rethrow;
+    }
+  }
+
+  // Save current session state to persistent storage
+  Future<void> persistSession() async {
+    try {
+      print('🔐 Session: Persisting session data...');
+
+      if (_currentIdentity != null) {
+        await _storage.write(
+          key: 'session_identity',
+          value: json.encode(_currentIdentity!.toJson()),
+        );
+        print('🔐 Session: ✅ Identity persisted');
+      }
+
+      await _saveContacts();
+      await _saveConversations();
+
+      // Save session state
+      await _storage.write(
+        key: 'session_state',
+        value: json.encode({
+          'isInitialized': _isInitialized,
+          'isConnected': _isConnected,
+          'lastSaved': DateTime.now().toIso8601String(),
+        }),
+      );
+
+      print('🔐 Session: ✅ Session data persisted successfully');
+    } catch (e) {
+      print('🔐 Session: Error persisting session: $e');
+      rethrow;
+    }
+  }
+
+  // Clear corrupted data and start fresh
+  Future<void> _clearCorruptedData() async {
+    try {
+      print('🔐 Session: Clearing corrupted session data...');
+      await _storage.deleteAll();
+      _currentIdentity = null;
+      _contacts.clear();
+      _conversations.clear();
+      _isInitialized = false;
+      _isConnected = false;
+      print('🔐 Session: ✅ Corrupted data cleared');
+    } catch (e) {
+      print('🔐 Session: Error clearing corrupted data: $e');
+    }
+  }
+
   Future<void> _loadOrCreateIdentity() async {
     try {
       final identityJson = await _storage.read(key: 'session_identity');
@@ -361,18 +445,81 @@ class SessionService {
   // Clear all data (for account deletion)
   Future<void> clearAllData() async {
     try {
+      print('🔐 Session: Clearing all session data (account deletion)...');
+
+      // Disconnect from network first
+      if (_isConnected) {
+        await disconnect();
+      }
+
+      // Clear in-memory data
       _currentIdentity = null;
       _contacts.clear();
       _conversations.clear();
+      _isInitialized = false;
+      _isConnected = false;
 
       // Clear all stored data
       await _storage.deleteAll();
 
-      print('🔐 Session: All data cleared');
+      print('🔐 Session: ✅ All session data cleared');
     } catch (e) {
       print('🔐 Session: Error clearing all data: $e');
       rethrow;
     }
+  }
+
+  // Handle app lifecycle events
+  Future<void> onAppPaused() async {
+    try {
+      print('🔐 Session: App paused - persisting session data...');
+      await persistSession();
+    } catch (e) {
+      print('🔐 Session: Error persisting session on app pause: $e');
+    }
+  }
+
+  Future<void> onAppResumed() async {
+    try {
+      print('🔐 Session: App resumed - checking session state...');
+      // Session data is already loaded, just verify state
+      if (_isInitialized && _currentIdentity != null) {
+        print('🔐 Session: Session state verified on resume');
+      }
+    } catch (e) {
+      print('🔐 Session: Error checking session state on resume: $e');
+    }
+  }
+
+  Future<void> onAppDetached() async {
+    try {
+      print('🔐 Session: App detached - final session persistence...');
+      await persistSession();
+    } catch (e) {
+      print('🔐 Session: Error persisting session on app detach: $e');
+    }
+  }
+
+  // Check if session data exists
+  Future<bool> hasExistingSession() async {
+    try {
+      return await _storage.containsKey(key: 'session_identity');
+    } catch (e) {
+      print('🔐 Session: Error checking for existing session: $e');
+      return false;
+    }
+  }
+
+  // Get session info for debugging
+  Map<String, dynamic> getSessionInfo() {
+    return {
+      'isInitialized': _isInitialized,
+      'isConnected': _isConnected,
+      'hasIdentity': _currentIdentity != null,
+      'identitySessionId': _currentIdentity?.sessionId,
+      'contactsCount': _contacts.length,
+      'conversationsCount': _conversations.length,
+    };
   }
 
   // Send message
