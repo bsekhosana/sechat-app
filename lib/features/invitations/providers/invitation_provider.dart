@@ -21,10 +21,16 @@ class InvitationProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isSyncingPendingInvitations = false;
+  final Map<String, bool> _loadingInvitations =
+      {}; // Track loading state per invitation
 
   List<Invitation> get invitations => _invitations;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  // Check if a specific invitation is loading
+  bool isInvitationLoading(String invitationId) =>
+      _loadingInvitations[invitationId] ?? false;
 
   User? getInvitationUser(String userId) {
     return _invitationUsers[userId];
@@ -72,6 +78,8 @@ class InvitationProvider extends ChangeNotifier {
       String senderId, String senderName, String invitationId) async {
     print(
         '📱 InvitationProvider: Received invitation from $senderName ($senderId) with ID: $invitationId');
+    print(
+        '📱 InvitationProvider: Current invitations count: ${_invitations.length}');
 
     // Check if invitation already exists
     final existingInvitationIndex =
@@ -91,6 +99,33 @@ class InvitationProvider extends ChangeNotifier {
       print(
           '📱 InvitationProvider: Updated existing invitation: $invitationId');
     } else {
+      // Check if this might be an invitation response (to prevent duplicates)
+      final isResponseInvitation = _invitations.any((inv) =>
+          inv.senderId == senderId &&
+          (inv.status == 'accepted' || inv.status == 'declined'));
+
+      // Also check if there's already an invitation from this sender (regardless of status)
+      final existingInvitationFromSender =
+          _invitations.any((inv) => inv.senderId == senderId);
+
+      // Check if this invitation ID already exists (prevent exact duplicates)
+      final existingInvitationById =
+          _invitations.any((inv) => inv.id == invitationId);
+
+      // Check if this looks like a response notification (has response data)
+      final isResponseNotification = invitationId.contains('response') ||
+          invitationId.contains('accepted') ||
+          invitationId.contains('declined');
+
+      if (isResponseInvitation ||
+          existingInvitationFromSender ||
+          existingInvitationById ||
+          isResponseNotification) {
+        print(
+            '📱 InvitationProvider: Skipping duplicate invitation - already have invitation from $senderId or ID exists or looks like response: $invitationId');
+        return;
+      }
+
       // Create new invitation record
       final invitation = Invitation(
         id: invitationId,
@@ -121,6 +156,9 @@ class InvitationProvider extends ChangeNotifier {
     // Save to local storage
     await LocalStorageService.instance
         .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+
+    // Remove any duplicate invitations
+    await removeDuplicateInvitations();
 
     notifyListeners();
     print(
@@ -162,6 +200,15 @@ class InvitationProvider extends ChangeNotifier {
         await _createConversationForSender(
             oldInvitation, responderId, responderName, conversationGuid);
       }
+
+      // Add invitation update notification for the sender (current user)
+      // This notification goes to the person who originally sent the invitation
+      await _addInvitationUpdateNotification(
+        invitationId: oldInvitation.id,
+        otherUserName: responderName,
+        status: status,
+        conversationGuid: status == 'accepted' ? conversationGuid : null,
+      );
 
       notifyListeners();
       print('📱 InvitationProvider: Updated invitation status to: $status');
@@ -249,10 +296,22 @@ class InvitationProvider extends ChangeNotifier {
   }
 
   void _handleLocalStorageChange() {
+    if (_isHandlingLocalStorageChange) {
+      print(
+          '📱 InvitationProvider: Local storage change handler already in progress, skipping...');
+      return;
+    }
+
+    _isHandlingLocalStorageChange = true;
     print(
         '📱 InvitationProvider: Local storage changed, reloading invitations...');
     _loadInvitationsFromLocal();
     _scheduleNotifyListeners();
+
+    // Reset flag after a delay to prevent immediate re-triggering
+    Timer(const Duration(milliseconds: 500), () {
+      _isHandlingLocalStorageChange = false;
+    });
   }
 
   void _scheduleNotifyListeners() {
@@ -267,6 +326,7 @@ class InvitationProvider extends ChangeNotifier {
   }
 
   bool _isHandlingNetworkChange = false;
+  bool _isHandlingLocalStorageChange = false;
 
   void _handleNetworkChange() {
     if (_isHandlingNetworkChange) {
@@ -337,6 +397,9 @@ class InvitationProvider extends ChangeNotifier {
         print(
             '📱 InvitationProvider: Loaded invitation $i: ${_invitations[i].toJson()}');
       }
+
+      // Remove any duplicate invitations after loading
+      await removeDuplicateInvitations();
 
       notifyListeners();
       print('📱 InvitationProvider: ✅ Notified listeners of invitation update');
@@ -883,6 +946,16 @@ class InvitationProvider extends ChangeNotifier {
         // Continue anyway - we've already blocked locally
       }
 
+      // Add invitation update notification for blocking
+      final otherUserName = invitation.senderUsername ??
+          invitation.recipientUsername ??
+          'Unknown User';
+      await _addInvitationUpdateNotification(
+        invitationId: invitation.id,
+        otherUserName: otherUserName,
+        status: 'blocked',
+      );
+
       notifyListeners();
       print('📱 InvitationProvider: ✅ User blocked successfully: $sessionId');
       return true;
@@ -897,14 +970,25 @@ class InvitationProvider extends ChangeNotifier {
   // Accept invitation (Session Protocol equivalent)
   Future<bool> acceptInvitation(String invitationId) async {
     try {
+      // Set loading state for this invitation
+      _loadingInvitations[invitationId] = true;
+      notifyListeners();
+
       print('📱 InvitationProvider: Accepting invitation: $invitationId');
+      print(
+          '📱 InvitationProvider: Current invitations count: ${_invitations.length}');
 
       final invitation =
           _invitations.firstWhere((inv) => inv.id == invitationId);
+      print('📱 InvitationProvider: Found invitation: ${invitation.toJson()}');
+
       final currentUserId = SessionService.instance.currentSessionId ?? '';
       final otherUserId =
           invitation.senderId; // The person who sent the invitation
       final otherUserName = invitation.senderUsername ?? 'Unknown User';
+
+      print('📱 InvitationProvider: Current user: $currentUserId');
+      print('📱 InvitationProvider: Other user: $otherUserId ($otherUserName)');
 
       // Update invitation status
       final updatedInvitation = invitation.copyWith(
@@ -913,8 +997,13 @@ class InvitationProvider extends ChangeNotifier {
       );
 
       final index = _invitations.indexWhere((inv) => inv.id == invitationId);
+      print('📱 InvitationProvider: Found invitation at index: $index');
+
       if (index != -1) {
         _invitations[index] = updatedInvitation;
+        print('📱 InvitationProvider: ✅ Updated invitation status to accepted');
+      } else {
+        print('📱 InvitationProvider: ❌ Could not find invitation to update');
       }
 
       // Save updated invitation to local storage
@@ -1008,19 +1097,9 @@ class InvitationProvider extends ChangeNotifier {
             '📱 InvitationProvider: ⚠️ Failed to send invitation response notification');
       }
 
-      // Add local notification for the accepter
-      await SimpleNotificationService.instance.showLocalNotification(
-        title: 'Invitation Accepted',
-        body: 'You are now connected with $otherUserName',
-        type: 'invitation_response',
-        data: {
-          'invitationId': invitationId,
-          'response': 'accepted',
-          'conversationGuid': conversationGuid,
-          'otherUserId': otherUserId,
-          'otherUserName': otherUserName,
-        },
-      );
+      // Note: No local notification for the accepter - they just accepted it
+      // The invitation update notification will be sent to the original sender
+      // via the sendInvitationResponse call above
 
       // Update the invitation status to prevent duplication
       // This ensures that when the response notification is received,
@@ -1036,10 +1115,28 @@ class InvitationProvider extends ChangeNotifier {
           _invitations.indexWhere((inv) => inv.id == invitationId);
       if (finalIndex != -1) {
         _invitations[finalIndex] = finalUpdatedInvitation;
+
+        // Temporarily disable local storage change handler to prevent loop
+        _isHandlingLocalStorageChange = true;
+
         // Save the final updated invitation
         await LocalStorageService.instance
             .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+
+        // Re-enable after a short delay
+        Timer(const Duration(milliseconds: 100), () {
+          _isHandlingLocalStorageChange = false;
+        });
+
+        print(
+            '📱 InvitationProvider: ✅ Final invitation update saved to prevent duplicates');
       }
+
+      // Clear loading state for this invitation
+      _loadingInvitations[invitationId] = false;
+
+      // Ensure the updated invitation is properly saved and persisted
+      await _ensureInvitationPersisted(updatedInvitation);
 
       notifyListeners();
       print(
@@ -1048,6 +1145,8 @@ class InvitationProvider extends ChangeNotifier {
     } catch (e) {
       print('📱 InvitationProvider: Error accepting invitation: $e');
       _error = 'Failed to accept invitation: $e';
+      // Clear loading state on error too
+      _loadingInvitations[invitationId] = false;
       notifyListeners();
       return false;
     }
@@ -1056,6 +1155,10 @@ class InvitationProvider extends ChangeNotifier {
   // Decline invitation
   Future<bool> declineInvitation(String invitationId) async {
     try {
+      // Set loading state for this invitation
+      _loadingInvitations[invitationId] = true;
+      notifyListeners();
+
       print('📱 InvitationProvider: Declining invitation: $invitationId');
 
       final invitation =
@@ -1075,9 +1178,17 @@ class InvitationProvider extends ChangeNotifier {
         _invitations[index] = updatedInvitation;
       }
 
+      // Temporarily disable local storage change handler to prevent loop
+      _isHandlingLocalStorageChange = true;
+
       // Save updated invitation to local storage
       await LocalStorageService.instance
           .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+
+      // Re-enable after a short delay
+      Timer(const Duration(milliseconds: 100), () {
+        _isHandlingLocalStorageChange = false;
+      });
 
       // Send invitation response notification to the original sender
       final responseSuccess =
@@ -1097,18 +1208,15 @@ class InvitationProvider extends ChangeNotifier {
             '📱 InvitationProvider: ⚠️ Failed to send invitation response notification');
       }
 
-      // Add local notification for the decliner
-      await SimpleNotificationService.instance.showLocalNotification(
-        title: 'Invitation Declined',
-        body: 'You declined the invitation from $otherUserName',
-        type: 'invitation_response',
-        data: {
-          'invitationId': invitationId,
-          'response': 'declined',
-          'otherUserId': otherUserId,
-          'otherUserName': otherUserName,
-        },
-      );
+      // Note: No local notification for the decliner - they just declined it
+      // The invitation update notification will be sent to the original sender
+      // via the sendInvitationResponse call above
+
+      // Clear loading state for this invitation
+      _loadingInvitations[invitationId] = false;
+
+      // Ensure the updated invitation is properly saved and persisted
+      await _ensureInvitationPersisted(updatedInvitation);
 
       notifyListeners();
       print(
@@ -1117,6 +1225,8 @@ class InvitationProvider extends ChangeNotifier {
     } catch (e) {
       print('📱 InvitationProvider: Error declining invitation: $e');
       _error = 'Failed to decline invitation: $e';
+      // Clear loading state on error too
+      _loadingInvitations[invitationId] = false;
       notifyListeners();
       return false;
     }
@@ -1156,6 +1266,139 @@ class InvitationProvider extends ChangeNotifier {
       print('📱 InvitationProvider: ✅ All invitation data cleared');
     } catch (e) {
       print('📱 InvitationProvider: Error clearing all data: $e');
+    }
+  }
+
+  // Ensure invitation is properly persisted to local storage
+  Future<void> _ensureInvitationPersisted(Invitation invitation) async {
+    try {
+      print(
+          '📱 InvitationProvider: Ensuring invitation persistence: ${invitation.id}');
+
+      // Find and update the invitation in the list
+      final index = _invitations.indexWhere((inv) => inv.id == invitation.id);
+      if (index != -1) {
+        _invitations[index] = invitation;
+      } else {
+        // If not found, add it to the list
+        _invitations.add(invitation);
+      }
+
+      // Sort invitations by creation date (newest first)
+      _invitations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      // Temporarily disable local storage change handler to prevent loop
+      _isHandlingLocalStorageChange = true;
+
+      // Save to local storage
+      await LocalStorageService.instance
+          .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+
+      // Re-enable after a short delay
+      Timer(const Duration(milliseconds: 100), () {
+        _isHandlingLocalStorageChange = false;
+      });
+
+      print(
+          '📱 InvitationProvider: ✅ Invitation persistence ensured: ${invitation.id}');
+    } catch (e) {
+      print('📱 InvitationProvider: Error ensuring invitation persistence: $e');
+    }
+  }
+
+  // Remove duplicate invitations (keep only the most recent one per sender)
+  Future<void> removeDuplicateInvitations() async {
+    try {
+      print('📱 InvitationProvider: Checking for duplicate invitations...');
+
+      final Map<String, Invitation> uniqueInvitations = {};
+
+      for (final invitation in _invitations) {
+        final key = invitation.senderId;
+        if (!uniqueInvitations.containsKey(key) ||
+            invitation.createdAt.isAfter(uniqueInvitations[key]!.createdAt)) {
+          uniqueInvitations[key] = invitation;
+        }
+      }
+
+      final originalCount = _invitations.length;
+      _invitations = uniqueInvitations.values.toList();
+      final newCount = _invitations.length;
+
+      if (originalCount != newCount) {
+        print(
+            '📱 InvitationProvider: Removed ${originalCount - newCount} duplicate invitations');
+
+        // Temporarily disable local storage change handler to prevent loop
+        _isHandlingLocalStorageChange = true;
+
+        // Save updated list to local storage
+        await LocalStorageService.instance
+            .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+
+        // Re-enable after a short delay
+        Timer(const Duration(milliseconds: 100), () {
+          _isHandlingLocalStorageChange = false;
+        });
+
+        notifyListeners();
+      } else {
+        print('📱 InvitationProvider: No duplicate invitations found');
+      }
+    } catch (e) {
+      print('📱 InvitationProvider: Error removing duplicate invitations: $e');
+    }
+  }
+
+  // Add invitation update notification
+  Future<void> _addInvitationUpdateNotification({
+    required String invitationId,
+    required String otherUserName,
+    required String status,
+    String? conversationGuid,
+  }) async {
+    try {
+      print(
+          '📱 InvitationProvider: Adding invitation update notification for $status');
+
+      String title;
+      String body;
+
+      switch (status) {
+        case 'accepted':
+          title = 'Invitation Accepted';
+          body = '$otherUserName accepted your invitation';
+          break;
+        case 'declined':
+          title = 'Invitation Declined';
+          body = '$otherUserName declined your invitation';
+          break;
+        case 'blocked':
+          title = 'User Blocked';
+          body = '$otherUserName has been blocked';
+          break;
+        default:
+          title = 'Invitation Update';
+          body = 'Your invitation to $otherUserName was $status';
+      }
+
+      await SimpleNotificationService.instance.showLocalNotification(
+        title: title,
+        body: body,
+        type: 'invitation_response',
+        data: {
+          'invitationId': invitationId,
+          'response': status,
+          'conversationGuid': conversationGuid,
+          'otherUserName': otherUserName,
+          'updateType': 'invitation_update',
+        },
+      );
+
+      print('📱 InvitationProvider: ✅ Invitation update notification added');
+    } catch (e) {
+      print(
+          '📱 InvitationProvider: Error adding invitation update notification: $e');
     }
   }
 

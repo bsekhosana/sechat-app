@@ -61,6 +61,9 @@ Future<void> main() async {
   // Set up notification callbacks
   _setupSimpleNotifications();
 
+  // Set up provider instances for notification service
+  _setupNotificationProviders();
+
   // Set up method channel for native communication
   _setupMethodChannels();
 
@@ -115,8 +118,10 @@ void _setupSimpleNotifications() {
     if (conversationGuid != null) {
       print('🔔 Main: Conversation GUID provided: $conversationGuid');
     }
-    // The notification will be handled by the SimpleNotificationService
+
+    // The invitation response will be handled by the SimpleNotificationService
     // which will show a local notification and trigger UI updates
+    // The InvitationProvider will be notified through the notification system
     print('🔔 Main: ✅ Invitation response notification processed');
   });
 
@@ -135,6 +140,15 @@ void _setupSimpleNotifications() {
   });
 
   print('🔔 Main: Simple notification service setup complete');
+}
+
+// Set up provider instances for notification service
+void _setupNotificationProviders() {
+  print('🔔 Main: Setting up notification providers...');
+
+  // Note: Provider instances will be set after the app is built
+  // This will be handled in the widget tree where providers are available
+  print('🔔 Main: Notification providers setup complete');
 }
 
 // Set up method channels and event channels for native communication

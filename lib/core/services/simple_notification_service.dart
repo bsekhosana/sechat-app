@@ -40,6 +40,9 @@ class SimpleNotificationService {
   Function(String, String, String)? _onMessageReceived;
   Function(String, bool)? _onTypingIndicator;
 
+  // Provider instances for handling responses
+  dynamic? _invitationProvider;
+
   SimpleNotificationService._();
 
   /// Initialize the notification service
@@ -530,6 +533,20 @@ class SimpleNotificationService {
           responderId, responderName, conversationGuid);
     }
 
+    // Handle invitation response in InvitationProvider if available
+    if (_invitationProvider != null) {
+      try {
+        await _invitationProvider.handleInvitationResponse(
+            responderId, responderName, response,
+            conversationGuid: conversationGuid);
+        print(
+            '🔔 SimpleNotificationService: ✅ Invitation response handled by InvitationProvider');
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: Error handling invitation response in provider: $e');
+      }
+    }
+
     // Trigger callback with conversation GUID if available
     _onInvitationResponse?.call(responderId, responderName, response,
         conversationGuid: conversationGuid);
@@ -648,6 +665,8 @@ class SimpleNotificationService {
 
     // Link token to session with AirNotifier if session ID is available
     if (_sessionId != null) {
+      print(
+          '🔔 SimpleNotificationService: Session ID available, linking token to session: $_sessionId');
       await _linkTokenToSession();
     } else {
       print(
@@ -659,6 +678,7 @@ class SimpleNotificationService {
   Future<void> handleDeviceTokenReceived(String token) async {
     print(
         '🔔 SimpleNotificationService: Device token received from native: $token');
+    print('🔔 SimpleNotificationService: Current session ID: $_sessionId');
     await setDeviceToken(token);
   }
 
@@ -879,6 +899,11 @@ class SimpleNotificationService {
               {String? conversationGuid})
           callback) {
     _onInvitationResponse = callback;
+  }
+
+  /// Set invitation provider instance for handling invitation responses
+  void setInvitationProvider(dynamic invitationProvider) {
+    _invitationProvider = invitationProvider;
   }
 
   /// Set message received callback

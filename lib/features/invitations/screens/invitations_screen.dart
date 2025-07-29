@@ -777,6 +777,9 @@ Download now and let's chat securely!
                                 deleteButtonText:
                                     _tabIndex == 0 ? 'Block' : 'Delete',
                                 isNewInvitation: isNewInvitation,
+                                isLoading: context
+                                    .read<InvitationProvider>()
+                                    .isInvitationLoading(invitation.id),
                               ),
                             ),
                           ),
@@ -844,6 +847,7 @@ class _InvitationCard extends StatefulWidget {
   final bool isReceived;
   final String deleteButtonText;
   final bool isNewInvitation;
+  final bool isLoading;
 
   const _InvitationCard({
     required this.invitation,
@@ -858,6 +862,7 @@ class _InvitationCard extends StatefulWidget {
     required this.isReceived,
     required this.deleteButtonText,
     required this.isNewInvitation,
+    required this.isLoading,
   });
 
   @override
@@ -1012,7 +1017,7 @@ class _InvitationCardState extends State<_InvitationCard>
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: widget.onDecline,
+                        onPressed: widget.isLoading ? null : widget.onDecline,
                         style: TextButton.styleFrom(
                           backgroundColor: isPendingCard
                               ? Colors.black.withOpacity(0.2)
@@ -1020,11 +1025,21 @@ class _InvitationCardState extends State<_InvitationCard>
                           foregroundColor:
                               isPendingCard ? Colors.black : Colors.red,
                         ),
-                        child: const Text('Decline'),
+                        child: widget.isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation<Color>(Colors.red),
+                                ),
+                              )
+                            : const Text('Decline'),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
-                        onPressed: widget.onAccept,
+                        onPressed: widget.isLoading ? null : widget.onAccept,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isPendingCard
                               ? Colors.black
@@ -1033,7 +1048,17 @@ class _InvitationCardState extends State<_InvitationCard>
                               ? const Color(0xFFFF6B35)
                               : Colors.white,
                         ),
-                        child: const Text('Accept'),
+                        child: widget.isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white),
+                                ),
+                              )
+                            : const Text('Accept'),
                       ),
                     ],
                   ),
