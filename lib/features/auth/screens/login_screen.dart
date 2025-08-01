@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sechat_app/core/services/session_service.dart';
-import 'package:sechat_app/shared/providers/auth_provider.dart';
+import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/features/auth/screens/register_screen.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
+import 'package:sechat_app/features/auth/screens/main_nav_screen.dart';
 import 'package:sechat_app/features/chat/screens/chat_screen.dart';
+import 'package:sechat_app/shared/widgets/app_icon.dart';
+import 'package:sechat_app/shared/widgets/custom_textfield.dart';
+import 'package:sechat_app/shared/widgets/custom_elevated_button.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -15,17 +18,219 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _sessionIdController = TextEditingController();
-  final _privateKeyController = TextEditingController();
+  final _displayNameController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
-  bool _showPrivateKey = false;
+  bool _showPassword = false;
   bool _isCreatingNewAccount = false;
+  String _sessionDisplayName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDisplayName();
+  }
 
   @override
   void dispose() {
-    _sessionIdController.dispose();
-    _privateKeyController.dispose();
+    _displayNameController.dispose();
+    _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadDisplayName() async {
+    final seSessionService = SeSessionService();
+    final session = await seSessionService.loadSession();
+    if (session != null) {
+      setState(() {
+        _displayNameController.text = session.displayName;
+        _sessionDisplayName = session.displayName;
+      });
+      print('🔍 LoginScreen: Loaded display name: ${session.displayName}');
+    } else {
+      print('🔍 LoginScreen: No session found');
+    }
+  }
+
+  String _getDisplayName() {
+    // Use the stored session display name if available
+    if (_sessionDisplayName.isNotEmpty) {
+      return _sessionDisplayName;
+    }
+    // Fall back to the controller text or default
+    return _displayNameController.text.isNotEmpty
+        ? _displayNameController.text
+        : 'User';
+  }
+
+  void _showForgotPasswordDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2C2C2C),
+          title: const Text(
+            'Forgot Password',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: const Text(
+            'Since SeChat uses local encryption, passwords cannot be recovered. You\'ll need to create a new account to start fresh.',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 16,
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white70,
+              ),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _showDeleteSessionConfirmation();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B35),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Create New Account',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteSessionConfirmation() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Title
+            const Text(
+              'Create New Account',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Message
+            const Text(
+              'This will delete your current session and all associated data. You\'ll need to create a new account with a new password.',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+
+            // Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: CustomElevatedButton(
+                    isLoading: false,
+                    onPressed: () => Navigator.of(context).pop(),
+                    text: 'Cancel',
+                    icon: Icons.close,
+                    isPrimary: false,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: CustomElevatedButton(
+                    isLoading: false,
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _deleteSessionAndNavigate();
+                    },
+                    text: 'Delete & Create New',
+                    icon: Icons.delete_forever,
+                    isPrimary: true,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteSessionAndNavigate() async {
+    try {
+      final seSessionService = SeSessionService();
+      await seSessionService.deleteSession();
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => const RegisterScreen(),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -51,18 +256,28 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   // Logo and Title
                   SizedBox(height: isSmallScreen ? 20 : 40),
-                  Image.asset(
-                    'assets/logo/seChat_Logo.png',
-                    height: isSmallScreen ? 80 : 120,
-                    width: isSmallScreen ? 80 : 120,
-                  ),
+                  AppIcon(widthPerc: 0.32),
                   SizedBox(height: isSmallScreen ? 16 : 24),
-                  Text(
-                    'Welcome to SeChat',
-                    style: TextStyle(
-                      fontSize: isSmallScreen ? 24 : 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Welcome back, ',
+                          style: TextStyle(
+                            fontSize: isSmallScreen ? 24 : 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        TextSpan(
+                          text: _getDisplayName(),
+                          style: TextStyle(
+                            fontSize: isSmallScreen ? 24 : 32,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFFF6B35),
+                          ),
+                        ),
+                      ],
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -82,139 +297,40 @@ class _LoginScreenState extends State<LoginScreen> {
                     key: _formKey,
                     child: Column(
                       children: [
-                        // Session ID Field
-                        TextFormField(
-                          controller: _sessionIdController,
-                          decoration: InputDecoration(
-                            labelText: 'Session ID (Optional)',
-                            hintText: 'Enter your Session ID',
-                            prefixIcon: const Icon(Icons.person),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey[50],
-                          ),
+                        // Password Field
+                        CustomTextfield(
+                          controller: _passwordController,
+                          label: 'Password',
+                          icon: Icons.lock,
                           validator: (value) {
-                            if (value != null && value.isNotEmpty) {
-                              if (value.length < 10) {
-                                return 'Session ID must be at least 10 characters';
-                              }
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter your password';
                             }
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: isSmallScreen ? 16 : 20),
-
-                        // Private Key Field
-                        TextFormField(
-                          controller: _privateKeyController,
-                          obscureText: !_showPrivateKey,
-                          decoration: InputDecoration(
-                            labelText: 'Private Key (Optional)',
-                            hintText: 'Enter your private key',
-                            prefixIcon: const Icon(Icons.key),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _showPrivateKey
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _showPrivateKey = !_showPrivateKey;
-                                });
-                              },
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            filled: true,
-                            fillColor: Colors.grey[50],
-                          ),
-                          validator: (value) {
-                            if (value != null && value.isNotEmpty) {
-                              if (value.length < 20) {
-                                return 'Private key must be at least 20 characters';
-                              }
+                            if (value.length != 6) {
+                              return 'Password must be exactly 6 characters';
                             }
                             return null;
                           },
                         ),
                         SizedBox(height: isSmallScreen ? 24 : 32),
 
-                        // Buttons
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleLogin,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(
-                                vertical: isSmallScreen ? 14 : 16,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
-                                    ),
-                                  )
-                                : FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(
-                                      _isCreatingNewAccount
-                                          ? 'Create New SeChat Account'
-                                          : 'Login to SeChat',
-                                      style: TextStyle(
-                                        fontSize: isSmallScreen ? 14 : 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                          ),
+                        // Login Button
+                        CustomElevatedButton(
+                          isLoading: _isLoading,
+                          onPressed: _handleLogin,
+                          text: 'Login to SeChat',
+                          icon: Icons.login,
+                          isPrimary: true,
                         ),
                         SizedBox(height: isSmallScreen ? 16 : 20),
 
-                        // Toggle Button
-                        TextButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  if (_isCreatingNewAccount) {
-                                    // Switch to login mode
-                                    setState(() {
-                                      _isCreatingNewAccount = false;
-                                    });
-                                  } else {
-                                    // Navigate to registration screen
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => const RegisterScreen(),
-                                      ),
-                                    );
-                                  }
-                                },
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              _isCreatingNewAccount
-                                  ? 'Already have an account? Login'
-                                  : 'New to SeChat? Create New Account',
-                              style: TextStyle(
-                                fontSize: isSmallScreen ? 12 : 14,
-                                color: Colors.blue,
-                              ),
-                            ),
-                          ),
+                        // Forgot Password Button
+                        CustomElevatedButton(
+                          isLoading: _isLoading,
+                          onPressed: _showForgotPasswordDialog,
+                          text: 'Forgot Password',
+                          icon: Icons.help_outline,
+                          isPrimary: false,
                         ),
                       ],
                     ),
@@ -253,33 +369,41 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final authProvider = context.read<AuthProvider>();
+      final seSessionService = SeSessionService();
+      final displayName = _displayNameController.text.trim();
+      final password = _passwordController.text.trim();
 
       if (_isCreatingNewAccount) {
-        // Create new account
-        final displayName = _sessionIdController.text.trim().isNotEmpty
-            ? _sessionIdController.text.trim()
-            : 'SeChat User';
-        await authProvider.createSessionIdentity(displayName: displayName);
+        // Navigate to registration screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const RegisterScreen(),
+          ),
+        );
       } else {
-        // Import existing account
-        final sessionId = _sessionIdController.text.trim();
-        final privateKey = _privateKeyController.text.trim();
+        // Login with existing account
+        final success = await seSessionService.login(displayName, password);
 
-        if (sessionId.isNotEmpty || privateKey.isNotEmpty) {
-          await authProvider.importSessionIdentity(
-            sessionId: sessionId.isNotEmpty ? sessionId : '',
-            privateKey: privateKey.isNotEmpty ? privateKey : '',
-          );
+        if (success) {
+          // Initialize notification services with logged in session
+          await seSessionService.initializeNotificationServices();
+
+          // Navigate to main app
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => MainNavScreen()),
+            );
+          }
         } else {
-          // Create new account if no credentials provided
-          await authProvider.createSessionIdentity(displayName: 'SeChat User');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Invalid display name or password'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
-      }
-
-      // Navigate to main app
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/main');
       }
     } catch (e) {
       if (mounted) {

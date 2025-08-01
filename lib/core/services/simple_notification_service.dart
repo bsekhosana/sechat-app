@@ -9,7 +9,7 @@ import 'package:pointycastle/export.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io' show Platform;
 import 'airnotifier_service.dart';
-import 'session_service.dart';
+import 'se_session_service.dart';
 import 'global_user_service.dart';
 import 'encryption_service.dart';
 import 'local_storage_service.dart';
@@ -53,7 +53,7 @@ class SimpleNotificationService {
       print('🔔 SimpleNotificationService: Initializing...');
 
       // Get session ID (may be null initially - will be set later via setSessionId)
-      _sessionId = SessionService.instance.currentSessionId;
+      _sessionId = SeSessionService().currentSessionId;
       print('🔔 SimpleNotificationService: Session ID: $_sessionId');
 
       // Request permissions
@@ -141,7 +141,7 @@ class SimpleNotificationService {
         'type': 'invitation',
         'invitationId': invitationId,
         'senderName': senderName,
-        'senderId': SessionService.instance.currentSessionId,
+        'senderId': SeSessionService().currentSessionId,
         'message': message ?? 'Contact request',
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'version': '1.0',
@@ -193,7 +193,7 @@ class SimpleNotificationService {
       final responseData = {
         'type': 'invitation_response',
         'invitationId': invitationId,
-        'responderId': SessionService.instance.currentSessionId,
+        'responderId': SeSessionService().currentSessionId,
         'responderName': senderName,
         'response': response, // 'accepted' or 'declined'
         'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -260,7 +260,7 @@ class SimpleNotificationService {
       final messageData = {
         'type': 'message',
         'senderName': senderName,
-        'senderId': SessionService.instance.currentSessionId,
+        'senderId': SeSessionService().currentSessionId,
         'message': message,
         'conversationId': conversationId,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -455,7 +455,7 @@ class SimpleNotificationService {
       final invitation = {
         'id': invitationId,
         'senderId': senderId,
-        'recipientId': SessionService.instance.currentSessionId ?? '',
+        'recipientId': SeSessionService().currentSessionId ?? '',
         'senderUsername': senderName,
         'recipientUsername': GlobalUserService.instance.currentUsername ?? '',
         'message': 'Contact request',
@@ -559,7 +559,7 @@ class SimpleNotificationService {
       print(
           '🔔 SimpleNotificationService: Creating conversation for sender with GUID: $conversationGuid');
 
-      final currentUserId = SessionService.instance.currentSessionId ?? '';
+      final currentUserId = SeSessionService().currentSessionId ?? '';
       final currentUserName =
           GlobalUserService.instance.currentUsername ?? 'Unknown User';
 
@@ -680,6 +680,12 @@ class SimpleNotificationService {
         '🔔 SimpleNotificationService: Device token received from native: $token');
     print('🔔 SimpleNotificationService: Current session ID: $_sessionId');
     await setDeviceToken(token);
+    
+    // If we have a session ID, try to link the token immediately
+    if (_sessionId != null) {
+      print('🔔 SimpleNotificationService: Attempting to link token to existing session: $_sessionId');
+      await _linkTokenToSession();
+    }
   }
 
   /// Link token to session with retry mechanism
@@ -742,10 +748,35 @@ class SimpleNotificationService {
   /// Get current session ID
   String? get sessionId => _sessionId;
 
+  /// Clear session data and unlink token (for account deletion)
+  Future<void> clearSessionData() async {
+    try {
+      print('🔔 SimpleNotificationService: Clearing session data and unlinking token...');
+      
+      // Unlink token from current session if available
+      if (_sessionId != null && _deviceToken != null) {
+        try {
+          await AirNotifierService.instance.unlinkTokenFromSession();
+          print('🔔 SimpleNotificationService: ✅ Token unlinked from session');
+        } catch (e) {
+          print('🔔 SimpleNotificationService: Error unlinking token: $e');
+        }
+      }
+      
+      // Clear session ID
+      _sessionId = null;
+      
+      print('🔔 SimpleNotificationService: ✅ Session data cleared');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error clearing session data: $e');
+    }
+  }
+
   /// Set session ID and link token if available
   Future<void> setSessionId(String sessionId) async {
     _sessionId = sessionId;
     print('🔔 SimpleNotificationService: Session ID set: $sessionId');
+    print('🔔 SimpleNotificationService: Current device token: $_deviceToken');
 
     // Initialize AirNotifier with the new session ID
     try {
@@ -769,6 +800,8 @@ class SimpleNotificationService {
 
     // Link existing token to session if available
     if (_deviceToken != null) {
+      print(
+          '🔔 SimpleNotificationService: Device token available, linking to session: $_deviceToken');
       await _linkTokenToSession();
     } else {
       // Wait for native platform to automatically send token

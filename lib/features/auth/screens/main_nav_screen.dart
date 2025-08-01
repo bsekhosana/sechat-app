@@ -44,7 +44,11 @@ class _MainNavScreenState extends State<MainNavScreen> {
     _selectedIndex = widget.initialIndex;
     _handleNotificationDeepLink();
     _setupNotificationHandler();
-    _loadAllData();
+
+    // Defer data loading to avoid build phase conflicts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAllData();
+    });
   }
 
   void _loadAllData() {

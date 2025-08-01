@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../auth/screens/login_screen.dart';
+import '../../auth/screens/welcome_screen.dart';
+import '../../../core/services/se_session_service.dart';
 
-import '../../chat/providers/chat_provider.dart';
 import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
-import 'package:sechat_app/core/services/session_service.dart';
-
 import 'package:sechat_app/shared/widgets/app_icon.dart';
 import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:sechat_app/core/services/airnotifier_service.dart';
@@ -50,250 +48,6 @@ Download now and let's chat securely!
       backgroundColor: Colors.transparent,
       builder: (context) => const _StorageManagementSheet(),
     );
-  }
-
-  void _testNotificationFlow(BuildContext context) async {
-    try {
-      print('🧪 Settings: Testing notification flow...');
-
-      // Test method channel connectivity first
-      final methodChannelTest =
-          await SimpleNotificationService.instance.testMethodChannel();
-
-      if (methodChannelTest == null) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  '❌ Method channel test failed - native communication broken'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        return;
-      } else {
-        print('🧪 Settings: Method channel test result: $methodChannelTest');
-      }
-
-      // Test MainActivity connectivity
-      final mainActivityTest =
-          await SimpleNotificationService.instance.testMainActivity();
-
-      if (mainActivityTest == null) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content:
-                  Text('❌ MainActivity test failed - MainActivity not working'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        return;
-      } else {
-        print('🧪 Settings: MainActivity test result: $mainActivityTest');
-      }
-
-      // Test AirNotifier connection
-      final airNotifierService = AirNotifierService.instance;
-      final connectionTest =
-          await airNotifierService.testAirNotifierConnection();
-
-      if (!connectionTest) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('❌ AirNotifier connection test failed'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-        return;
-      }
-
-      // Test token registration
-      final notificationService = SimpleNotificationService.instance;
-      final deviceToken = notificationService.deviceToken;
-      final sessionId = notificationService.sessionId;
-
-      print('🧪 Settings: Device token: $deviceToken');
-      print('🧪 Settings: Session ID: $sessionId');
-
-      if (deviceToken != null && sessionId != null) {
-        final success = await airNotifierService.registerDeviceToken(
-          deviceToken: deviceToken,
-          sessionId: sessionId,
-        );
-
-        if (success) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('✅ Token registration test successful!'),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        } else {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('❌ Token registration test failed'),
-                backgroundColor: Colors.red,
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
-        }
-      }
-
-      // Test invitation notification processing
-      print('🧪 Settings: Testing invitation notification processing...');
-      final testNotificationData = {
-        'data': {
-          'type': 'invitation',
-          'invitationId':
-              'test_manual_${DateTime.now().millisecondsSinceEpoch}',
-          'senderName': 'Manual Test User',
-          'senderId':
-              'manual_test_sender_${DateTime.now().millisecondsSinceEpoch}',
-          'message': 'Manual test invitation',
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        }
-      };
-
-      await SimpleNotificationService.instance
-          .handleNotification(testNotificationData);
-      print('🧪 Settings: Manual invitation notification test completed');
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                '✅ Manual notification test completed! Check logs for details.'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('❌ Missing device token or session ID'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-
-      // Simulate invitation notification
-      final notificationData = {
-        'type': 'invitation',
-        'action': 'invitation_received',
-        'senderId': 'test_sender_${DateTime.now().millisecondsSinceEpoch}',
-        'senderName': 'Test User',
-        'invitationId':
-            'test_invitation_${DateTime.now().millisecondsSinceEpoch}',
-        'message': 'Would you like to connect?',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      };
-
-      await SimpleNotificationService.instance
-          .processNotification(notificationData);
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🧪 Test invitation notification sent!'),
-            backgroundColor: Colors.blue,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      print('🧪 Settings: Test notification failed: $e');
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Test failed: $e'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  void _retryConnection(BuildContext context) async {
-    try {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFFFF6B35),
-          ),
-        ),
-      );
-
-      // Try to reconnect Session Protocol
-      try {
-        await SessionService.instance.connect().timeout(
-          const Duration(seconds: 10),
-          onTimeout: () {
-            throw Exception('Session Protocol connection timeout');
-          },
-        );
-        print('🔐 Settings: Session Protocol connected successfully');
-      } catch (e) {
-        print('🔐 Settings: Session Protocol connection failed: $e');
-        throw Exception('Session Protocol: $e');
-      }
-
-      // Note: Session Messenger is now optional and uses push notifications
-      // No need to manually reconnect as it's handled automatically
-      print(
-          '🔐 Settings: Session Messenger uses push notifications (no manual connection needed)');
-
-      // Close loading dialog
-      if (context.mounted) {
-        Navigator.of(context).pop();
-
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Connection retry successful!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (e) {
-      // Close loading dialog
-      if (context.mounted) {
-        Navigator.of(context).pop();
-
-        // Show error message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Connection failed: $e'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 5),
-            action: SnackBarAction(
-              label: 'Retry',
-              textColor: Colors.white,
-              onPressed: () => _retryConnection(context),
-            ),
-          ),
-        );
-      }
-    }
   }
 
   void _showLogoutConfirmation(BuildContext context) {
@@ -349,9 +103,9 @@ Download now and let's chat securely!
                     ),
                   );
 
-                  // Perform logout
-                  await Provider.of<AuthProvider>(context, listen: false)
-                      .logout();
+                  // Perform logout using SeSessionService
+                  final seSessionService = SeSessionService();
+                  await seSessionService.logout();
 
                   // Check if widget is still mounted before navigation
                   if (context.mounted) {
@@ -386,6 +140,85 @@ Download now and let's chat securely!
               ),
               child: const Text(
                 'Logout',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showSessionBackupDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2C2C2C),
+          title: const Text(
+            'Session Backup',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: const Text(
+            'This will create a backup of your current session data including all messages. The backup is stored locally on your device.',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 16,
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white70,
+              ),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop(); // Close dialog first
+
+                try {
+                  await SeSessionService().backupSession();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Session backup created successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error creating backup: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B35),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Create Backup',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -462,26 +295,18 @@ Download now and let's chat securely!
                   child: Column(
                     children: [
                       _buildSettingsItem(
-                        title: 'Retry Connection',
-                        subtitle: 'Reconnect to Session Network',
-                        onTap: () => _retryConnection(context),
-                      ),
-                      _buildSettingsItem(
-                        title: 'Test Notifications',
-                        subtitle: 'Test UI update flow',
-                        onTap: () => _testNotificationFlow(context),
-                      ),
-                      _buildSettingsItem(
                         title: 'Storage & Data',
+                        subtitle: 'Manage your data and storage',
                         onTap: () => _showStorageManagementSheet(context),
                       ),
                       _buildSettingsItem(
-                        title: 'Last Synced',
-                        subtitle: _getLastSyncedTime(),
-                        onTap: () => _showSyncInfo(context),
+                        title: 'Session Backup',
+                        subtitle: 'Create a backup of your session data',
+                        onTap: () => _showSessionBackupDialog(context),
                       ),
                       _buildSettingsItem(
                         title: 'Logout',
+                        subtitle: 'Sign out of your account',
                         onTap: () => _showLogoutConfirmation(context),
                         isDestructive: true,
                       ),
@@ -580,46 +405,6 @@ Download now and let's chat securely!
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  String _getLastSyncedTime() {
-    // TODO: Get actual last sync time from SessionService
-    final now = DateTime.now();
-    return '${now.day}/${now.month}/${now.year} at ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _showSyncInfo(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF232323),
-        title: const Text(
-          'Sync Information',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Last Synced: ${_getLastSyncedTime()}',
-              style: const TextStyle(color: Colors.white),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'SeChat automatically syncs messages and contacts using the Session Protocol. No manual sync is required.',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK', style: TextStyle(color: Colors.blue)),
-          ),
-        ],
       ),
     );
   }
@@ -743,7 +528,8 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
         print('🗑️ Settings: Starting account deletion process...');
 
         // Clear all session data first
-        await SessionService.instance.clearAllData();
+        final seSessionService = SeSessionService();
+        await seSessionService.deleteSession();
         print('🗑️ Settings: ✅ Session data cleared');
 
         // Clear all local storage data
@@ -751,7 +537,6 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
         print('🗑️ Settings: ✅ Local storage data cleared');
 
         // Clear all provider data
-        context.read<ChatProvider>().clearAllData();
         context.read<InvitationProvider>().clearAllData();
         context.read<NotificationProvider>().clearAllData();
         print('🗑️ Settings: ✅ Provider data cleared');
@@ -769,8 +554,8 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
           );
 
           // Navigate to welcome screen after account deletion
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            '/welcome',
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const WelcomeScreen()),
             (route) => false,
           );
         }

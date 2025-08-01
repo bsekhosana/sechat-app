@@ -7,6 +7,9 @@ import '../../../core/services/network_service.dart';
 import 'main_nav_screen.dart';
 import 'dart:convert';
 import '../../../core/services/session_service.dart';
+import '../../../core/services/se_session_service.dart';
+import '../../../shared/widgets/custom_elevated_button.dart';
+import '../../../shared/widgets/custom_textfield.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -39,39 +42,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      final authProvider = context.read<AuthProvider>();
       final displayName = _displayNameController.text.trim();
 
       if (displayName.isEmpty) {
         throw Exception('Please enter a display name');
       }
 
-      final success = await authProvider.createSessionIdentity(
-        displayName: displayName,
-      );
+      // Use the new SeSessionService
+      final seSessionService = SeSessionService();
+      final result = await seSessionService.createSession(displayName);
 
-      if (success) {
-        // Get the created Session identity details
-        final identity = authProvider.currentUser;
-        if (identity != null) {
-          final sessionIdentity = SessionService.instance.currentIdentity;
-          setState(() {
-            _sessionId = identity.id;
-            _qrCodeData = authProvider.getSessionQRCodeData();
-            _privateKey = sessionIdentity?.privateKey;
-          });
+      if (result != null) {
+        final sessionData = result['sessionData'] as SessionData;
+        final password = result['password'] as String;
 
-          // Debug: Check if private key is available
-          print('🔐 Debug: Session ID: $_sessionId');
-          print('🔐 Debug: Private Key: $_privateKey');
-          print('🔐 Debug: Session Identity: ${sessionIdentity?.toJson()}');
+        setState(() {
+          _sessionId = sessionData.sessionId;
+          _qrCodeData = sessionData.publicKey; // Use public key as QR data
+          _privateKey = password; // Store password for display
+        });
 
-          // Show success dialog with Session details
-          _showSuccessDialog();
-        }
+        // Debug: Check if session was created successfully
+        print('🔐 Debug: Session ID: ${sessionData.sessionId}');
+        print('🔐 Debug: Public Key: ${sessionData.publicKey}');
+        print('🔐 Debug: Display Name: ${sessionData.displayName}');
+        print('🔐 Debug: Password: $password');
+        print('🔐 Debug: Created At: ${sessionData.createdAt}');
+
+        // Show success dialog with Session details
+        _showSuccessDialog();
       } else {
         setState(() {
-          _error = authProvider.error ?? 'Failed to create Session identity';
+          _error = 'Failed to create session';
         });
       }
     } catch (e) {
@@ -160,11 +162,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (_privateKey != null) ...[
                         const SizedBox(height: 8),
                         _buildDetailRow(
-                          'Private Key',
+                          'Login Password',
                           _privateKey!,
                           Icons.copy,
                           () => _copyToClipboard(
-                              context, _privateKey!, 'Private Key'),
+                              context, _privateKey!, 'Login Password'),
                         ),
                       ],
 
@@ -221,9 +223,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             const SizedBox(height: 4),
                             const Text(
-                              '• Save your private key securely\n'
+                              '• Save your login password securely\n'
                               '• You\'ll need it to access your account\n'
-                              '• Never share your private key with anyone',
+                              '• Never share your password with anyone',
                               style: TextStyle(color: Colors.red, fontSize: 11),
                             ),
                           ],
@@ -240,7 +242,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
+                      // Initialize notification services with new session
+                      final seSessionService = SeSessionService();
+                      await seSessionService.initializeNotificationServices();
+
                       Navigator.of(context).pop();
                       Navigator.of(context).pushAndRemoveUntil(
                         MaterialPageRoute(builder: (_) => MainNavScreen()),
@@ -356,57 +362,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return '${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    required String? Function(String?) validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-        prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.7)),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF404040)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF404040)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 2),
-        ),
-        filled: true,
-        fillColor: const Color(0xFF2C2C2C),
-      ),
-      validator: validator,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: Colors.white,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: const Text('Create Session'),
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
+        foregroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: SafeArea(
-        child: Consumer2<AuthProvider, NetworkService>(
-          builder: (context, authProvider, networkService, child) {
+        child: Consumer<NetworkService>(
+          builder: (context, networkService, child) {
             return SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -424,7 +397,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: Colors.black,
                           letterSpacing: 0.5,
                         ),
                         textAlign: TextAlign.center,
@@ -434,7 +407,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         'Set up your private messaging account',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.black.withOpacity(0.7),
                           letterSpacing: 0.3,
                         ),
                         textAlign: TextAlign.center,
@@ -497,11 +470,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             _buildInfoRow(Icons.visibility_off,
                                 'No phone numbers needed'),
                             _buildInfoRow(
-                                Icons.device_hub, 'Works without internet'),
-                            _buildInfoRow(
                                 Icons.storage, 'Your data stays on your phone'),
-                            _buildInfoRow(
-                                Icons.person_off, 'Stay anonymous if you want'),
+                            _buildInfoRow(Icons.person_off, 'Stay anonymous'),
                           ],
                         ),
                       ),
@@ -536,7 +506,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const SizedBox(height: 20),
 
                       // Display Name Field
-                      _buildTextField(
+                      CustomTextfield(
                         controller: _displayNameController,
                         label: 'Your Name',
                         icon: Icons.person_outline,
@@ -553,30 +523,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       const SizedBox(height: 20),
 
-                      // Create Button
-                      ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _createSessionIdentity,
-                        icon: _isLoading
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              )
-                            : Icon(Icons.add_circle_outline),
-                        label:
-                            Text(_isLoading ? 'Creating...' : 'Create Account'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF6B35),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
+                      CustomElevatedButton(
+                        isLoading: _isLoading,
+                        onPressed: _createSessionIdentity,
+                        text: 'Create Account',
+                        icon: Icons.add_circle_outline,
+                        isPrimary: true,
                       ),
 
                       if (_error != null) ...[
@@ -621,11 +573,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white70, size: 16),
+          Icon(icon, color: Colors.black.withOpacity(0.7), size: 16),
           const SizedBox(width: 8),
           Text(
             text,
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+            style:
+                TextStyle(color: Colors.black.withOpacity(0.7), fontSize: 14),
           ),
         ],
       ),

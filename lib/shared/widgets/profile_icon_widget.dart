@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sechat_app/core/services/session_service.dart';
+import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import '../providers/auth_provider.dart';
 import '../../core/services/global_user_service.dart';
@@ -114,11 +114,12 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                             ),
                           ),
                           const SizedBox(height: 4),
-                          Consumer2<NetworkService, SessionService>(
-                            builder: (context, networkService, sessionService,
-                                child) {
-                              bool isConnected = networkService.isConnected &&
-                                  sessionService.isConnected;
+                          Consumer<NetworkService>(
+                            builder: (context, networkService, child) {
+                              final seSessionService = SeSessionService();
+                              final session = seSessionService.currentSession;
+                              bool isConnected =
+                                  networkService.isConnected && session != null;
 
                               return Text(
                                 isConnected ? 'Connected' : 'Disconnected',
@@ -316,7 +317,10 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       );
 
       // Clear all conversations in Session Protocol
-      await SessionService.instance.clearAllConversations();
+      // Clear conversations using SeSessionService
+      final seSessionService = SeSessionService();
+      await seSessionService.clearSessionMessages(
+          seSessionService.currentSession?.sessionId ?? '');
 
       // Clear local chat data
       context.read<ChatProvider>().reset();
@@ -355,7 +359,9 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       );
 
       // Clear all data in Session Protocol
-      await SessionService.instance.clearAllData();
+      // Clear all data using SeSessionService
+      final seSessionService = SeSessionService();
+      await seSessionService.deleteSession();
 
       // Clear local storage
       await LocalStorageService.instance.clearAllData();
@@ -379,7 +385,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
   void _showQRCode() {
     final sessionId =
-        SessionService.instance.currentSessionId ?? 'No Session ID';
+        SeSessionService().currentSession?.sessionId ?? 'No Session ID';
     final displayName =
         GlobalUserService.instance.currentUsername ?? 'SeChat User';
 
@@ -577,7 +583,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
   void _copySessionId(BuildContext context) {
     final sessionId =
-        SessionService.instance.currentSessionId ?? 'No Session ID';
+        SeSessionService().currentSession?.sessionId ?? 'No Session ID';
     Clipboard.setData(ClipboardData(text: sessionId));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -591,7 +597,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
   void _shareQRCode(BuildContext context) async {
     try {
       final sessionId =
-          SessionService.instance.currentSessionId ?? 'No Session ID';
+          SeSessionService().currentSession?.sessionId ?? 'No Session ID';
       final displayName =
           GlobalUserService.instance.currentUsername ?? 'SeChat User';
 
@@ -651,7 +657,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
   void _saveQRCode(BuildContext context) async {
     try {
       final sessionId =
-          SessionService.instance.currentSessionId ?? 'No Session ID';
+          SeSessionService().currentSession?.sessionId ?? 'No Session ID';
       final displayName =
           GlobalUserService.instance.currentUsername ?? 'SeChat User';
 
@@ -776,8 +782,8 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<NetworkService, SessionService>(
-      builder: (context, networkService, sessionService, child) {
+    return Consumer<NetworkService>(
+      builder: (context, networkService, child) {
         // Determine connection status and color
         Color statusColor;
         bool isConnected = false;
@@ -791,8 +797,10 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
           statusColor = Colors.orange;
           isConnected = false;
         } else {
-          // Network is connected, check Session status
-          if (sessionService.isConnected) {
+          // Network is connected, check SeSession status
+          final seSessionService = SeSessionService();
+          final session = seSessionService.currentSession;
+          if (session != null) {
             statusColor = Colors.green;
             isConnected = true;
           } else {

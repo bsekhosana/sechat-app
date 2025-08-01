@@ -9,7 +9,6 @@ import 'dart:io' show Platform;
 
 import 'features/search/providers/search_provider.dart';
 import 'features/chat/providers/chat_provider.dart';
-import 'shared/providers/auth_provider.dart';
 import 'features/invitations/providers/invitation_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
@@ -17,7 +16,8 @@ import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'shared/widgets/app_lifecycle_handler.dart';
 import 'core/services/simple_notification_service.dart';
-import 'core/services/session_service.dart';
+import 'core/services/se_session_service.dart';
+import 'core/services/se_shared_preference_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/local_storage_service.dart';
 
@@ -38,24 +38,49 @@ Future<void> main() async {
   // Initialize LocalStorageService
   await LocalStorageService.instance.initialize();
 
-  // Initialize simple notification service (without session ID - will be set later)
-  await SimpleNotificationService.instance.initialize();
+  // Initialize SeSharedPreferenceService
+  await SeSharedPreferenceService().initialize();
 
-  // Restore session data if it exists
-  print('🔔 Main: Checking for existing session data...');
-  final hasExistingSession = await SessionService.instance.hasExistingSession();
-  if (hasExistingSession) {
-    print('🔔 Main: Found existing session, restoring...');
-    try {
-      await SessionService.instance.restoreSession();
-      print('🔔 Main: ✅ Session restored successfully');
-    } catch (e) {
-      print('🔔 Main: ❌ Failed to restore session: $e');
-      print('🔔 Main: Will create new session on first use');
+  // Initialize SeSessionService
+  print('🔔 Main: Initializing SeSessionService...');
+  final seSessionService = SeSessionService();
+
+  // Check for persistent session
+  final hasPersistentSession = await seSessionService.hasPersistentSession();
+  print('🔔 Main: Has persistent session: $hasPersistentSession');
+
+  // Validate session persistence
+  final persistenceValidation =
+      await seSessionService.validateSessionPersistence();
+  print('🔔 Main: Session persistence validation: $persistenceValidation');
+
+  // Load session and attempt backup restore if needed
+  await seSessionService.loadSession();
+
+  // If no current session but backup exists, try to restore
+  if (seSessionService.currentSession == null) {
+    final restored = await seSessionService.restoreSessionFromBackup();
+    if (restored) {
+      print('🔔 Main: ✅ Session restored from backup');
     }
-  } else {
+  }
+
+  // Create backup of current session if it exists
+  if (seSessionService.currentSession != null) {
+    await seSessionService.backupSession();
+    print('🔔 Main: ✅ Session backup created');
+  }
+
+  print('🔔 Main: ✅ SeSessionService initialized');
+
+  // Initialize notification services with SeSessionService
+  if (seSessionService.currentSession != null) {
     print(
-        '🔔 Main: No existing session found, will create new one on first use');
+        '🔔 Main: Initializing notification services with existing session...');
+    await seSessionService.initializeNotificationServices();
+  } else {
+    // Initialize simple notification service (without session ID - will be set later)
+    await SimpleNotificationService.instance.initialize();
   }
 
   // Set up notification callbacks
@@ -77,13 +102,11 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider.value(value: AuthProvider.instance),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(create: (_) => InvitationProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
-        Provider.value(value: SessionService.instance),
         ChangeNotifierProvider(create: (_) => LocalStorageService.instance),
       ],
       child: const SeChatApp(),
@@ -325,22 +348,43 @@ class _AuthCheckerState extends State<AuthChecker> {
 
     if (!mounted) return;
 
-    final authProvider = context.read<AuthProvider>();
-
-    // Wait until AuthProvider is done loading
-    while (authProvider.isLoading && mounted) {
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-
-    if (!mounted) return;
-
     try {
-      if (authProvider.isAuthenticated) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => MainNavScreen()),
-        );
+      final seSessionService = SeSessionService();
+      final session = await seSessionService.loadSession();
+
+      print('🔍 AuthChecker: Session loaded: ${session != null}');
+      if (session != null) {
+        print('🔍 AuthChecker: Session ID: ${session.sessionId}');
+        print('🔍 AuthChecker: Display Name: ${session.displayName}');
+        print(
+            '🔍 AuthChecker: Has encrypted private key: ${session.encryptedPrivateKey.isNotEmpty}');
+      }
+
+      if (session != null) {
+        // Session exists, check if user is currently logged in
+        final isLoggedIn = await seSessionService.isUserLoggedIn();
+        print('🔍 AuthChecker: Is user logged in: $isLoggedIn');
+
+        if (isLoggedIn) {
+          // User is logged in, initialize notification services and go to main screen
+          print(
+              '🔍 AuthChecker: User is logged in, initializing notification services...');
+          await seSessionService.initializeNotificationServices();
+          print('🔍 AuthChecker: User is logged in, navigating to main screen');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => MainNavScreen()),
+          );
+        } else {
+          // Session exists but user needs to login, go to login screen
+          print(
+              '🔍 AuthChecker: Session exists but user needs login, navigating to login screen');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        }
       } else {
-        // User not authenticated, show welcome screen
+        // No session exists, go to welcome screen
+        print('🔍 AuthChecker: No session found, navigating to welcome screen');
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         );

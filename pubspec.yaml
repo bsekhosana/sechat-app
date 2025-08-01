@@ -41,6 +41,7 @@ dependencies:
   pointycastle: ^3.7.3
   ed25519_hd_key: ^2.1.0
   sodium_libs: ^3.4.5+2
+  encrypt: ^5.0.3
   
   # Storage and Security
   flutter_secure_storage: ^9.2.4

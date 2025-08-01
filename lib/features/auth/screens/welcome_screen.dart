@@ -4,6 +4,7 @@ import '../../../shared/providers/auth_provider.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import '../../../shared/widgets/app_icon.dart';
+import '../../../shared/widgets/custom_elevated_button.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -54,7 +55,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Widget build(BuildContext context) {
     if (_checking) {
       return const Scaffold(
-        backgroundColor: Color(0xFF121212),
+        backgroundColor: Colors.white,
         body: Center(
           child: CircularProgressIndicator(
             color: Color(0xFFFF6B35),
@@ -64,7 +65,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -79,7 +80,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: Colors.black,
                   letterSpacing: 0.5,
                 ),
               ),
@@ -89,7 +90,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.black.withOpacity(0.7),
                   letterSpacing: 0.3,
                 ),
               ),
@@ -99,7 +100,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.black.withOpacity(0.5),
                   height: 1.5,
                 ),
               ),
@@ -137,7 +138,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
+                          foregroundColor: Colors.black,
                           shadowColor: Colors.transparent,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
@@ -165,7 +166,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         width: 1,
                       ),
                     ),
-                    child: ElevatedButton(
+                    child: CustomElevatedButton(
+                      isLoading: false,
+                      isPrimary: false,
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -173,22 +176,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                         );
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        'Create New SeChat Account',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+                      text: 'Create New SeChat Account',
                     ),
                   ),
                 ],

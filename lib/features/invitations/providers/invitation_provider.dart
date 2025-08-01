@@ -13,6 +13,8 @@ import '../../../core/services/simple_notification_service.dart';
 import '../../../core/services/global_user_service.dart';
 import '../../../core/utils/guid_generator.dart';
 import '../../chat/providers/chat_provider.dart';
+import '../../notifications/providers/notification_provider.dart';
+import '../../notifications/models/local_notification.dart';
 import 'dart:async';
 
 class InvitationProvider extends ChangeNotifier {
@@ -295,7 +297,7 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
-  void _handleLocalStorageChange() {
+  Future<void> _handleLocalStorageChange() async {
     if (_isHandlingLocalStorageChange) {
       print(
           '📱 InvitationProvider: Local storage change handler already in progress, skipping...');
@@ -305,13 +307,10 @@ class InvitationProvider extends ChangeNotifier {
     _isHandlingLocalStorageChange = true;
     print(
         '📱 InvitationProvider: Local storage changed, reloading invitations...');
-    _loadInvitationsFromLocal();
+    await _loadInvitationsFromLocal();
     _scheduleNotifyListeners();
 
-    // Reset flag after a delay to prevent immediate re-triggering
-    Timer(const Duration(milliseconds: 500), () {
-      _isHandlingLocalStorageChange = false;
-    });
+    _isHandlingLocalStorageChange = false;
   }
 
   void _scheduleNotifyListeners() {
@@ -775,6 +774,17 @@ class InvitationProvider extends ChangeNotifier {
       print(
           '📱 InvitationProvider: Existing invitation IDs: $existingInvitationIds');
 
+      // Preserve local invitation states - don't override them with Session contacts
+      // Keep all invitations that have been modified locally (have status changes or are received)
+      final localInvitations = _invitations
+          .where((inv) =>
+              inv.isReceived == true ||
+              inv.status != 'pending' ||
+              inv.updatedAt.isAfter(inv.createdAt))
+          .toList();
+      print(
+          '📱 InvitationProvider: Preserving ${localInvitations.length} local invitations (received, modified, or non-pending)');
+
       // Check if we already have Session contacts in our invitations
       final hasSessionContacts = _invitations
           .any((inv) => inv.status == 'accepted' && inv.isReceived == false);
@@ -782,11 +792,27 @@ class InvitationProvider extends ChangeNotifier {
       print(
           '📱 InvitationProvider: Already has Session contacts: $hasSessionContacts');
 
+      // Start with local invitations (preserve their states)
+      _invitations = localInvitations;
+
       // Only add Session contacts if we don't have them already or if force refresh is requested
       int addedCount = 0;
       if (!hasSessionContacts || forceRefresh) {
         // Add Session contacts as invitations (if not already present)
         for (final contact in contacts.values) {
+          // Check if we already have this contact as a local invitation
+          final existingLocalInvitation = localInvitations
+              .where((inv) =>
+                  inv.senderId == contact.sessionId ||
+                  inv.recipientId == contact.sessionId)
+              .firstOrNull;
+
+          if (existingLocalInvitation != null) {
+            print(
+                '📱 InvitationProvider: Skipped Session contact - local invitation exists: ${contact.sessionId}');
+            continue;
+          }
+
           if (!existingInvitationIds.contains(contact.sessionId)) {
             final sessionInvitation = Invitation(
               id: contact.sessionId,
@@ -967,6 +993,15 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
+  Invitation? _findInvitationByParticipants(
+      String senderId, String receiverId) {
+    return _invitations.firstWhere(
+      (inv) =>
+          (inv.senderId == senderId && inv.recipientId == receiverId) ||
+          (inv.senderId == receiverId && inv.recipientId == senderId),
+    );
+  }
+
   // Accept invitation (Session Protocol equivalent)
   Future<bool> acceptInvitation(String invitationId) async {
     try {
@@ -1007,8 +1042,12 @@ class InvitationProvider extends ChangeNotifier {
       }
 
       // Save updated invitation to local storage
+      print(
+          '📱 InvitationProvider: Saving invitation status update to local storage...');
       await LocalStorageService.instance
           .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
+      print(
+          '📱 InvitationProvider: ✅ Invitation status saved to local storage');
 
       // Add as contact in Session Protocol
       try {
@@ -1132,11 +1171,18 @@ class InvitationProvider extends ChangeNotifier {
             '📱 InvitationProvider: ✅ Final invitation update saved to prevent duplicates');
       }
 
+      await _ensureInvitationPersisted(updatedInvitation);
+
       // Clear loading state for this invitation
       _loadingInvitations[invitationId] = false;
 
-      // Ensure the updated invitation is properly saved and persisted
-      await _ensureInvitationPersisted(updatedInvitation);
+      // Add notification for invitation acceptance
+      await _addInvitationStatusNotification(
+        invitationId: invitationId,
+        otherUserName: otherUserName,
+        status: 'accepted',
+        conversationGuid: conversationGuid,
+      );
 
       notifyListeners();
       print(
@@ -1176,6 +1222,8 @@ class InvitationProvider extends ChangeNotifier {
       final index = _invitations.indexWhere((inv) => inv.id == invitationId);
       if (index != -1) {
         _invitations[index] = updatedInvitation;
+      } else {
+        _invitations.insert(0, updatedInvitation);
       }
 
       // Temporarily disable local storage change handler to prevent loop
@@ -1217,6 +1265,13 @@ class InvitationProvider extends ChangeNotifier {
 
       // Ensure the updated invitation is properly saved and persisted
       await _ensureInvitationPersisted(updatedInvitation);
+
+      // Add notification for invitation decline
+      await _addInvitationStatusNotification(
+        invitationId: invitationId,
+        otherUserName: otherUserName,
+        status: 'declined',
+      );
 
       notifyListeners();
       print(
@@ -1269,41 +1324,98 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
-  // Ensure invitation is properly persisted to local storage
-  Future<void> _ensureInvitationPersisted(Invitation invitation) async {
+  // Add notification for invitation status change
+  Future<void> _addInvitationStatusNotification({
+    required String invitationId,
+    required String otherUserName,
+    required String status,
+    String? conversationGuid,
+  }) async {
     try {
       print(
-          '📱 InvitationProvider: Ensuring invitation persistence: ${invitation.id}');
+          '📱 InvitationProvider: Adding invitation status notification for $status');
 
-      // Find and update the invitation in the list
-      final index = _invitations.indexWhere((inv) => inv.id == invitation.id);
-      if (index != -1) {
-        _invitations[index] = invitation;
-      } else {
-        // If not found, add it to the list
-        _invitations.add(invitation);
+      String title;
+      String body;
+      NotificationType type;
+
+      switch (status) {
+        case 'accepted':
+          title = 'Invitation Accepted';
+          body = 'You accepted invitation from $otherUserName';
+          type = NotificationType.invitationResponse;
+          break;
+        case 'declined':
+          title = 'Invitation Declined';
+          body = 'You declined invitation from $otherUserName';
+          type = NotificationType.invitationResponse;
+          break;
+        case 'blocked':
+          title = 'User Blocked';
+          body = 'You blocked $otherUserName';
+          type = NotificationType.system;
+          break;
+        default:
+          title = 'Invitation Update';
+          body = 'Your invitation to $otherUserName was $status';
+          type = NotificationType.invitationResponse;
       }
 
-      // Sort invitations by creation date (newest first)
-      _invitations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final notification = LocalNotification(
+        id: 'invitation_${invitationId}_${status}_${DateTime.now().millisecondsSinceEpoch}',
+        title: title,
+        body: body,
+        type: type,
+        timestamp: DateTime.now(),
+        isRead: false,
+        data: {
+          'invitationId': invitationId,
+          'status': status,
+          'conversationGuid': conversationGuid,
+          'otherUserName': otherUserName,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
 
-      // Temporarily disable local storage change handler to prevent loop
-      _isHandlingLocalStorageChange = true;
+      // Add to notification provider
+      final notificationProvider = NotificationProvider();
+      notificationProvider.addNotification(notification);
 
-      // Save to local storage
-      await LocalStorageService.instance
-          .saveInvitations(_invitations.map((inv) => inv.toJson()).toList());
-
-      // Re-enable after a short delay
-      Timer(const Duration(milliseconds: 100), () {
-        _isHandlingLocalStorageChange = false;
-      });
-
-      print(
-          '📱 InvitationProvider: ✅ Invitation persistence ensured: ${invitation.id}');
+      print('📱 InvitationProvider: ✅ Invitation status notification added');
     } catch (e) {
-      print('📱 InvitationProvider: Error ensuring invitation persistence: $e');
+      print(
+          '📱 InvitationProvider: Error adding invitation status notification: $e');
     }
+  }
+
+  Future<void> _ensureInvitationPersisted(Invitation invitation) async {
+    final rawList = await LocalStorageService.instance.getInvitations();
+
+    // Find if this invitation already exists in storage
+    final index = rawList.indexWhere((r) => r['id'] == invitation.id);
+
+    // Always use the latest version from invitation.toJson()
+    final updated = invitation.toJson();
+
+    // Replace old version if it exists
+    if (index != -1) {
+      rawList.removeAt(index);
+    }
+
+    // Insert updated version at the top
+    rawList.insert(0, updated);
+
+    // Save the updated list
+    await LocalStorageService.instance.saveInvitations(rawList);
+
+    // Debug confirmation
+    print(
+        '✅ Saved invitation [${invitation.id}] with status: ${invitation.status}');
+
+    final saved = await LocalStorageService.instance.getInvitations();
+    final match =
+        saved.firstWhere((r) => r['id'] == invitation.id, orElse: () => {});
+    print('🧪 Final saved status: ${match?['status']}');
   }
 
   // Remove duplicate invitations (keep only the most recent one per sender)

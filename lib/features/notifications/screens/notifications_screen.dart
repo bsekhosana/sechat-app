@@ -5,6 +5,7 @@ import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
 import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:sechat_app/features/notifications/providers/notification_provider.dart';
 import 'package:sechat_app/features/notifications/models/local_notification.dart';
+import 'package:sechat_app/features/auth/screens/main_nav_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -298,7 +299,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   void _navigateToChat(String chatId) {
     // Navigate to main nav screen and switch to chats tab
-    Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => MainNavScreen()),
+      (route) => false,
+    );
 
     // Switch to chats tab (this would need to be handled by the main nav screen)
     // For now, we'll just navigate to the main screen
@@ -306,7 +310,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   void _navigateToInvitations() {
     // Navigate to main nav screen and switch to invitations tab
-    Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false);
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => MainNavScreen()),
+      (route) => false,
+    );
 
     // Switch to invitations tab (this would need to be handled by the main nav screen)
     // For now, we'll just navigate to the main screen

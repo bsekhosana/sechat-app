@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:crypto/crypto.dart';
 import 'package:pointycastle/pointycastle.dart';
 import 'package:uuid/uuid.dart';
+import 'simple_notification_service.dart';
 
 // Session Protocol Models
 class LocalSessionIdentity {
@@ -450,6 +451,14 @@ class SessionService {
       // Disconnect from network first
       if (_isConnected) {
         await disconnect();
+      }
+
+      // Clear notification service session data and unlink token
+      try {
+        await SimpleNotificationService.instance.clearSessionData();
+        print('🔐 Session: ✅ Notification service session data cleared');
+      } catch (e) {
+        print('🔐 Session: Error clearing notification service data: $e');
       }
 
       // Clear in-memory data
