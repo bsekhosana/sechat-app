@@ -2,11 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../shared/providers/auth_provider.dart';
-import '../../features/chat/providers/chat_provider.dart';
-import '../../features/invitations/providers/invitation_provider.dart';
-import '../../features/search/providers/search_provider.dart';
-import 'session_service.dart';
+// import '../../shared/providers/auth_provider.dart'; // Temporarily disabled
+// import '../../features/chat/providers/chat_provider.dart'; // Temporarily disabled
+// import '../../features/invitations/providers/invitation_provider.dart'; // Temporarily disabled
+// import '../../features/search/providers/search_provider.dart'; // Removed search functionality
+import 'se_session_service.dart';
 import 'local_storage_service.dart';
 import 'simple_notification_service.dart';
 
@@ -32,9 +32,9 @@ class UserExistenceGuard {
         '🔍 UserExistenceGuard: User no longer exists, starting logout process');
 
     try {
-      // 1. Disconnect Session
-      print('🔍 UserExistenceGuard: Disconnecting Session');
-      SessionService.instance.disconnect();
+      // 1. Logout from SeSessionService
+      print('🔍 UserExistenceGuard: Logging out from SeSessionService');
+      await SeSessionService().logout();
 
       // 2. Clear all local storage
       print('🔍 UserExistenceGuard: Clearing local storage');
@@ -103,9 +103,9 @@ class UserExistenceGuard {
         '🔍 UserExistenceGuard: User no longer exists, starting logout process');
 
     try {
-      // 1. Disconnect Session
-      print('🔍 UserExistenceGuard: Disconnecting Session');
-      SessionService.instance.disconnect();
+      // 1. Logout from SeSessionService
+      print('🔍 UserExistenceGuard: Logging out from SeSessionService');
+      await SeSessionService().logout();
 
       // 2. Clear all local storage
       print('🔍 UserExistenceGuard: Clearing local storage');
@@ -183,35 +183,35 @@ class UserExistenceGuard {
         return;
       }
 
-      // Reset auth provider
-      try {
-        final authProvider = context.read<AuthProvider>();
-        authProvider.reset();
-      } catch (e) {
-        print('🔍 UserExistenceGuard: Error resetting auth provider: $e');
-      }
+      // Reset auth provider - temporarily disabled
+      // try {
+      //   final authProvider = context.read<AuthProvider>();
+      //   authProvider.reset();
+      // } catch (e) {
+      //   print('🔍 UserExistenceGuard: Error resetting auth provider: $e');
+      // }
 
-      // Reset other providers
-      try {
-        final chatProvider = context.read<ChatProvider>();
-        chatProvider.reset();
-      } catch (e) {
-        print('🔍 UserExistenceGuard: Error resetting chat provider: $e');
-      }
+      // Reset other providers - temporarily disabled
+      // try {
+      //   final chatProvider = context.read<ChatProvider>();
+      //   chatProvider.reset();
+      // } catch (e) {
+      //   print('🔍 UserExistenceGuard: Error resetting chat provider: $e');
+      // }
 
-      try {
-        final invitationProvider = context.read<InvitationProvider>();
-        invitationProvider.reset();
-      } catch (e) {
-        print('🔍 UserExistenceGuard: Error resetting invitation provider: $e');
-      }
+      // try {
+      //   final invitationProvider = context.read<InvitationProvider>();
+      //   // invitationProvider.reset(); // Temporarily disabled
+      // } catch (e) {
+      //   print('🔍 UserExistenceGuard: Error resetting invitation provider: $e');
+      // }
 
-      try {
-        final searchProvider = context.read<SearchProvider>();
-        searchProvider.reset();
-      } catch (e) {
-        print('🔍 UserExistenceGuard: Error resetting search provider: $e');
-      }
+      // try {
+      //   final searchProvider = context.read<SearchProvider>();
+      //   // searchProvider.reset(); // Temporarily disabled
+      // } catch (e) {
+      //   print('🔍 UserExistenceGuard: Error resetting search provider: $e');
+      // }
 
       print('🔍 UserExistenceGuard: All providers reset');
     } catch (e) {

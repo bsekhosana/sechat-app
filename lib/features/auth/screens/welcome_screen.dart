@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/providers/auth_provider.dart';
+// import '../../../shared/providers/auth_provider.dart'; // Temporarily disabled
 import 'login_screen.dart';
 import 'register_screen.dart';
 import '../../../shared/widgets/app_icon.dart';
@@ -26,22 +26,28 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Future<void> _checkExistingUser() async {
     try {
       // Check if Session identity exists in local storage
-      final authProvider = context.read<AuthProvider>();
+      // final authProvider = context.read<AuthProvider>(); // Temporarily disabled
 
-      // Check if user has existing Session identity
-      if (authProvider.isAuthenticated) {
-        // User has existing Session identity, show login option
-        setState(() {
-          _hasExistingUser = true;
-          _checking = false;
-        });
-      } else {
-        // No Session identity exists, only show registration
-        setState(() {
-          _hasExistingUser = false;
-          _checking = false;
-        });
-      }
+      // Check if user has existing Session identity - temporarily disabled
+      // if (authProvider.isAuthenticated) {
+      //   // User has existing Session identity, show login option
+      //   setState(() {
+      //     _hasExistingUser = true;
+      //     _checking = false;
+      //   });
+      // } else {
+      //   // No Session identity exists, only show registration
+      //   setState(() {
+      //       _hasExistingUser = false;
+      //       _checking = false;
+      //   });
+      // }
+
+      // Temporarily show only registration
+      setState(() {
+        _hasExistingUser = false;
+        _checking = false;
+      });
     } catch (e) {
       // If there's an error, default to showing only registration
       setState(() {

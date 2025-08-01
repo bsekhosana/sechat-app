@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
-import '../../core/services/session_service.dart';
+import '../../core/services/se_session_service.dart';
 
 class AppLifecycleHandler extends StatefulWidget {
   final Widget child;
@@ -64,7 +64,10 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
   void _handleAppResumed() async {
     try {
-      await SessionService.instance.onAppResumed();
+      // SeSessionService doesn't have lifecycle methods
+      // Notification services handle this automatically
+      print(
+          '📱 AppLifecycleHandler: App resumed - notification services active');
     } catch (e) {
       print('📱 AppLifecycleHandler: Error handling app resume: $e');
     }
@@ -72,7 +75,10 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
   void _handleAppPaused() async {
     try {
-      await SessionService.instance.onAppPaused();
+      // SeSessionService doesn't have lifecycle methods
+      // Notification services handle this automatically
+      print(
+          '📱 AppLifecycleHandler: App paused - notification services continue');
     } catch (e) {
       print('📱 AppLifecycleHandler: Error handling app pause: $e');
     }
@@ -80,7 +86,10 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
   void _handleAppDetached() async {
     try {
-      await SessionService.instance.onAppDetached();
+      // SeSessionService doesn't have lifecycle methods
+      // Notification services handle this automatically
+      print(
+          '📱 AppLifecycleHandler: App detached - notification services continue');
     } catch (e) {
       print('📱 AppLifecycleHandler: Error handling app detach: $e');
     }

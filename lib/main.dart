@@ -7,8 +7,8 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 
-import 'features/search/providers/search_provider.dart';
-import 'features/chat/providers/chat_provider.dart';
+// import 'features/search/providers/search_provider.dart'; // Removed search functionality
+// import 'features/chat/providers/chat_provider.dart'; // Temporarily disabled
 import 'features/invitations/providers/invitation_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
@@ -102,10 +102,11 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => SearchProvider()),
-        ChangeNotifierProvider(create: (_) => ChatProvider()),
+        // ChangeNotifierProvider(create: (_) => SearchProvider()), // Removed search functionality
+        // ChangeNotifierProvider(create: (_) => ChatProvider()), // Temporarily disabled
         ChangeNotifierProvider(create: (_) => InvitationProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        // ChangeNotifierProvider(create: (_) => AuthProvider()), // Temporarily disabled
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
         ChangeNotifierProvider(create: (_) => LocalStorageService.instance),
       ],

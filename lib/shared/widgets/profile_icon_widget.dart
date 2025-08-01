@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
-import '../providers/auth_provider.dart';
+// import '../providers/auth_provider.dart'; // Temporarily disabled
 import '../../core/services/global_user_service.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
-import 'package:sechat_app/features/chat/providers/chat_provider.dart';
+// import 'package:sechat_app/features/chat/providers/chat_provider.dart'; // Temporarily disabled
 import 'package:sechat_app/core/services/local_storage_service.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -323,7 +323,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
           seSessionService.currentSession?.sessionId ?? '');
 
       // Clear local chat data
-      context.read<ChatProvider>().reset();
+      // context.read<ChatProvider>().reset(); // Temporarily disabled
 
       // Clear local storage
       await LocalStorageService.instance.clearAllData();
@@ -367,7 +367,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       await LocalStorageService.instance.clearAllData();
 
       // Log out and navigate to welcome screen
-      await context.read<AuthProvider>().logout();
+      await SeSessionService().logout();
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         (route) => false,

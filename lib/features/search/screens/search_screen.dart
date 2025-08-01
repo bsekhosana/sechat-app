@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/providers/auth_provider.dart';
+// import '../../../shared/providers/auth_provider.dart'; // Temporarily disabled
 import '../../../core/services/global_user_service.dart';
 import '../providers/search_provider.dart';
 import '../../../shared/models/user.dart';
-import '../../invitations/providers/invitation_provider.dart';
+// import '../../invitations/providers/invitation_provider.dart'; // Temporarily disabled
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -43,8 +43,8 @@ class _SearchScreenState extends State<SearchScreen> {
 
     if (confirmed == true) {
       final searchProvider = context.read<SearchProvider>();
-      final invitationProvider = context.read<InvitationProvider>();
-      final authProvider = context.read<AuthProvider>();
+      // final invitationProvider = context.read<InvitationProvider>(); // Temporarily disabled
+      // final authProvider = context.read<AuthProvider>(); // Temporarily disabled
       final currentUsername =
           GlobalUserService.instance.currentUsername ?? 'Unknown User';
 
@@ -455,12 +455,12 @@ class _SearchScreenState extends State<SearchScreen> {
       itemCount: searchProvider.searchResults.length,
       itemBuilder: (context, index) {
         final user = searchProvider.searchResults[index];
-        final currentUser = context.read<AuthProvider>().currentUser;
+        // final currentUser = context.read<AuthProvider>().currentUser; // Temporarily disabled
 
-        // Don't show current user in search results
-        if (currentUser?.id == user.id) {
-          return const SizedBox.shrink();
-        }
+        // Don't show current user in search results - temporarily disabled
+        // if (currentUser?.id == user.id) {
+        //   return const SizedBox.shrink();
+        // }
 
         return _UserCard(
           user: user,
@@ -671,7 +671,7 @@ class _UserCard extends StatelessWidget {
 
   void _removeInvitation(BuildContext context) async {
     final searchProvider = context.read<SearchProvider>();
-    final invitationProvider = context.read<InvitationProvider>();
+    // final invitationProvider = context.read<InvitationProvider>(); // Temporarily disabled
 
     final success = await searchProvider.removeInvitation(user.id);
 

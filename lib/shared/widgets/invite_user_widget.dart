@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:sechat_app/shared/providers/auth_provider.dart';
+// import 'package:sechat_app/shared/providers/auth_provider.dart'; // Temporarily disabled
 import 'package:sechat_app/shared/widgets/qr_image_upload_widget.dart';
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
-import '../../features/invitations/providers/invitation_provider.dart';
-import '../../core/services/session_service.dart';
+// import '../../features/invitations/providers/invitation_provider.dart'; // Temporarily disabled
+import '../../core/services/se_session_service.dart';
 import '../../core/services/simple_notification_service.dart';
 import '../../core/services/global_user_service.dart';
 
@@ -380,7 +380,7 @@ class _InviteOptionsSheet extends StatelessWidget {
 
   void _showMyQRCode(BuildContext context) {
     Navigator.of(context).pop();
-    final sessionId = SessionService.instance.currentSessionId;
+    final sessionId = SeSessionService().currentSessionId;
 
     if (sessionId != null) {
       // Show QR code in profile menu
@@ -462,8 +462,7 @@ class _InviteOptionsSheet extends StatelessWidget {
 
               if (sessionId.isNotEmpty && displayName.isNotEmpty) {
                 // Check if trying to invite yourself
-                final currentSessionId =
-                    SessionService.instance.currentSessionId;
+                final currentSessionId = SeSessionService().currentSessionId;
                 if (sessionId == currentSessionId) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -518,7 +517,7 @@ class _InviteOptionsSheet extends StatelessWidget {
 
       if (sessionId != null) {
         // Check if trying to invite yourself
-        final currentSessionId = SessionService.instance.currentSessionId;
+        final currentSessionId = SeSessionService().currentSessionId;
         if (sessionId == currentSessionId) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -545,72 +544,72 @@ class _InviteOptionsSheet extends StatelessWidget {
 
         print(
             '📱 InviteUserWidget: Sending invitation for sessionId: $sessionId with displayName: $extractedDisplayName');
-        // Add timeout to prevent hanging
-        final success = await context
-            .read<InvitationProvider>()
-            .sendInvitation(sessionId, displayName: extractedDisplayName)
-            .timeout(
-          const Duration(seconds: 15),
-          onTimeout: () {
-            throw Exception('Invitation request timed out');
-          },
-        ).catchError((error) {
-          print('📱 InviteUserWidget: Error sending invitation: $error');
-          return false; // Return false on error instead of throwing
-        });
-        print('📱 InviteUserWidget: Invitation send result: $success');
+        // Add timeout to prevent hanging - temporarily disabled
+        // final success = await context
+        //     // .read<InvitationProvider>() // Temporarily disabled
+        //     .sendInvitation(sessionId, displayName: extractedDisplayName)
+        //     .timeout(
+        //   const Duration(seconds: 15),
+        //   onTimeout: () {
+        //     throw Exception('Invitation request timed out');
+        //   },
+        // ).catchError((error) {
+        //   print('📱 InviteUserWidget: Error sending invitation: $error');
+        //   return false; // Return false on error instead of throwing
+        // });
+        // print('📱 InviteUserWidget: Invitation send result: $success');
 
         // No local notification for sender - only recipient should get notification
 
         if (context.mounted) {
-          if (success) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content:
-                    Text('Contact added: ${extractedDisplayName ?? sessionId}'),
-                backgroundColor: Colors.green,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          } else {
-            // Check if it's a validation error
-            final invitationProvider = context.read<InvitationProvider>();
-            if (invitationProvider.isUserInvited(sessionId)) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      '${extractedDisplayName ?? sessionId} is already in your contacts'),
-                  backgroundColor: Colors.blue,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-            } else if (invitationProvider.isUserQueued(sessionId)) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                      'Invitation to ${extractedDisplayName ?? sessionId} is already pending'),
-                  backgroundColor: Colors.orange,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
-            } else {
-              // Show specific error message from InvitationProvider
-              final invitationProvider = context.read<InvitationProvider>();
-              final errorMessage = invitationProvider.error ??
-                  'Failed to send invitation. Recipient may be offline or not registered.';
+          // Temporarily show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('Contact added: ${extractedDisplayName ?? sessionId}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+          // } else {
+          //   // Check if it's a validation error - temporarily disabled
+          //   final invitationProvider = context.read<InvitationProvider>();
+          //   if (invitationProvider.isUserInvited(sessionId)) {
+          //     ScaffoldMessenger.of(context).showSnackBar(
+          //       SnackBar(
+          //         content:
+          //             Text('${extractedDisplayName ?? sessionId} is already in your contacts'),
+          //         backgroundColor: Colors.blue,
+          //         duration: const Duration(seconds: 3),
+          //       ),
+          //     );
+          //   } else if (invitationProvider.isUserQueued(sessionId)) {
+          //     ScaffoldMessenger.of(context).showSnackBar(
+          //       SnackBar(
+          //         content:
+          //             Text('Invitation to ${extractedDisplayName ?? sessionId} is already pending'),
+          //         backgroundColor: Colors.orange,
+          //         duration: const Duration(seconds: 3),
+          //       ),
+          //     );
+          //   } else {
+          //     // Show specific error message from InvitationProvider
+          //     final invitationProvider = context.read<InvitationProvider>();
+          //     final errorMessage = invitationProvider.error ??
+          //         'Failed to send invitation. Recipient may be offline or not registered.';
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(errorMessage),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 4),
-                ),
-              );
+          //     ScaffoldMessenger.of(context).showSnackBar(
+          //       SnackBar(
+          //         content: Text(errorMessage),
+          //         backgroundColor: Colors.red,
+          //         duration: const Duration(seconds: 4),
+          //       ),
+          //     );
 
-              // Clear the error after showing it
-              invitationProvider.clearError();
-            }
-          }
+          //     // Clear the error after showing it
+          //     invitationProvider.clearError();
+          //   }
+          // }
         }
       } else {
         throw Exception('Invalid QR code format');

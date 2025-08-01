@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/services/session_service.dart';
+import '../../core/services/se_session_service.dart';
 import '../../core/services/network_service.dart';
 
 class ConnectionStatusWidget extends StatefulWidget {
@@ -33,26 +33,8 @@ class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
   }
 
   void _setupConnectionListeners() {
-    // Listen for Session Protocol connection changes
-    SessionService.instance.onConnected = () {
-      if (mounted) {
-        _checkConnectionStatus();
-      }
-    };
-
-    SessionService.instance.onDisconnected = () {
-      if (mounted) {
-        _checkConnectionStatus();
-      }
-    };
-
-    SessionService.instance.onError = (error) {
-      if (mounted) {
-        _checkConnectionStatus();
-      }
-    };
-
-    // Listen for network service changes
+    // Listen for network service changes only
+    // Session connection is now handled by notification system
     NetworkService.instance.addListener(() {
       if (mounted) {
         _checkConnectionStatus();
@@ -72,27 +54,27 @@ class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
   }
 
   void _checkConnectionStatus() {
-    final isSessionConnected = SessionService.instance.isConnected;
     final isNetworkConnected = NetworkService.instance.isConnected;
     final isReconnecting = NetworkService.instance.isReconnecting;
+    final hasSession = SeSessionService().currentSession != null;
 
     String message;
     Color color;
     bool showWidget = false;
 
-    if (isSessionConnected && isNetworkConnected) {
-      // Fully connected
-      message = 'Connected to Session Network';
+    if (isNetworkConnected && hasSession) {
+      // Network connected and session exists
+      message = 'Connected to SeChat Network';
       color = Colors.green;
       showWidget = false; // Hide when fully connected
-    } else if (isNetworkConnected && !isSessionConnected) {
-      // Network available but Session not connected
-      message = 'Failed to connect to Session Network';
-      color = Colors.red;
+    } else if (isNetworkConnected && !hasSession) {
+      // Network available but no session
+      message = 'No active session';
+      color = Colors.orange;
       showWidget = true;
     } else if (isReconnecting) {
       // Reconnecting
-      message = 'Reconnecting to Session Network...';
+      message = 'Reconnecting to network...';
       color = Colors.orange;
       showWidget = true;
     } else {
@@ -138,12 +120,13 @@ class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
     try {
       print('ConnectionStatusWidget: Attempting to reconnect...');
 
-      // Try to reconnect Session Protocol
-      if (!SessionService.instance.isConnected) {
-        await SessionService.instance.connect();
+      // Check if session exists and try to initialize notification services
+      final seSessionService = SeSessionService();
+      if (seSessionService.currentSession != null) {
+        await seSessionService.initializeNotificationServices();
       }
 
-      // Note: Session Messenger is now optional and uses push notifications
+      // Note: Connection is now handled by notification system
       // No need to manually reconnect as it's handled automatically
 
       // Refresh connection status

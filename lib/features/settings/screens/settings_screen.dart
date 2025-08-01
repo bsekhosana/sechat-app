@@ -14,7 +14,7 @@ import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:sechat_app/core/services/airnotifier_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
-import '../../invitations/providers/invitation_provider.dart';
+// import '../../invitations/providers/invitation_provider.dart'; // Temporarily disabled
 import 'package:sechat_app/features/notifications/providers/notification_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -51,102 +51,138 @@ Download now and let's chat securely!
   }
 
   void _showLogoutConfirmation(BuildContext context) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF2C2C2C),
-          title: const Text(
-            'Logout',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
             ),
           ),
-          content: const Text(
-            'Are you sure you want to log out? You\'ll need to enter your password to log back in.',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white70,
-              ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(context).pop(); // Close dialog first
-
-                try {
-                  // Show loading indicator
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (context) => const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFFFF6B35),
+              // Title
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Logout',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              // Description
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Text(
+                  'Are you sure you want to log out? You\'ll need to enter your password to log back in.',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[200],
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
                       ),
                     ),
-                  );
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.of(context)
+                              .pop(); // Close action sheet first
 
-                  // Perform logout using SeSessionService
-                  final seSessionService = SeSessionService();
-                  await seSessionService.logout();
+                          try {
+                            print('🔍 Settings: Starting logout process...');
 
-                  // Check if widget is still mounted before navigation
-                  if (context.mounted) {
-                    // Navigate to login screen without back button
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (_) => const LoginScreen(),
+                            // Perform logout using SeSessionService
+                            final seSessionService = SeSessionService();
+                            final logoutSuccess =
+                                await seSessionService.logout();
+
+                            print('🔍 Settings: Logout result: $logoutSuccess');
+
+                            // Check if widget is still mounted before navigation
+                            if (context.mounted) {
+                              print(
+                                  '🔍 Settings: Navigating to welcome screen...');
+                              // Navigate to welcome screen without back button
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (_) => const WelcomeScreen(),
+                                ),
+                                (route) => false,
+                              );
+                              print('🔍 Settings: Navigation completed');
+                            } else {
+                              print(
+                                  '🔍 Settings: Context not mounted after logout');
+                            }
+                          } catch (e) {
+                            print('🔍 Settings: Logout error: $e');
+                            // If there's an error and context is still mounted, show error
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Logout failed: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF6B35),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Logout'),
                       ),
-                      (route) => false,
-                    );
-                  }
-                } catch (e) {
-                  print('Logout error: $e');
-                  // If there's an error and context is still mounted, close loading dialog
-                  if (context.mounted) {
-                    Navigator.of(context).pop(); // Close loading dialog
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Logout failed. Please try again.'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF5555),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                    ),
+                  ],
                 ),
               ),
-              child: const Text(
-                'Logout',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+              const SizedBox(height: 20),
+            ],
+          ),
         );
       },
     );
@@ -234,63 +270,14 @@ Download now and let's chat securely!
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
           children: [
-            // Header matching the designs
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: _shareApp,
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF6B35),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.share,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: InviteUserWidget(),
-                  ),
-                  const SizedBox(width: 12),
-                  const ProfileIconWidget(),
-                ],
-              ),
-            ),
-
-            // Settings title
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Settings',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
             // Settings options
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.only(left: 20, right: 20, top: 0),
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
@@ -537,7 +524,7 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
         print('🗑️ Settings: ✅ Local storage data cleared');
 
         // Clear all provider data
-        context.read<InvitationProvider>().clearAllData();
+        // context.read<InvitationProvider>().clearAllData(); // Temporarily disabled
         context.read<NotificationProvider>().clearAllData();
         print('🗑️ Settings: ✅ Provider data cleared');
 

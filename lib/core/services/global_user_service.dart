@@ -1,5 +1,5 @@
 import '../../shared/models/user.dart';
-import '../../shared/providers/auth_provider.dart';
+import 'se_session_service.dart';
 
 /// Global service for accessing the current user without needing context
 class GlobalUserService {
@@ -9,10 +9,25 @@ class GlobalUserService {
   GlobalUserService._();
 
   /// Get the current authenticated user
-  User? get currentUser => AuthProvider.instance.currentUser;
+  User? get currentUser {
+    final session = SeSessionService().currentSession;
+    if (session == null) return null;
+
+    return User(
+      id: session.sessionId,
+      username: session.displayName,
+      profilePicture: null, // SeSessionService doesn't store profile pictures
+      isOnline: true,
+      lastSeen: DateTime.now(),
+      createdAt: session.createdAt,
+    );
+  }
 
   /// Check if user is authenticated
-  bool get isAuthenticated => AuthProvider.instance.isAuthenticated;
+  bool get isAuthenticated {
+    final session = SeSessionService().currentSession;
+    return session != null && session.isLoggedIn;
+  }
 
   /// Get the current user's ID
   String? get currentUserId => currentUser?.id;
@@ -24,10 +39,10 @@ class GlobalUserService {
   String? get currentUserProfilePicture => currentUser?.profilePicture;
 
   /// Get the current user's session ID
-  String? get sessionId => AuthProvider.instance.sessionId;
+  String? get sessionId => SeSessionService().currentSessionId;
 
   /// Get the current user's display name
-  String? get displayName => AuthProvider.instance.displayName;
+  String? get displayName => SeSessionService().currentSession?.displayName;
 
   /// Check if the user is online
   bool get isOnline => currentUser?.isOnline ?? false;
@@ -37,14 +52,8 @@ class GlobalUserService {
 
   /// Update the current user's online status
   void updateOnlineStatus(bool isOnline) {
-    if (currentUser != null) {
-      final updatedUser = currentUser!.copyWith(
-        isOnline: isOnline,
-        lastSeen: isOnline ? null : DateTime.now(),
-      );
-      // Note: This would need to be integrated with AuthProvider to actually update the user
-      // For now, this is a placeholder for the concept
-    }
+    // SeSessionService doesn't track online status
+    // This is handled by the notification system
   }
 
   /// Check if user has a profile picture
@@ -57,37 +66,38 @@ class GlobalUserService {
       displayName ?? currentUsername ?? 'Anonymous User';
 
   /// Check if this is the first time user
-  bool get isFirstTime => AuthProvider.instance.isFirstTime;
+  bool get isFirstTime {
+    final session = SeSessionService().currentSession;
+    return session == null;
+  }
 
   /// Get user's public key if available
-  String? get publicKey => currentUser?.publicKey;
+  String? get publicKey => SeSessionService().currentSession?.publicKey;
 
   /// Check if user has been created recently (within last 24 hours)
   bool get isNewUser {
-    final user = currentUser;
-    if (user == null) return false;
-    return DateTime.now().difference(user.createdAt).inHours < 24;
+    final session = SeSessionService().currentSession;
+    if (session == null) return false;
+    return DateTime.now().difference(session.createdAt).inHours < 24;
   }
 
   /// Get user's creation date
-  DateTime? get createdAt => currentUser?.createdAt;
+  DateTime? get createdAt => SeSessionService().currentSession?.createdAt;
 
   /// Check if user data is available
-  bool get hasUserData => currentUser != null;
+  bool get hasUserData => SeSessionService().currentSession != null;
 
   /// Get user's device ID if available
-  String? get deviceId => currentUser?.deviceId;
+  String? get deviceId =>
+      null; // SeSessionService doesn't track device ID separately
 
   /// Check if user is typing
   bool get isTyping => currentUser?.isTyping ?? false;
 
   /// Update typing status
   void updateTypingStatus(bool isTyping) {
-    if (currentUser != null) {
-      final updatedUser = currentUser!.copyWith(isTyping: isTyping);
-      // Note: This would need to be integrated with AuthProvider to actually update the user
-      // For now, this is a placeholder for the concept
-    }
+    // SeSessionService doesn't track typing status
+    // This is handled by the chat system
   }
 
   /// Get user's invitation status
@@ -109,49 +119,78 @@ class GlobalUserService {
   bool? get previousOnlineStatus => currentUser?.previousOnlineStatus;
 
   /// Check if user is loading
-  bool get isLoading => AuthProvider.instance.isLoading;
+  bool get isLoading => false; // SeSessionService operations are synchronous
 
   /// Check if auth is initialized
-  bool get isInitialized => AuthProvider.instance.isInitialized;
+  bool get isInitialized => SeSessionService().currentSession != null;
 
   /// Get any auth error
-  String? get error => AuthProvider.instance.error;
+  String? get error => null; // SeSessionService doesn't store errors
 
   /// Clear auth error
-  void clearError() => AuthProvider.instance.clearError();
+  void clearError() {
+    // SeSessionService doesn't store errors
+  }
 
   /// Logout the current user
-  Future<void> logout() => AuthProvider.instance.logout();
+  Future<void> logout() async {
+    await SeSessionService().logout();
+  }
 
   /// Update user profile
   Future<bool> updateProfile({
     String? displayName,
     String? profilePicture,
-  }) =>
-      AuthProvider.instance.updateProfile(
-        displayName: displayName,
-        profilePicture: profilePicture,
-      );
+  }) async {
+    // SeSessionService doesn't support profile updates yet
+    // This would need to be implemented if needed
+    return false;
+  }
 
   /// Export session identity
-  Future<Map<String, String>> exportSessionIdentity() =>
-      AuthProvider.instance.exportSessionIdentity();
+  Future<Map<String, String>> exportSessionIdentity() async {
+    final session = SeSessionService().currentSession;
+    if (session == null) return {};
+
+    return {
+      'sessionId': session.sessionId,
+      'displayName': session.displayName,
+      'publicKey': session.publicKey,
+      'createdAt': session.createdAt.toIso8601String(),
+    };
+  }
 
   /// Delete session identity
-  Future<bool> deleteSessionIdentity() =>
-      AuthProvider.instance.deleteSessionIdentity();
+  Future<bool> deleteSessionIdentity() async {
+    try {
+      await SeSessionService().deleteSession();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
   /// Get session QR code data
-  String? getSessionQRCodeData() =>
-      AuthProvider.instance.getSessionQRCodeData();
+  String? getSessionQRCodeData() {
+    final session = SeSessionService().currentSession;
+    return session?.publicKey;
+  }
 
   /// Parse session QR code data
-  Map<String, dynamic>? parseSessionQRCodeData(String qrData) =>
-      AuthProvider.instance.parseSessionQRCodeData(qrData);
+  Map<String, dynamic>? parseSessionQRCodeData(String qrData) {
+    // This would need to be implemented based on QR code format
+    return null;
+  }
 
   /// Check if user has contacts
-  Future<bool> hasContacts() => AuthProvider.instance.hasContacts();
+  Future<bool> hasContacts() async {
+    // This would need to be implemented based on invitation system
+    return false;
+  }
 
   /// Get user's contacts
-  Map<String, dynamic> getContacts() => AuthProvider.instance.getContacts();
+  Map<String, dynamic> getContacts() {
+    // This would need to be implemented based on invitation system
+    return {};
+  }
 }

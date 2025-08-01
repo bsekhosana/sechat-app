@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/providers/auth_provider.dart';
+// import '../../../shared/providers/auth_provider.dart'; // Temporarily disabled
 import '../../../shared/widgets/app_icon.dart';
 import '../../../core/services/network_service.dart';
 import 'main_nav_screen.dart';
 import 'dart:convert';
-import '../../../core/services/session_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../shared/widgets/custom_elevated_button.dart';
 import '../../../shared/widgets/custom_textfield.dart';
