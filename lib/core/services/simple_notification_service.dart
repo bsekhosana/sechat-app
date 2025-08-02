@@ -17,6 +17,7 @@ import 'se_shared_preference_service.dart';
 import '../../shared/models/chat.dart';
 import '../../shared/models/message.dart' as app_message;
 import '../utils/guid_generator.dart';
+import 'indicator_service.dart';
 
 /// Simple, consolidated notification service with end-to-end encryption
 class SimpleNotificationService {
@@ -514,6 +515,9 @@ class SimpleNotificationService {
       print(
           '🔔 SimpleNotificationService: ✅ Invitation callback triggered - UI will update in real-time');
 
+      // Trigger indicator for new invitation
+      IndicatorService().setNewInvitation();
+
       // Refresh InvitationProvider if available
       if (_invitationProvider != null) {
         try {
@@ -773,6 +777,9 @@ class SimpleNotificationService {
       data: data,
       timestamp: DateTime.now(),
     );
+
+    // Trigger indicator for new chat message
+    IndicatorService().setNewChat();
 
     // Trigger callback
     _onMessageReceived?.call(senderId, senderName, message);

@@ -7,6 +7,7 @@ import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/airnotifier_service.dart';
 import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/indicator_service.dart';
 import '../../../core/utils/guid_generator.dart';
 
 enum InvitationStatus {
@@ -234,6 +235,10 @@ class InvitationProvider extends ChangeNotifier {
 
       _error = null;
       notifyListeners();
+      
+      // Trigger indicator for new invitation
+      IndicatorService().setNewInvitation();
+      
       return true;
     } catch (e) {
       _error = 'Failed to send invitation: $e';
@@ -314,6 +319,10 @@ class InvitationProvider extends ChangeNotifier {
 
       _error = null;
       notifyListeners();
+      
+      // Trigger indicator for new chat
+      IndicatorService().setNewChat();
+      
       print('📱 InvitationProvider: ✅ Invitation accepted successfully');
       return true;
     } catch (e) {

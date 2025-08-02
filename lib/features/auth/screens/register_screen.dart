@@ -532,6 +532,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         text: 'Create Account',
                         icon: Icons.add_circle_outline,
                         isPrimary: true,
+                        orangeLoading: true,
                       ),
 
                       if (_error != null) ...[

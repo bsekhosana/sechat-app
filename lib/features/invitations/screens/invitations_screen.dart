@@ -132,7 +132,7 @@ class _ReceivedInvitationsTab extends StatelessWidget {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.only(left: 20, right: 20, top: 0),
+          padding: const EdgeInsets.only(left: 20, right: 20, top: 20),
           itemCount: receivedInvitations.length,
           itemBuilder: (context, index) {
             final invitation = receivedInvitations[index];
