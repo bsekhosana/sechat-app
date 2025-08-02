@@ -102,38 +102,76 @@ Download now and let's chat securely!
         top: false,
         child: Column(
           children: [
-            // Title
-            Padding(
-              padding: const EdgeInsets.only(left: 20, right: 20, top: 20),
+            // Header
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey[300]!),
+                ),
+              ),
               child: Row(
                 children: [
-                  const Text(
-                    'Chats',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.chat,
+                      color: Color(0xFFFF6B35),
+                      size: 20,
                     ),
                   ),
-                  const Spacer(),
-                  if (_chats.isNotEmpty)
-                    Text(
-                      '${_chats.length} conversation${_chats.length == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 14,
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Text(
+                      'Chats',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
                       ),
                     ),
+                  ),
+                  if (_chats.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_chats.length}',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.search,
+                      color: Colors.grey,
+                      size: 20,
+                    ),
+                  ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 20),
-
             // Connection Status
             const ConnectionStatusWidget(),
-
-            const SizedBox(height: 20),
 
             // Chats List
             Expanded(
@@ -201,12 +239,12 @@ Download now and let's chat securely!
     final currentUserId = SeSessionService().currentSessionId ?? '';
     final otherUserDisplayName = chat.getOtherUserDisplayName(currentUserId);
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      color: chat.getBlockedStatus() ? Colors.grey[100] : Colors.white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
       ),
       child: InkWell(
         onTap: () => _openChat(chat),
@@ -217,21 +255,27 @@ Download now and let's chat securely!
           child: Row(
             children: [
               // Avatar
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: chat.getBlockedStatus()
-                    ? Colors.grey
-                    : const Color(0xFFFF6B35),
-                child: Text(
-                  otherUserDisplayName.substring(0, 1).toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: chat.getBlockedStatus()
+                      ? Colors.grey[400]
+                      : const Color(0xFFFF6B35),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Center(
+                  child: Text(
+                    otherUserDisplayName.substring(0, 1).toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
 
               // Chat info
               Expanded(
@@ -256,10 +300,10 @@ Download now and let's chat securely!
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
-                              vertical: 2,
+                              vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.red[100],
+                              color: Colors.red.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(

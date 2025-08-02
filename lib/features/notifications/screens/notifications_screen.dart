@@ -28,42 +28,68 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
+        top: false,
         child: Column(
           children: [
-            // Header with Clear All button
-            Consumer<NotificationProvider>(
-              builder: (context, notificationProvider, child) {
-                if (notificationProvider.notifications.isNotEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        const Text(
-                          'Notifications',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => _showClearAllDialog(
+            // Header
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey[300]!),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.notifications,
+                      color: Color(0xFFFF6B35),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Text(
+                      'Notifications',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                  Consumer<NotificationProvider>(
+                    builder: (context, notificationProvider, child) {
+                      if (notificationProvider.notifications.isNotEmpty) {
+                        return GestureDetector(
+                          onTap: () => _showClearAllDialog(
                               context, notificationProvider),
-                          child: const Text(
-                            'Clear All',
-                            style: TextStyle(
-                              color: Color(0xFFFF6B35),
-                              fontWeight: FontWeight.w600,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.clear_all,
+                              color: Colors.grey,
+                              size: 20,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ],
+              ),
             ),
 
             // Notifications List
@@ -176,14 +202,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: notification.isRead
-            ? const Color(0xFF232323)
-            : const Color(0xFF2A2A2A),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: notification.isRead
-              ? Colors.transparent
-              : const Color(0xFFFF6B35).withOpacity(0.3),
+              ? Colors.grey[300]!
+              : const Color(0xFFFF6B35).withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -193,10 +217,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         title: Text(
           notification.title,
           style: TextStyle(
-            color: Colors.white,
+            color: Colors.black,
             fontSize: 16,
-            fontWeight:
-                notification.isRead ? FontWeight.normal : FontWeight.bold,
+            fontWeight: notification.isRead ? FontWeight.w500 : FontWeight.w600,
           ),
         ),
         subtitle: Column(
@@ -206,7 +229,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Text(
               notification.body,
               style: TextStyle(
-                color: Colors.grey[400],
+                color: Colors.grey[600],
                 fontSize: 14,
               ),
             ),
@@ -214,7 +237,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Text(
               _formatTimestamp(notification.timestamp),
               style: TextStyle(
-                color: Colors.grey[600],
+                color: Colors.grey[500],
                 fontSize: 12,
               ),
             ),

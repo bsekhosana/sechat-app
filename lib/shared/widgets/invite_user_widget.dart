@@ -667,28 +667,28 @@ class _InviteOptionsSheet extends StatelessWidget {
     // Must start with 'session_'
     if (!sessionId.startsWith('session_')) return false;
 
-    // Remove the 'session_' prefix
-    final idPart = sessionId.substring(8);
+    // // Remove the 'session_' prefix
+    // final idPart = sessionId.substring(8);
 
-    // Split by hyphens
-    final parts = idPart.split('-');
+    // // Split by hyphens
+    // final parts = idPart.split('-');
 
-    // Check if we have the right number of parts
-    if (parts.length != 5) return false;
+    // // Check if we have the right number of parts
+    // if (parts.length != 5) return false;
 
-    // Validate each part length
-    // Format: timestamp-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    if (parts[0].length < 8 || // timestamp can be longer
-        parts[1].length != 4 ||
-        parts[2].length != 4 ||
-        parts[3].length != 4 ||
-        parts[4].length != 12) {
-      return false;
-    }
+    // // Validate each part length
+    // // Format: timestamp-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    // if (parts[0].length < 8 || // timestamp can be longer
+    //     parts[1].length != 4 ||
+    //     parts[2].length != 4 ||
+    //     parts[3].length != 4 ||
+    //     parts[4].length != 12) {
+    //   return false;
+    // }
 
-    // Check if all characters are valid (alphanumeric)
-    final validChars = RegExp(r'^[a-z0-9-]+$');
-    if (!validChars.hasMatch(idPart)) return false;
+    // // Check if all characters are valid (alphanumeric)
+    // final validChars = RegExp(r'^[a-z0-9-]+$');
+    // if (!validChars.hasMatch(idPart)) return false;
 
     return true;
   }
