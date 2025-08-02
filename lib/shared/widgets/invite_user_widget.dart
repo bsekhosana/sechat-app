@@ -577,9 +577,26 @@ class _InviteOptionsSheet extends StatelessWidget {
         print(
             '📱 InviteUserWidget: Sending invitation for sessionId: $sessionId with displayName: $extractedDisplayName');
 
+        // Check if the session ID can be invited first
+        final invitationProvider = context.read<InvitationProvider>();
+        final canInviteResult =
+            invitationProvider.canInviteSessionId(sessionId);
+
+        if (!canInviteResult['canInvite']) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(canInviteResult['reason']),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
+        }
+
         // Send invitation using InvitationProvider
-        final success = await context
-            .read<InvitationProvider>()
+        final success = await invitationProvider
             .sendInvitationBySessionId(sessionId,
                 displayName: extractedDisplayName)
             .timeout(

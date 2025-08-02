@@ -99,19 +99,29 @@ class NotificationProvider extends ChangeNotifier {
       }
 
       if (notificationsList.isEmpty) {
-        // Add sample notification if no notifications exist
-        notificationsList.add(
-          LocalNotification(
-            id: '1',
-            title: 'Welcome to SeChat!',
-            body: 'Your secure messaging app is ready to use.',
-            type: NotificationType.system,
-            timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-            isRead: false,
-            data: null,
-          ),
-        );
-        await _saveNotifications();
+        // Check if welcome notification has been shown before
+        final hasShownWelcome =
+            await _prefsService.getBool('has_shown_welcome_notification') ??
+                false;
+
+        if (!hasShownWelcome) {
+          // Add welcome notification only if it hasn't been shown before
+          notificationsList.add(
+            LocalNotification(
+              id: 'welcome_notification',
+              title: 'Welcome to SeChat!',
+              body: 'Your secure messaging app is ready to use.',
+              type: NotificationType.system,
+              timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+              isRead: false,
+              data: null,
+            ),
+          );
+
+          // Mark that welcome notification has been shown
+          await _prefsService.setBool('has_shown_welcome_notification', true);
+          await _saveNotifications();
+        }
       } else {
         _notifications = notificationsList;
         // Sort by timestamp (newest first) to ensure proper ordering
@@ -119,18 +129,28 @@ class NotificationProvider extends ChangeNotifier {
       }
     } catch (e) {
       print('Error loading notifications: $e');
-      // Fallback to sample notifications
-      _notifications = [
-        LocalNotification(
-          id: '1',
-          title: 'Welcome to SeChat!',
-          body: 'Your secure messaging app is ready to use.',
-          type: NotificationType.system,
-          timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-          isRead: false,
-          data: null,
-        ),
-      ];
+      // Only add fallback welcome notification if it hasn't been shown before
+      final hasShownWelcome =
+          await _prefsService.getBool('has_shown_welcome_notification') ??
+              false;
+
+      if (!hasShownWelcome) {
+        _notifications = [
+          LocalNotification(
+            id: 'welcome_notification',
+            title: 'Welcome to SeChat!',
+            body: 'Your secure messaging app is ready to use.',
+            type: NotificationType.system,
+            timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+            isRead: false,
+            data: null,
+          ),
+        ];
+        // Mark that welcome notification has been shown
+        await _prefsService.setBool('has_shown_welcome_notification', true);
+      } else {
+        _notifications = [];
+      }
     }
 
     _isLoading = false;

@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../providers/invitation_provider.dart';
 import '../../../core/services/se_session_service.dart';
-import '../../../core/services/se_shared_preference_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../chat/screens/chat_screen.dart';
 
@@ -316,7 +314,6 @@ class _InvitationsScreenState extends State<InvitationsScreen>
         border: Border.all(color: Colors.grey[300]!),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -347,79 +344,614 @@ class _InvitationsScreenState extends State<InvitationsScreen>
             fontFamily: 'monospace',
           ),
         ),
-        trailing: isReceived
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
+        trailing: _buildInvitationStatusWidget(invitation, isReceived),
+      ),
+    );
+  }
+
+  Widget _buildInvitationStatusWidget(dynamic invitation, bool isReceived) {
+    final status =
+        invitation.status.toString().split('.').last; // Convert enum to string
+
+    if (isReceived) {
+      // Received invitations - show accept/decline buttons for pending
+      if (status == 'pending') {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: () => _acceptInvitation(invitation),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.check,
+                  color: Colors.green,
+                  size: 20,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _declineInvitation(invitation),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.close,
+                  color: Colors.red,
+                  size: 20,
+                ),
+              ),
+            ),
+          ],
+        );
+      } else {
+        // Show status badge for non-pending received invitations
+        return _buildStatusBadge(status);
+      }
+    } else {
+      // Sent invitations - show status and actions
+      if (status == 'pending') {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Delete button above status
+            GestureDetector(
+              onTap: () => _deleteInvitation(invitation),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.delete,
+                  color: Colors.red,
+                  size: 16,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Pending status below
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'Pending',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        );
+      } else if (status == 'accepted') {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.check_circle,
+                color: Colors.green,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _openChat(invitation),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.chat,
+                  color: Color(0xFFFF6B35),
+                  size: 20,
+                ),
+              ),
+            ),
+          ],
+        );
+      } else if (status == 'declined') {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.cancel,
+                color: Colors.red,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _resendInvitation(invitation),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.refresh,
+                  color: Color(0xFFFF6B35),
+                  size: 20,
+                ),
+              ),
+            ),
+          ],
+        );
+      } else {
+        return _buildStatusBadge(status);
+      }
+    }
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color badgeColor;
+    Color textColor;
+    String statusText;
+    IconData statusIcon;
+
+    switch (status) {
+      case 'accepted':
+        badgeColor = Colors.green.withValues(alpha: 0.1);
+        textColor = Colors.green;
+        statusText = 'Accepted';
+        statusIcon = Icons.check_circle;
+        break;
+      case 'declined':
+        badgeColor = Colors.red.withValues(alpha: 0.1);
+        textColor = Colors.red;
+        statusText = 'Declined';
+        statusIcon = Icons.cancel;
+        break;
+      case 'cancelled':
+        badgeColor = Colors.grey.withValues(alpha: 0.1);
+        textColor = Colors.grey[600]!;
+        statusText = 'Cancelled';
+        statusIcon = Icons.block;
+        break;
+      default:
+        badgeColor = Colors.grey.withValues(alpha: 0.1);
+        textColor = Colors.grey[600]!;
+        statusText = 'Unknown';
+        statusIcon = Icons.help;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: textColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(statusIcon, color: textColor, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            statusText,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _acceptInvitation(dynamic invitation) async {
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Accepting invitation...'),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Call the InvitationProvider to accept the invitation
+      final invitationProvider = context.read<InvitationProvider>();
+      final success = await invitationProvider.acceptInvitation(invitation.id);
+
+      if (context.mounted) {
+        if (success) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('Accepted invitation from ${invitation.fromUsername}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else {
+          // Show error message
+          final errorMessage =
+              invitationProvider.error ?? 'Failed to accept invitation';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          // Clear the error after showing it
+          invitationProvider.clearError();
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error accepting invitation: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  void _declineInvitation(dynamic invitation) async {
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Declining invitation...'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      // Call the InvitationProvider to decline the invitation
+      final invitationProvider = context.read<InvitationProvider>();
+      final success = await invitationProvider.declineInvitation(invitation.id);
+
+      if (context.mounted) {
+        if (success) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('Declined invitation from ${invitation.fromUsername}'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else {
+          // Show error message
+          final errorMessage =
+              invitationProvider.error ?? 'Failed to decline invitation';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          // Clear the error after showing it
+          invitationProvider.clearError();
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error declining invitation: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  void _openChat(dynamic invitation) async {
+    // Find the chat for this accepted invitation
+    final invitationProvider = context.read<InvitationProvider>();
+    final chats = await invitationProvider.getChats();
+
+    // Look for a chat between these two users
+    Chat? foundChat;
+    try {
+      foundChat = chats.firstWhere(
+        (chat) =>
+            (chat.user1Id == invitation.fromUserId &&
+                chat.user2Id == invitation.toUserId) ||
+            (chat.user1Id == invitation.toUserId &&
+                chat.user2Id == invitation.fromUserId),
+      );
+    } catch (e) {
+      foundChat = null;
+    }
+
+    if (foundChat != null) {
+      // Navigate to chat screen
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(chat: foundChat!),
+        ),
+      );
+    } else {
+      // Show error if chat not found
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Chat not found for ${invitation.toUsername}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _deleteInvitation(dynamic invitation) async {
+    try {
+      // Show confirmation action sheet
+      final shouldDelete = await showModalBottomSheet<bool>(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) => Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Title
+              const Text(
+                'Delete Invitation',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Message
+              Text(
+                'Are you sure you want to delete the invitation to ${invitation.toUsername}?',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 30),
+              // Action buttons
+              Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => _acceptInvitation(invitation),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(color: Colors.grey[300]!),
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.check,
-                        color: Colors.green,
-                        size: 20,
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => _declineInvitation(invitation),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.close,
-                        color: Colors.red,
-                        size: 20,
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
                   ),
                 ],
-              )
-            : Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Pending',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
               ),
-      ),
-    );
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
+      );
+
+      if (shouldDelete == true) {
+        // Show loading indicator
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Deleting invitation...'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Call the InvitationProvider to delete the invitation
+        final invitationProvider = context.read<InvitationProvider>();
+        final success =
+            await invitationProvider.deleteInvitation(invitation.id);
+
+        if (context.mounted) {
+          if (success) {
+            // Show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Invitation to ${invitation.toUsername} deleted'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          } else {
+            // Show error message
+            final errorMessage =
+                invitationProvider.error ?? 'Failed to delete invitation';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(errorMessage),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+            // Clear the error after showing it
+            invitationProvider.clearError();
+          }
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting invitation: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 
-  void _acceptInvitation(dynamic invitation) {
-    // TODO: Implement accept invitation logic
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Accepted invitation from ${invitation.fromUsername}'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
+  void _resendInvitation(dynamic invitation) async {
+    try {
+      // Show confirmation dialog
+      final shouldResend = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
+          title: const Text(
+            'Resend Invitation',
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to resend the invitation to ${invitation.toUsername}?',
+            style: const TextStyle(color: Colors.black),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                'Resend',
+                style: TextStyle(color: Color(0xFFFF6B35)),
+              ),
+            ),
+          ],
+        ),
+      );
 
-  void _declineInvitation(dynamic invitation) {
-    // TODO: Implement decline invitation logic
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Declined invitation from ${invitation.fromUsername}'),
-        backgroundColor: Colors.red,
-      ),
-    );
+      if (shouldResend == true) {
+        // Show loading indicator
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Resending invitation...'),
+            backgroundColor: const Color(0xFFFF6B35),
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Call the InvitationProvider to resend the invitation
+        final invitationProvider = context.read<InvitationProvider>();
+        final success =
+            await invitationProvider.resendInvitation(invitation.id);
+
+        if (context.mounted) {
+          if (success) {
+            // Show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Invitation to ${invitation.toUsername} resent'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          } else {
+            // Show error message
+            final errorMessage =
+                invitationProvider.error ?? 'Failed to resend invitation';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(errorMessage),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+            // Clear the error after showing it
+            invitationProvider.clearError();
+          }
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error resending invitation: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 }

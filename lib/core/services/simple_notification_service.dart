@@ -352,7 +352,7 @@ class SimpleNotificationService {
   Future<void> handleNotification(Map<String, dynamic> notificationData) async {
     try {
       print(
-          '🔔 SimpleNotificationService: Handling notification: $notificationData');
+          '🔔 SimpleNotificationService: 🔔 RECEIVED NOTIFICATION: $notificationData');
 
       // Extract the actual data from the notification
       Map<String, dynamic>? actualData;
@@ -401,10 +401,18 @@ class SimpleNotificationService {
 
       switch (type) {
         case 'invitation':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing invitation notification');
           await _handleInvitationNotification(decryptedData);
           break;
         case 'invitation_response':
           await _handleInvitationResponseNotification(decryptedData);
+          break;
+        case 'invitation_accepted':
+          await _handleInvitationAcceptedNotification(decryptedData);
+          break;
+        case 'invitation_declined':
+          await _handleInvitationDeclinedNotification(decryptedData);
           break;
         case 'message':
           await _handleMessageNotification(decryptedData);
@@ -443,16 +451,32 @@ class SimpleNotificationService {
     final existingInvitationsJson =
         await prefsService.getJsonList('invitations') ?? [];
 
+    print(
+        '🔔 SimpleNotificationService: Found ${existingInvitationsJson.length} existing invitations');
+    print(
+        '🔔 SimpleNotificationService: Current session ID: ${SeSessionService().currentSessionId}');
+    print(
+        '🔔 SimpleNotificationService: Looking for invitation from $senderId to current user');
+
     // Check for existing invitation from this sender
     final existingInvitation = existingInvitationsJson.firstWhere(
-      (inv) =>
-          inv['fromUserId'] == senderId &&
-          inv['toUserId'] == (SeSessionService().currentSessionId ?? ''),
+      (inv) {
+        final fromUserId = inv['fromUserId'] as String?;
+        final toUserId = inv['toUserId'] as String?;
+        final currentUserId = SeSessionService().currentSessionId ?? '';
+
+        print(
+            '🔔 SimpleNotificationService: Checking invitation: fromUserId=$fromUserId, toUserId=$toUserId, currentUserId=$currentUserId');
+
+        return fromUserId == senderId && toUserId == currentUserId;
+      },
       orElse: () => <String, dynamic>{},
     );
 
     if (existingInvitation.isNotEmpty) {
       final status = existingInvitation['status'] as String?;
+      print(
+          '🔔 SimpleNotificationService: Found existing invitation with status: $status');
 
       if (status == 'accepted') {
         print(
@@ -473,6 +497,9 @@ class SimpleNotificationService {
         _showToastMessage('Invitation already pending from $senderName');
         return;
       }
+    } else {
+      print(
+          '🔔 SimpleNotificationService: No existing invitation found, proceeding with new invitation');
     }
 
     // Check if sender is blocked (you can implement this logic)
@@ -503,12 +530,15 @@ class SimpleNotificationService {
 
     // Create invitation record and save to local storage
     try {
+      final currentSession = SeSessionService().currentSession;
+      final currentUsername = currentSession?.displayName ?? 'Unknown User';
+
       final invitation = {
         'id': invitationId,
         'senderId': senderId,
         'recipientId': SeSessionService().currentSessionId ?? '',
         'senderUsername': senderName,
-        'recipientUsername': GlobalUserService.instance.currentUsername ?? '',
+        'recipientUsername': currentUsername,
         'message': 'Contact request',
         'status': 'pending',
         'createdAt': DateTime.now().toIso8601String(),
@@ -829,6 +859,115 @@ class SimpleNotificationService {
 
     // Trigger callback
     _onMessageReceived?.call(senderId, senderName, message);
+  }
+
+  /// Handle invitation accepted notification
+  Future<void> _handleInvitationAcceptedNotification(
+      Map<String, dynamic> data) async {
+    final toUserId = data['toUserId'] as String?;
+    final toUsername = data['toUsername'] as String?;
+    final invitationId = data['invitationId'] as String?;
+    final chatGuid = data['chatGuid'] as String?;
+
+    if (toUserId == null || toUsername == null || invitationId == null) {
+      print(
+          '🔔 SimpleNotificationService: Invalid invitation accepted notification data');
+      return;
+    }
+
+    print(
+        '🔔 SimpleNotificationService: Processing invitation accepted from $toUsername ($toUserId)');
+
+    // Show local notification
+    await showLocalNotification(
+      title: 'Invitation Accepted',
+      body: '$toUsername accepted your invitation',
+      type: 'invitation_accepted',
+      data: {
+        ...data,
+        'chatGuid': chatGuid,
+      },
+    );
+
+    // Save notification to SharedPreferences
+    await _saveNotificationToSharedPrefs(
+      id: 'invitation_accepted_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Invitation Accepted',
+      body: '$toUsername accepted your invitation',
+      type: 'invitation_accepted',
+      data: {
+        ...data,
+        'chatGuid': chatGuid,
+      },
+      timestamp: DateTime.now(),
+    );
+
+    // If we have a chat GUID, create the chat for the sender
+    if (chatGuid != null) {
+      await _createChatForSender(data, chatGuid);
+    }
+
+    // Handle invitation response in InvitationProvider if available
+    if (_invitationProvider != null) {
+      try {
+        await _invitationProvider.handleInvitationResponse(
+            toUserId, toUsername, 'accepted',
+            conversationGuid: chatGuid);
+        print(
+            '🔔 SimpleNotificationService: ✅ Invitation accepted handled by InvitationProvider');
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: Error handling invitation accepted in provider: $e');
+      }
+    }
+  }
+
+  /// Handle invitation declined notification
+  Future<void> _handleInvitationDeclinedNotification(
+      Map<String, dynamic> data) async {
+    final toUserId = data['toUserId'] as String?;
+    final toUsername = data['toUsername'] as String?;
+    final invitationId = data['invitationId'] as String?;
+
+    if (toUserId == null || toUsername == null || invitationId == null) {
+      print(
+          '🔔 SimpleNotificationService: Invalid invitation declined notification data');
+      return;
+    }
+
+    print(
+        '🔔 SimpleNotificationService: Processing invitation declined from $toUsername ($toUserId)');
+
+    // Show local notification
+    await showLocalNotification(
+      title: 'Invitation Declined',
+      body: '$toUsername declined your invitation',
+      type: 'invitation_declined',
+      data: data,
+    );
+
+    // Save notification to SharedPreferences
+    await _saveNotificationToSharedPrefs(
+      id: 'invitation_declined_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Invitation Declined',
+      body: '$toUsername declined your invitation',
+      type: 'invitation_declined',
+      data: data,
+      timestamp: DateTime.now(),
+    );
+
+    // Handle invitation response in InvitationProvider if available
+    if (_invitationProvider != null) {
+      try {
+        await _invitationProvider.handleInvitationResponse(
+            toUserId, toUsername, 'declined');
+        print(
+            '🔔 SimpleNotificationService: ✅ Invitation declined handled by InvitationProvider');
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: Error handling invitation declined in provider: $e');
+      }
+    }
   }
 
   /// Save notification to SharedPreferences

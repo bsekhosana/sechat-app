@@ -607,6 +607,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       existingNotificationsJson.add(welcomeNotification);
       await prefsService.setJsonList(
           'notifications', existingNotificationsJson);
+
+      // Mark that welcome notification has been shown to prevent it from appearing again
+      await prefsService.setBool('has_shown_welcome_notification', true);
+
       print(
           '🔍 RegisterScreen: ✅ Welcome notification added to SharedPreferences');
     } catch (e) {

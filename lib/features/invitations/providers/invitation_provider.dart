@@ -1,6 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'dart:convert';
-import '../../../shared/models/user.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/message.dart';
 import '../../../core/services/se_shared_preference_service.dart';
@@ -9,7 +7,6 @@ import '../../../core/services/airnotifier_service.dart';
 import '../../../core/services/simple_notification_service.dart';
 import '../../../core/services/indicator_service.dart';
 import '../../../core/utils/guid_generator.dart';
-import '../../../core/services/se_shared_preference_service.dart';
 
 enum InvitationStatus {
   pending,
@@ -46,7 +43,7 @@ class Invitation {
       'fromUsername': fromUsername,
       'toUserId': toUserId,
       'toUsername': toUsername,
-      'status': status.name,
+      'status': status.toString().split('.').last,
       'createdAt': createdAt.toIso8601String(),
       'respondedAt': respondedAt?.toIso8601String(),
     };
@@ -60,7 +57,7 @@ class Invitation {
       toUserId: json['toUserId'],
       toUsername: json['toUsername'],
       status: InvitationStatus.values.firstWhere(
-        (e) => e.name == json['status'],
+        (e) => e.toString().split('.').last == json['status'],
         orElse: () => InvitationStatus.pending,
       ),
       createdAt: DateTime.parse(json['createdAt']),
@@ -82,6 +79,17 @@ class InvitationProvider extends ChangeNotifier {
   List<Invitation> get invitations => _invitations;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  // Get chats from SharedPreferences
+  Future<List<Chat>> getChats() async {
+    try {
+      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      return chatsJson.map((json) => Chat.fromJson(json)).toList();
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error loading chats: $e');
+      return [];
+    }
+  }
 
   // Get invitations for current user
   List<Invitation> get receivedInvitations => _invitations
@@ -347,12 +355,13 @@ class InvitationProvider extends ChangeNotifier {
         return false;
       }
 
-      // Check if invitation already exists
+      // Check for existing invitations in all directions
       final existingInvitation = _invitations.firstWhere(
         (inv) =>
-            inv.fromUserId == currentSession.sessionId &&
-            inv.toUserId == sessionId &&
-            inv.status == InvitationStatus.pending,
+            (inv.fromUserId == currentSession.sessionId &&
+                inv.toUserId == sessionId) ||
+            (inv.fromUserId == sessionId &&
+                inv.toUserId == currentSession.sessionId),
         orElse: () => Invitation(
           id: '',
           fromUserId: '',
@@ -365,7 +374,25 @@ class InvitationProvider extends ChangeNotifier {
       );
 
       if (existingInvitation.id.isNotEmpty) {
-        _error = 'Invitation already sent';
+        // Check the status of the existing invitation
+        if (existingInvitation.status == InvitationStatus.pending) {
+          if (existingInvitation.fromUserId == currentSession.sessionId) {
+            _error = 'Invitation already sent to this user';
+          } else {
+            _error = 'You already have a pending invitation from this user';
+          }
+        } else if (existingInvitation.status == InvitationStatus.accepted) {
+          _error = 'You are already connected with this user';
+        } else if (existingInvitation.status == InvitationStatus.declined) {
+          if (existingInvitation.fromUserId == currentSession.sessionId) {
+            _error = 'Your invitation was declined by this user';
+          } else {
+            _error = 'You previously declined an invitation from this user';
+          }
+        } else if (existingInvitation.status == InvitationStatus.cancelled) {
+          _error = 'Previous invitation was cancelled';
+        }
+
         notifyListeners();
         return false;
       }
@@ -636,19 +663,37 @@ class InvitationProvider extends ChangeNotifier {
 
   Future<void> _sendInvitationNotification(Invitation invitation) async {
     try {
-      await AirNotifierService.instance.sendNotificationToSession(
+      print(
+          '📱 InvitationProvider: Sending invitation notification to: ${invitation.toUserId}');
+      print('📱 InvitationProvider: Invitation data: ${invitation.toJson()}');
+
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
         sessionId: invitation.toUserId,
         title: 'New Invitation',
         body: '${invitation.fromUsername} wants to connect with you',
         data: {
           'type': 'invitation',
           'invitationId': invitation.id,
-          'senderId': invitation.fromUserId, // Changed from fromUserId
-          'senderName': invitation.fromUsername, // Changed from fromUsername
+          'senderId': invitation.fromUserId,
+          'senderName': invitation.fromUsername,
+          'fromUserId': invitation.fromUserId,
+          'fromUsername': invitation.fromUsername,
+          'toUserId': invitation.toUserId,
+          'toUsername': invitation.toUsername,
         },
       );
+
+      if (success) {
+        print(
+            '📱 InvitationProvider: ✅ Invitation notification sent successfully');
+      } else {
+        print(
+            '📱 InvitationProvider: ❌ Failed to send invitation notification');
+      }
     } catch (e) {
-      print('Failed to send invitation notification: $e');
+      print(
+          '📱 InvitationProvider: ❌ Error sending invitation notification: $e');
     }
   }
 
@@ -775,9 +820,287 @@ class InvitationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Handle invitation response from notifications
+  Future<void> handleInvitationResponse(
+      String responderId, String responderName, String response,
+      {String? conversationGuid}) async {
+    try {
+      print(
+          '📱 InvitationProvider: Handling invitation response: $response from $responderName ($responderId)');
+
+      // Find the invitation that matches this response
+      final invitation = _invitations.firstWhere(
+        (inv) =>
+            inv.toUserId == responderId &&
+            inv.fromUserId == _sessionService.currentSessionId,
+        orElse: () => throw Exception('Invitation not found for response'),
+      );
+
+      // Update invitation status
+      final updatedInvitation = Invitation(
+        id: invitation.id,
+        fromUserId: invitation.fromUserId,
+        fromUsername: invitation.fromUsername,
+        toUserId: invitation.toUserId,
+        toUsername: invitation.toUsername,
+        status: response == 'accepted'
+            ? InvitationStatus.accepted
+            : InvitationStatus.declined,
+        createdAt: invitation.createdAt,
+        respondedAt: DateTime.now(),
+      );
+
+      // Update in the list
+      final index = _invitations.indexWhere((inv) => inv.id == invitation.id);
+      if (index != -1) {
+        _invitations[index] = updatedInvitation;
+        await _saveInvitations();
+        print(
+            '📱 InvitationProvider: ✅ Invitation status updated to $response');
+      }
+
+      // If accepted and we have a conversation GUID, create the chat
+      if (response == 'accepted' && conversationGuid != null) {
+        final chat = Chat(
+          id: conversationGuid,
+          user1Id: invitation.fromUserId,
+          user2Id: invitation.toUserId,
+          user1DisplayName: invitation.fromUsername,
+          user2DisplayName: invitation.toUsername,
+          status: 'active',
+          lastMessageAt: DateTime.now(),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        await _saveChat(chat);
+        print('📱 InvitationProvider: ✅ Chat created for accepted invitation');
+
+        // Create initial welcome message
+        await _createInitialMessage(conversationGuid, invitation);
+
+        // Trigger indicator for new chat
+        IndicatorService().setNewChat();
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error handling invitation response: $e');
+    }
+  }
+
+  // Delete invitation (for pending sent invitations)
+  Future<bool> deleteInvitation(String invitationId) async {
+    try {
+      print('📱 InvitationProvider: Deleting invitation: $invitationId');
+
+      final invitation = _invitations.firstWhere(
+        (inv) => inv.id == invitationId,
+        orElse: () => throw Exception('Invitation not found'),
+      );
+
+      if (invitation.status != InvitationStatus.pending) {
+        _error = 'Only pending invitations can be deleted';
+        notifyListeners();
+        return false;
+      }
+
+      // Remove invitation from list
+      _invitations.removeWhere((inv) => inv.id == invitationId);
+      await _saveInvitations();
+
+      // Send cancellation notification to recipient
+      await _sendCancellationNotification(invitation);
+
+      // Create local notification for invitation deleted
+      await _createLocalNotification(
+        title: 'Invitation Deleted',
+        body: 'Invitation to ${invitation.toUsername} has been deleted',
+        type: 'invitation_deleted',
+        data: {
+          'invitationId': invitationId,
+          'toUsername': invitation.toUsername,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+
+      _error = null;
+      notifyListeners();
+      print('📱 InvitationProvider: ✅ Invitation deleted successfully');
+      return true;
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error deleting invitation: $e');
+      _error = 'Failed to delete invitation: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Resend invitation (for declined sent invitations)
+  Future<bool> resendInvitation(String invitationId) async {
+    try {
+      print('📱 InvitationProvider: Resending invitation: $invitationId');
+
+      final invitation = _invitations.firstWhere(
+        (inv) => inv.id == invitationId,
+        orElse: () => throw Exception('Invitation not found'),
+      );
+
+      if (invitation.status != InvitationStatus.declined) {
+        _error = 'Only declined invitations can be resent';
+        notifyListeners();
+        return false;
+      }
+
+      // Create new invitation with updated timestamp
+      final newInvitation = Invitation(
+        id: GuidGenerator.generateGuid(),
+        fromUserId: invitation.fromUserId,
+        fromUsername: invitation.fromUsername,
+        toUserId: invitation.toUserId,
+        toUsername: invitation.toUsername,
+        status: InvitationStatus.pending,
+        createdAt: DateTime.now(),
+        respondedAt: null,
+      );
+
+      // Replace old invitation with new one
+      final index = _invitations.indexWhere((inv) => inv.id == invitationId);
+      if (index != -1) {
+        _invitations[index] = newInvitation;
+        await _saveInvitations();
+      }
+
+      // Send new invitation notification
+      await _sendInvitationNotification(newInvitation);
+
+      // Create local notification for invitation sent
+      await _createLocalNotification(
+        title: 'Invitation Sent',
+        body: 'Invitation sent to ${newInvitation.toUsername}',
+        type: 'invitation_sent',
+        data: {
+          'invitationId': newInvitation.id,
+          'toUsername': newInvitation.toUsername,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+
+      _error = null;
+      notifyListeners();
+
+      // Trigger indicator for new invitation
+      IndicatorService().setNewInvitation();
+
+      print('📱 InvitationProvider: ✅ Invitation resent successfully');
+      return true;
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error resending invitation: $e');
+      _error = 'Failed to resend invitation: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   void clearAllData() {
     _invitations.clear();
     _error = null;
     notifyListeners();
+  }
+
+  // Check if a session ID can be invited (for UI feedback)
+  Map<String, dynamic> canInviteSessionId(String sessionId) {
+    try {
+      final currentSession = _sessionService.currentSession;
+      if (currentSession == null) {
+        return {
+          'canInvite': false,
+          'reason': 'No active session',
+        };
+      }
+
+      // Validate session ID format
+      if (!GuidGenerator.isValidSessionGuid(sessionId)) {
+        return {
+          'canInvite': false,
+          'reason': 'Invalid session ID format',
+        };
+      }
+
+      // Check if it's the current user's session ID
+      if (sessionId == currentSession.sessionId) {
+        return {
+          'canInvite': false,
+          'reason': 'Cannot invite yourself',
+        };
+      }
+
+      // Check for existing invitations in all directions
+      final existingInvitation = _invitations.firstWhere(
+        (inv) =>
+            (inv.fromUserId == currentSession.sessionId &&
+                inv.toUserId == sessionId) ||
+            (inv.fromUserId == sessionId &&
+                inv.toUserId == currentSession.sessionId),
+        orElse: () => Invitation(
+          id: '',
+          fromUserId: '',
+          fromUsername: '',
+          toUserId: '',
+          toUsername: '',
+          status: InvitationStatus.pending,
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      if (existingInvitation.id.isNotEmpty) {
+        // Check the status of the existing invitation
+        if (existingInvitation.status == InvitationStatus.pending) {
+          if (existingInvitation.fromUserId == currentSession.sessionId) {
+            return {
+              'canInvite': false,
+              'reason': 'Invitation already sent to this user',
+            };
+          } else {
+            return {
+              'canInvite': false,
+              'reason': 'You already have a pending invitation from this user',
+            };
+          }
+        } else if (existingInvitation.status == InvitationStatus.accepted) {
+          return {
+            'canInvite': false,
+            'reason': 'You are already connected with this user',
+          };
+        } else if (existingInvitation.status == InvitationStatus.declined) {
+          if (existingInvitation.fromUserId == currentSession.sessionId) {
+            return {
+              'canInvite': false,
+              'reason': 'Your invitation was declined by this user',
+            };
+          } else {
+            return {
+              'canInvite': false,
+              'reason': 'You previously declined an invitation from this user',
+            };
+          }
+        } else if (existingInvitation.status == InvitationStatus.cancelled) {
+          return {
+            'canInvite': false,
+            'reason': 'Previous invitation was cancelled',
+          };
+        }
+      }
+
+      return {
+        'canInvite': true,
+        'reason': 'Ready to send invitation',
+      };
+    } catch (e) {
+      return {
+        'canInvite': false,
+        'reason': 'Error checking invitation status: $e',
+      };
+    }
   }
 }
