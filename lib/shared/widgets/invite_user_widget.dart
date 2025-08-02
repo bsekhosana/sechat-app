@@ -428,6 +428,11 @@ class _InviteOptionsSheet extends StatelessWidget {
                 focusedBorder: OutlineInputBorder(
                   borderSide: BorderSide(color: Colors.blue),
                 ),
+                hintText:
+                    'session_1754115986891-s7is7tfa-ow8-waq-c1v-2rux9hk2721',
+                hintStyle: TextStyle(color: Colors.grey, fontSize: 12),
+                helperText: 'Enter the complete session ID from the contact',
+                helperStyle: TextStyle(color: Colors.grey, fontSize: 12),
               ),
             ),
             const SizedBox(height: 16),
@@ -461,6 +466,19 @@ class _InviteOptionsSheet extends StatelessWidget {
               final displayName = displayNameController.text.trim();
 
               if (sessionId.isNotEmpty && displayName.isNotEmpty) {
+                // Validate session ID format
+                if (!_isValidSessionId(sessionId)) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Invalid session ID format. Please check the format and try again.'),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                  return;
+                }
+
                 // Check if trying to invite yourself
                 final currentSessionId = SeSessionService().currentSessionId;
                 if (sessionId == currentSessionId) {
@@ -516,6 +534,20 @@ class _InviteOptionsSheet extends StatelessWidget {
           data['displayName'] as String? ?? displayName;
 
       if (sessionId != null) {
+        // Validate session ID format
+        if (!_isValidSessionId(sessionId)) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Invalid session ID format: $sessionId'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+
         // Check if trying to invite yourself
         final currentSessionId = SeSessionService().currentSessionId;
         if (sessionId == currentSessionId) {
@@ -626,5 +658,38 @@ class _InviteOptionsSheet extends StatelessWidget {
       }
     }
     print('📱 InviteUserWidget: QR code processing completed');
+  }
+
+  /// Validates if a session ID has the correct format
+  /// Accepts both old format (session_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+  /// and new format (session_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+  bool _isValidSessionId(String sessionId) {
+    // Must start with 'session_'
+    if (!sessionId.startsWith('session_')) return false;
+
+    // Remove the 'session_' prefix
+    final idPart = sessionId.substring(8);
+
+    // Split by hyphens
+    final parts = idPart.split('-');
+
+    // Check if we have the right number of parts
+    if (parts.length != 5) return false;
+
+    // Validate each part length
+    // Format: timestamp-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    if (parts[0].length < 8 || // timestamp can be longer
+        parts[1].length != 4 ||
+        parts[2].length != 4 ||
+        parts[3].length != 4 ||
+        parts[4].length != 12) {
+      return false;
+    }
+
+    // Check if all characters are valid (alphanumeric)
+    final validChars = RegExp(r'^[a-z0-9-]+$');
+    if (!validChars.hasMatch(idPart)) return false;
+
+    return true;
   }
 }

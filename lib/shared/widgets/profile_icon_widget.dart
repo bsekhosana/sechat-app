@@ -26,6 +26,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
   late AnimationController _glowController;
   late Animation<double> _pulseAnimation;
   late AnimationController _pulseController;
+  bool _showCopySuccess = false;
 
   @override
   void dispose() {
@@ -607,6 +608,38 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
                       const SizedBox(height: 24),
 
+                      // Copy Success Message
+                      if (_showCopySuccess)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: Colors.green.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                color: Colors.green,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Session ID copied to clipboard',
+                                style: TextStyle(
+                                  color: Colors.green[700],
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
                       // Session ID with Copy Button
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -732,13 +765,19 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
     final sessionId = SeSessionService().currentSessionId;
     if (sessionId != null) {
       Clipboard.setData(ClipboardData(text: sessionId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Session ID copied to clipboard'),
-          backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
-        ),
-      );
+      // Show success message above the session ID container
+      setState(() {
+        _showCopySuccess = true;
+      });
+
+      // Hide the message after 3 seconds
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _showCopySuccess = false;
+          });
+        }
+      });
     }
   }
 
