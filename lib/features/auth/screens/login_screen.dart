@@ -300,6 +300,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         // Password Field
                         CustomTextfield(
                           controller: _passwordController,
+                          isPassword: true,
                           label: 'Password',
                           icon: Icons.lock,
                           validator: (value) {
@@ -321,6 +322,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           text: 'Login to SeChat',
                           icon: Icons.login,
                           isPrimary: true,
+                          orangeLoading: true,
                         ),
                         SizedBox(height: isSmallScreen ? 16 : 20),
 

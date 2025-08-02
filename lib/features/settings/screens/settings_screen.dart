@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/local_storage_service.dart';
+import '../../../core/services/se_shared_preference_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../auth/screens/welcome_screen.dart';
 import '../../../core/services/se_session_service.dart';
@@ -130,6 +131,17 @@ Download now and let's chat securely!
                           try {
                             print('🔍 Settings: Starting logout process...');
 
+                            // Show loading dialog
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (context) => const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFFF6B35),
+                                ),
+                              ),
+                            );
+
                             // Perform logout using SeSessionService
                             final seSessionService = SeSessionService();
                             final logoutSuccess =
@@ -137,14 +149,20 @@ Download now and let's chat securely!
 
                             print('🔍 Settings: Logout result: $logoutSuccess');
 
+                            // Close loading dialog
+                            if (context.mounted) {
+                              Navigator.of(context)
+                                  .pop(); // Close loading dialog
+                            }
+
                             // Check if widget is still mounted before navigation
                             if (context.mounted) {
                               print(
-                                  '🔍 Settings: Navigating to welcome screen...');
-                              // Navigate to welcome screen without back button
+                                  '🔍 Settings: Navigating to login screen...');
+                              // Navigate to login screen without back button
                               Navigator.of(context).pushAndRemoveUntil(
                                 MaterialPageRoute(
-                                  builder: (_) => const WelcomeScreen(),
+                                  builder: (_) => const LoginScreen(),
                                 ),
                                 (route) => false,
                               );
@@ -152,11 +170,22 @@ Download now and let's chat securely!
                             } else {
                               print(
                                   '🔍 Settings: Context not mounted after logout');
+                              // Force navigation even if context is not mounted
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                    builder: (_) => const LoginScreen(),
+                                  ),
+                                  (route) => false,
+                                );
+                              });
                             }
                           } catch (e) {
                             print('🔍 Settings: Logout error: $e');
-                            // If there's an error and context is still mounted, show error
+                            // Close loading dialog if there's an error
                             if (context.mounted) {
+                              Navigator.of(context)
+                                  .pop(); // Close loading dialog
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('Logout failed: $e'),
@@ -522,6 +551,11 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
         // Clear all local storage data
         await LocalStorageService.instance.clearAllData();
         print('🗑️ Settings: ✅ Local storage data cleared');
+
+        // Clear all SharedPreferences data
+        final prefsService = SeSharedPreferenceService();
+        await prefsService.clear();
+        print('🗑️ Settings: ✅ All SharedPreferences data cleared');
 
         // Clear all provider data
         // context.read<InvitationProvider>().clearAllData(); // Temporarily disabled

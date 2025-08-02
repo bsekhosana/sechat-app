@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 // import '../../../shared/providers/auth_provider.dart'; // Temporarily disabled
 import '../../../shared/widgets/app_icon.dart';
+import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/network_service.dart';
 import 'main_nav_screen.dart';
 import 'dart:convert';
@@ -245,6 +246,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       // Initialize notification services with new session
                       final seSessionService = SeSessionService();
                       await seSessionService.initializeNotificationServices();
+
+                      // Add welcome notification to SharedPreferences
+                      await _addWelcomeNotification();
 
                       Navigator.of(context).pop();
                       Navigator.of(context).pushAndRemoveUntil(
@@ -582,5 +586,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _addWelcomeNotification() async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+      final existingNotificationsJson =
+          await prefsService.getJsonList('notifications') ?? [];
+
+      final welcomeNotification = {
+        'id': 'welcome_${DateTime.now().millisecondsSinceEpoch}',
+        'title': 'Welcome to SeChat!',
+        'body': 'Your secure messaging app is ready to use.',
+        'type': 'system',
+        'data': {},
+        'timestamp': DateTime.now().toIso8601String(),
+        'isRead': false,
+      };
+
+      existingNotificationsJson.add(welcomeNotification);
+      await prefsService.setJsonList(
+          'notifications', existingNotificationsJson);
+      print(
+          '🔍 RegisterScreen: ✅ Welcome notification added to SharedPreferences');
+    } catch (e) {
+      print('🔍 RegisterScreen: ❌ Error adding welcome notification: $e');
+    }
   }
 }

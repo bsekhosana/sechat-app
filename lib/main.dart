@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
@@ -33,69 +32,30 @@ Future<void> main() async {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   }
 
-  await Hive.initFlutter();
+  // Hive initialization removed - using SharedPreferences only
 
-  // Initialize LocalStorageService
-  await LocalStorageService.instance.initialize();
-
-  // Initialize SeSharedPreferenceService
-  await SeSharedPreferenceService().initialize();
+  // Initialize core services in parallel for faster startup
+  await Future.wait([
+    LocalStorageService.instance.initialize(),
+    SeSharedPreferenceService().initialize(),
+  ]);
 
   // Initialize SeSessionService
-  print('🔔 Main: Initializing SeSessionService...');
   final seSessionService = SeSessionService();
-
-  // Check for persistent session
-  final hasPersistentSession = await seSessionService.hasPersistentSession();
-  print('🔔 Main: Has persistent session: $hasPersistentSession');
-
-  // Validate session persistence
-  final persistenceValidation =
-      await seSessionService.validateSessionPersistence();
-  print('🔔 Main: Session persistence validation: $persistenceValidation');
-
-  // Load session and attempt backup restore if needed
   await seSessionService.loadSession();
 
-  // If no current session but backup exists, try to restore
-  if (seSessionService.currentSession == null) {
-    final restored = await seSessionService.restoreSessionFromBackup();
-    if (restored) {
-      print('🔔 Main: ✅ Session restored from backup');
-    }
-  }
-
-  // Create backup of current session if it exists
+  // Initialize notification services
   if (seSessionService.currentSession != null) {
-    await seSessionService.backupSession();
-    print('🔔 Main: ✅ Session backup created');
-  }
-
-  print('🔔 Main: ✅ SeSessionService initialized');
-
-  // Initialize notification services with SeSessionService
-  if (seSessionService.currentSession != null) {
-    print(
-        '🔔 Main: Initializing notification services with existing session...');
     await seSessionService.initializeNotificationServices();
   } else {
-    // Initialize simple notification service (without session ID - will be set later)
     await SimpleNotificationService.instance.initialize();
   }
 
   // Set up notification callbacks
   _setupSimpleNotifications();
 
-  // Set up provider instances for notification service
-  _setupNotificationProviders();
-
   // Set up method channel for native communication
   _setupMethodChannels();
-
-  // Add a longer delay to ensure native platforms are ready
-  print('🔔 Main: Waiting for native platforms to initialize...');
-  await Future.delayed(const Duration(seconds: 3));
-  print('🔔 Main: Native platform initialization delay complete');
 
   // All real-time features now use silent notifications via AirNotifier
 
@@ -122,13 +82,10 @@ void _setupSimpleNotifications() {
   // Set up notification callbacks
   notificationService
       .setOnInvitationReceived((senderId, senderName, invitationId) async {
-    print('🔔 Main: Invitation received from $senderName ($senderId)');
-
     // Force refresh of invitations list by triggering a rebuild
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
         // This will trigger a rebuild of the invitations screen
-        print('🔔 Main: ✅ Triggering invitations screen refresh');
       } catch (e) {
         print('🔔 Main: Error refreshing invitations screen: $e');
       }
@@ -137,42 +94,26 @@ void _setupSimpleNotifications() {
 
   notificationService.setOnInvitationResponse(
       (responderId, responderName, status, {conversationGuid}) async {
-    print(
-        '🔔 Main: Invitation response from $responderName ($responderId): $status');
-    if (conversationGuid != null) {
-      print('🔔 Main: Conversation GUID provided: $conversationGuid');
-    }
-
     // The invitation response will be handled by the SimpleNotificationService
     // which will show a local notification and trigger UI updates
     // The InvitationProvider will be notified through the notification system
-    print('🔔 Main: ✅ Invitation response notification processed');
   });
 
   notificationService.setOnMessageReceived((senderId, senderName, message) {
-    print('🔔 Main: Message received from $senderName ($senderId)');
     // The notification will be handled by the SimpleNotificationService
     // which will show a local notification and trigger UI updates
-    print('🔔 Main: ✅ Message notification processed');
   });
 
   notificationService.setOnTypingIndicator((senderId, isTyping) {
-    print('🔔 Main: Typing indicator from $senderId: $isTyping');
     // The notification will be handled by the SimpleNotificationService
     // which will trigger UI updates
-    print('🔔 Main: ✅ Typing indicator processed');
   });
-
-  print('🔔 Main: Simple notification service setup complete');
 }
 
 // Set up provider instances for notification service
 void _setupNotificationProviders() {
-  print('🔔 Main: Setting up notification providers...');
-
   // Note: Provider instances will be set after the app is built
   // This will be handled in the widget tree where providers are available
-  print('🔔 Main: Notification providers setup complete');
 }
 
 // Set up method channels and event channels for native communication
@@ -182,7 +123,6 @@ void _setupMethodChannels() {
 
   // Listen to real-time notifications via EventChannel
   eventChannel.receiveBroadcastStream().listen((dynamic event) {
-    print('🔔 Main: Received notification via EventChannel: $event');
     _handleNotificationEvent(event);
   }, onError: (dynamic error) {
     print('🔔 Main: EventChannel error: $error');
@@ -192,7 +132,6 @@ void _setupMethodChannels() {
     switch (call.method) {
       case 'onDeviceTokenReceived':
         final String deviceToken = call.arguments as String;
-        print('🔔 Main: Received device token from native: $deviceToken');
 
         // Handle device token received from native platform
         try {

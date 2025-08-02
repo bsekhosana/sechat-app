@@ -13,6 +13,7 @@ import 'se_session_service.dart';
 import 'global_user_service.dart';
 import 'encryption_service.dart';
 import 'local_storage_service.dart';
+import 'se_shared_preference_service.dart';
 import '../../shared/models/chat.dart';
 import '../../shared/models/message.dart' as app_message;
 import '../utils/guid_generator.dart';
@@ -50,11 +51,8 @@ class SimpleNotificationService {
     if (_isInitialized) return;
 
     try {
-      print('🔔 SimpleNotificationService: Initializing...');
-
       // Get session ID (may be null initially - will be set later via setSessionId)
       _sessionId = SeSessionService().currentSessionId;
-      print('🔔 SimpleNotificationService: Session ID: $_sessionId');
 
       // Request permissions
       await _requestPermissions();
@@ -65,13 +63,9 @@ class SimpleNotificationService {
       // Initialize AirNotifier with session ID (if available)
       if (_sessionId != null) {
         await _initializeAirNotifier();
-      } else {
-        print(
-            '🔔 SimpleNotificationService: No session ID available initially - will initialize AirNotifier when session ID is set');
       }
 
       _isInitialized = true;
-      print('🔔 SimpleNotificationService: Initialized successfully');
     } catch (e) {
       print('🔔 SimpleNotificationService: Error initializing: $e');
     }
@@ -450,6 +444,16 @@ class SimpleNotificationService {
       data: data,
     );
 
+    // Save notification to SharedPreferences
+    await _saveNotificationToSharedPrefs(
+      id: 'invitation_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'New Contact Invitation',
+      body: '$senderName would like to connect with you',
+      type: 'invitation',
+      data: data,
+      timestamp: DateTime.now(),
+    );
+
     // Create invitation record and save to local storage
     try {
       final invitation = {
@@ -468,17 +472,38 @@ class SimpleNotificationService {
       print(
           '🔔 SimpleNotificationService: Saving invitation with data: $invitation');
 
-      // Save to local storage
-      await LocalStorageService.instance.saveInvitation(invitation);
+      // Save to SeSharedPreferenceService (same as InvitationProvider)
+      final prefsService = SeSharedPreferenceService();
+      final existingInvitationsJson =
+          await prefsService.getJsonList('invitations') ?? [];
+
+      // Convert invitation to Invitation model format
+      final invitationModel = {
+        'id': invitation['id'],
+        'fromUserId': invitation['senderId'],
+        'fromUsername': invitation['senderUsername'],
+        'toUserId': invitation['recipientId'],
+        'toUsername': invitation['recipientUsername'],
+        'status': 'pending',
+        'createdAt': invitation['createdAt'],
+        'respondedAt': null,
+      };
+
+      // Add new invitation to existing list
+      existingInvitationsJson.add(invitationModel);
+
+      // Save updated list
+      await prefsService.setJsonList('invitations', existingInvitationsJson);
       print(
-          '🔔 SimpleNotificationService: ✅ Invitation saved to local storage');
+          '🔔 SimpleNotificationService: ✅ Invitation saved to SeSharedPreferenceService');
 
       // Verify the invitation was saved by reading it back
-      final savedInvitation =
-          LocalStorageService.instance.getInvitation(invitationId);
-      if (savedInvitation != null) {
+      final savedInvitationsJson =
+          await prefsService.getJsonList('invitations');
+      if (savedInvitationsJson != null && savedInvitationsJson.isNotEmpty) {
+        final lastInvitation = savedInvitationsJson.last;
         print(
-            '🔔 SimpleNotificationService: ✅ Invitation verified in storage: ${savedInvitation['senderUsername']}');
+            '🔔 SimpleNotificationService: ✅ Invitation verified in storage: ${lastInvitation['fromUsername']}');
       } else {
         print(
             '🔔 SimpleNotificationService: ❌ Invitation not found in storage after saving');
@@ -488,6 +513,17 @@ class SimpleNotificationService {
       _onInvitationReceived?.call(senderId, senderName, invitationId);
       print(
           '🔔 SimpleNotificationService: ✅ Invitation callback triggered - UI will update in real-time');
+
+      // Refresh InvitationProvider if available
+      if (_invitationProvider != null) {
+        try {
+          await _invitationProvider.refreshInvitations();
+          print('🔔 SimpleNotificationService: ✅ InvitationProvider refreshed');
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: Error refreshing InvitationProvider: $e');
+        }
+      }
     } catch (e) {
       print('🔔 SimpleNotificationService: Error saving invitation: $e');
     }
@@ -526,6 +562,26 @@ class SimpleNotificationService {
         'conversationGuid': conversationGuid, // Include GUID if available
       },
     );
+
+    // Save notification to SharedPreferences
+    await _saveNotificationToSharedPrefs(
+      id: 'invitation_response_${DateTime.now().millisecondsSinceEpoch}',
+      title: title,
+      body: body,
+      type: 'invitation_response',
+      data: {
+        ...data,
+        'conversationGuid': conversationGuid,
+        'chatGuid': data['chatGuid'], // Include chat GUID if available
+      },
+      timestamp: DateTime.now(),
+    );
+
+    // If invitation was accepted and we have a chat GUID, create the chat for the sender
+    final chatGuid = data['chatGuid'] as String?;
+    if (response == 'accepted' && chatGuid != null) {
+      await _createChatForSender(data, chatGuid);
+    }
 
     // If accepted and conversation GUID is provided, create conversation for sender
     if (response == 'accepted' && conversationGuid != null) {
@@ -609,6 +665,58 @@ class SimpleNotificationService {
     }
   }
 
+  /// Create chat for sender when invitation is accepted
+  Future<void> _createChatForSender(
+      Map<String, dynamic> data, String chatGuid) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Creating chat for sender with GUID: $chatGuid');
+
+      final fromUserId = data['fromUserId'] as String?;
+      final fromUsername = data['fromUsername'] as String?;
+      final toUserId = data['toUserId'] as String?;
+      final toUsername = data['toUsername'] as String?;
+
+      if (fromUserId == null ||
+          fromUsername == null ||
+          toUserId == null ||
+          toUsername == null) {
+        print(
+            '🔔 SimpleNotificationService: ❌ Missing user data for chat creation');
+        return;
+      }
+
+      // Create chat conversation for sender
+      final chat = Chat(
+        id: chatGuid,
+        user1Id: fromUserId,
+        user2Id: toUserId,
+        status: 'active',
+        lastMessageAt: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Save chat to SharedPreferences
+      final prefsService = SeSharedPreferenceService();
+      final chatsJson = await prefsService.getJsonList('chats') ?? [];
+      final existingIndex = chatsJson.indexWhere((c) => c['id'] == chatGuid);
+
+      if (existingIndex != -1) {
+        chatsJson[existingIndex] = chat.toJson();
+      } else {
+        chatsJson.add(chat.toJson());
+      }
+
+      await prefsService.setJsonList('chats', chatsJson);
+      print(
+          '🔔 SimpleNotificationService: ✅ Chat created for sender: $chatGuid');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: ❌ Error creating chat for sender: $e');
+    }
+  }
+
   /// Handle message notification
   Future<void> _handleMessageNotification(Map<String, dynamic> data) async {
     final senderId = data['senderId'] as String?;
@@ -628,8 +736,56 @@ class SimpleNotificationService {
       data: data,
     );
 
+    // Save notification to SharedPreferences
+    await _saveNotificationToSharedPrefs(
+      id: 'message_${DateTime.now().millisecondsSinceEpoch}',
+      title: senderName,
+      body: message,
+      type: 'message',
+      data: data,
+      timestamp: DateTime.now(),
+    );
+
     // Trigger callback
     _onMessageReceived?.call(senderId, senderName, message);
+  }
+
+  /// Save notification to SharedPreferences
+  Future<void> _saveNotificationToSharedPrefs({
+    required String id,
+    required String title,
+    required String body,
+    required String type,
+    required Map<String, dynamic> data,
+    required DateTime timestamp,
+  }) async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+      final existingNotificationsJson =
+          await prefsService.getJsonList('notifications') ?? [];
+
+      final notificationModel = {
+        'id': id,
+        'title': title,
+        'body': body,
+        'type': type,
+        'data': data,
+        'timestamp': timestamp.toIso8601String(),
+        'isRead': false,
+      };
+
+      // Add new notification to existing list
+      existingNotificationsJson.add(notificationModel);
+
+      // Save updated list
+      await prefsService.setJsonList(
+          'notifications', existingNotificationsJson);
+      print(
+          '🔔 SimpleNotificationService: ✅ Notification saved to SharedPreferences: $title');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error saving notification to SharedPreferences: $e');
+    }
   }
 
   /// Handle typing indicator notification
@@ -680,10 +836,11 @@ class SimpleNotificationService {
         '🔔 SimpleNotificationService: Device token received from native: $token');
     print('🔔 SimpleNotificationService: Current session ID: $_sessionId');
     await setDeviceToken(token);
-    
+
     // If we have a session ID, try to link the token immediately
     if (_sessionId != null) {
-      print('🔔 SimpleNotificationService: Attempting to link token to existing session: $_sessionId');
+      print(
+          '🔔 SimpleNotificationService: Attempting to link token to existing session: $_sessionId');
       await _linkTokenToSession();
     }
   }
@@ -751,8 +908,9 @@ class SimpleNotificationService {
   /// Clear session data and unlink token (for account deletion)
   Future<void> clearSessionData() async {
     try {
-      print('🔔 SimpleNotificationService: Clearing session data and unlinking token...');
-      
+      print(
+          '🔔 SimpleNotificationService: Clearing session data and unlinking token...');
+
       // Unlink token from current session if available
       if (_sessionId != null && _deviceToken != null) {
         try {
@@ -762,10 +920,10 @@ class SimpleNotificationService {
           print('🔔 SimpleNotificationService: Error unlinking token: $e');
         }
       }
-      
+
       // Clear session ID
       _sessionId = null;
-      
+
       print('🔔 SimpleNotificationService: ✅ Session data cleared');
     } catch (e) {
       print('🔔 SimpleNotificationService: Error clearing session data: $e');

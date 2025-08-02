@@ -2,24 +2,19 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:sechat_app/features/notifications/models/local_notification.dart';
 import 'package:sechat_app/core/services/simple_notification_service.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 
 class NotificationProvider extends ChangeNotifier {
   List<LocalNotification> _notifications = [];
   bool _isLoading = false;
-  late Box<dynamic> _notificationsBox;
+  final SeSharedPreferenceService _prefsService = SeSharedPreferenceService();
 
   List<LocalNotification> get notifications => _notifications;
   bool get isLoading => _isLoading;
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
 
   NotificationProvider() {
-    _initializeNotificationsBox();
     _setupNotificationServiceCallback();
-  }
-
-  Future<void> _initializeNotificationsBox() async {
-    _notificationsBox = await Hive.openBox('notifications');
     loadNotifications();
   }
 
@@ -75,32 +70,37 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Load notifications from Hive storage
+      // Load notifications from SharedPreferences only
       final notificationsList = <LocalNotification>[];
 
-      for (final value in _notificationsBox.values) {
+      // Load from SharedPreferences
+      final sharedPrefsNotifications =
+          await _prefsService.getJsonList('notifications') ?? [];
+
+      for (final notificationJson in sharedPrefsNotifications) {
         try {
-          // Convert Map<dynamic, dynamic> to Map<String, dynamic>
-          if (value is Map) {
-            final Map<String, dynamic> jsonData = {};
-            value.forEach((key, val) {
-              if (key is String) {
-                jsonData[key] = val;
-              }
-            });
-            notificationsList.add(LocalNotification.fromJson(jsonData));
-          } else {
-            print(
-                'Error parsing notification: Invalid data type: ${value.runtimeType}');
+          if (notificationJson is Map<String, dynamic>) {
+            // Convert SharedPreferences format to LocalNotification format
+            final localNotification = LocalNotification(
+              id: notificationJson['id'] ?? '',
+              title: notificationJson['title'] ?? '',
+              body: notificationJson['body'] ?? '',
+              type: _getNotificationType(notificationJson['type'] ?? ''),
+              timestamp: DateTime.parse(notificationJson['timestamp'] ??
+                  DateTime.now().toIso8601String()),
+              isRead: notificationJson['isRead'] ?? false,
+              data: notificationJson['data'] ?? {},
+            );
+            notificationsList.add(localNotification);
           }
         } catch (e) {
-          print('Error parsing notification: $e');
+          print('Error parsing SharedPreferences notification: $e');
         }
       }
 
       if (notificationsList.isEmpty) {
-        // Load sample notifications for first time
-        _notifications = [
+        // Add sample notification if no notifications exist
+        notificationsList.add(
           LocalNotification(
             id: '1',
             title: 'Welcome to SeChat!',
@@ -110,7 +110,7 @@ class NotificationProvider extends ChangeNotifier {
             isRead: false,
             data: null,
           ),
-        ];
+        );
         await _saveNotifications();
       } else {
         _notifications = notificationsList;
@@ -137,17 +137,53 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  NotificationType _getNotificationType(String type) {
+    switch (type) {
+      case 'invitation':
+      case 'invitation_sent':
+      case 'invitation_deleted':
+      case 'invitation_cancelled':
+      case 'invitation_response':
+        return NotificationType.invitation;
+      case 'message':
+        return NotificationType.message;
+      default:
+        return NotificationType.system;
+    }
+  }
+
   Future<void> _saveNotifications() async {
     try {
-      // Clear existing notifications
-      await _notificationsBox.clear();
+      // Convert notifications to JSON format for SharedPreferences
+      final notificationsJson = _notifications
+          .map((notification) => {
+                'id': notification.id,
+                'title': notification.title,
+                'body': notification.body,
+                'type': _getNotificationTypeString(notification.type),
+                'timestamp': notification.timestamp.toIso8601String(),
+                'isRead': notification.isRead,
+                'data': notification.data,
+              })
+          .toList();
 
-      // Save all notifications
-      for (final notification in _notifications) {
-        await _notificationsBox.put(notification.id, notification.toJson());
-      }
+      // Save to SharedPreferences
+      await _prefsService.setJsonList('notifications', notificationsJson);
     } catch (e) {
       print('Error saving notifications: $e');
+    }
+  }
+
+  String _getNotificationTypeString(NotificationType type) {
+    switch (type) {
+      case NotificationType.invitation:
+        return 'invitation';
+      case NotificationType.message:
+        return 'message';
+      case NotificationType.invitationResponse:
+        return 'invitation_response';
+      case NotificationType.system:
+        return 'system';
     }
   }
 
@@ -198,8 +234,8 @@ class NotificationProvider extends ChangeNotifier {
       _notifications.clear();
       _isLoading = false;
 
-      // Clear from Hive storage as well
-      await _notificationsBox.clear();
+      // Clear from SharedPreferences
+      await _prefsService.remove('notifications');
 
       notifyListeners();
       print('📱 NotificationProvider: ✅ All notification data cleared');
@@ -213,35 +249,12 @@ class NotificationProvider extends ChangeNotifier {
     required String senderId,
     required String senderName,
     required String message,
-    required String chatId,
   }) {
     final notification = LocalNotification(
-      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'New message from $senderName',
+      id: 'message_${DateTime.now().millisecondsSinceEpoch}',
+      title: senderName,
       body: message,
       type: NotificationType.message,
-      timestamp: DateTime.now(),
-      isRead: false,
-      data: {
-        'senderId': senderId,
-        'chatId': chatId,
-        'message': message,
-      },
-    );
-    addNotification(notification);
-  }
-
-  // Add invitation notification
-  void addInvitationNotification({
-    required String senderId,
-    required String senderName,
-    required String message,
-  }) {
-    final notification = LocalNotification(
-      id: 'inv_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Contact request from $senderName',
-      body: message,
-      type: NotificationType.invitation,
       timestamp: DateTime.now(),
       isRead: false,
       data: {
@@ -250,6 +263,30 @@ class NotificationProvider extends ChangeNotifier {
         'message': message,
       },
     );
+
+    addNotification(notification);
+  }
+
+  // Add invitation notification
+  void addInvitationNotification({
+    required String senderId,
+    required String senderName,
+    required String invitationId,
+  }) {
+    final notification = LocalNotification(
+      id: 'invitation_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'New Contact Invitation',
+      body: '$senderName would like to connect with you',
+      type: NotificationType.invitation,
+      timestamp: DateTime.now(),
+      isRead: false,
+      data: {
+        'senderId': senderId,
+        'senderName': senderName,
+        'invitationId': invitationId,
+      },
+    );
+
     addNotification(notification);
   }
 
@@ -260,7 +297,7 @@ class NotificationProvider extends ChangeNotifier {
     Map<String, dynamic>? data,
   }) {
     final notification = LocalNotification(
-      id: 'sys_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'system_${DateTime.now().millisecondsSinceEpoch}',
       title: title,
       body: body,
       type: NotificationType.system,
@@ -268,27 +305,7 @@ class NotificationProvider extends ChangeNotifier {
       isRead: false,
       data: data,
     );
-    addNotification(notification);
-  }
 
-  // Add connection status notification
-  void addConnectionNotification({
-    required String title,
-    required String body,
-    required bool isConnected,
-  }) {
-    final notification = LocalNotification(
-      id: 'conn_${DateTime.now().millisecondsSinceEpoch}',
-      title: title,
-      body: body,
-      type: NotificationType.system,
-      timestamp: DateTime.now(),
-      isRead: false,
-      data: {
-        'isConnected': isConnected,
-        'timestamp': DateTime.now().toIso8601String(),
-      },
-    );
     addNotification(notification);
   }
 }

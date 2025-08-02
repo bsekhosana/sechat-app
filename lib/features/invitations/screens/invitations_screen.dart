@@ -39,6 +39,19 @@ class _InvitationsScreenState extends State<InvitationsScreen>
           indicatorColor: const Color(0xFFFF6B35),
           labelColor: const Color(0xFFFF6B35),
           unselectedLabelColor: Colors.grey,
+          indicatorWeight: 3,
+          labelStyle:
+              const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          unselectedLabelStyle:
+              const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+          indicator: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: Color(0xFFFF6B35),
+                width: 3,
+              ),
+            ),
+          ),
           tabs: const [
             Tab(
               icon: FaIcon(FontAwesomeIcons.inbox),
@@ -76,11 +89,8 @@ class _ReceivedInvitationsTab extends StatelessWidget {
         }
 
         final receivedInvitations = invitationProvider.receivedInvitations;
-        final pendingInvitations = receivedInvitations
-            .where((inv) => inv.status == InvitationStatus.pending)
-            .toList();
 
-        if (pendingInvitations.isEmpty) {
+        if (receivedInvitations.isEmpty) {
           return const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -92,9 +102,9 @@ class _ReceivedInvitationsTab extends StatelessWidget {
                 ),
                 SizedBox(height: 16),
                 Text(
-                  'No pending invitations',
+                  'No received invitations',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Colors.black,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
@@ -115,9 +125,9 @@ class _ReceivedInvitationsTab extends StatelessWidget {
 
         return ListView.builder(
           padding: const EdgeInsets.only(left: 20, right: 20, top: 0),
-          itemCount: pendingInvitations.length,
+          itemCount: receivedInvitations.length,
           itemBuilder: (context, index) {
-            final invitation = pendingInvitations[index];
+            final invitation = receivedInvitations[index];
             return _InvitationCard(
               invitation: invitation,
               isReceived: true,
@@ -280,7 +290,26 @@ class _InvitationCard extends StatelessWidget {
 
   Widget _buildActionButtons(BuildContext context) {
     if (invitation.status != InvitationStatus.pending) {
-      return const SizedBox.shrink();
+      // Show status indicator for non-pending invitations
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: _getStatusColor(invitation.status).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _getStatusColor(invitation.status),
+            width: 1,
+          ),
+        ),
+        child: Text(
+          _getStatusText(invitation.status),
+          style: TextStyle(
+            color: _getStatusColor(invitation.status),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
     }
 
     if (isReceived) {

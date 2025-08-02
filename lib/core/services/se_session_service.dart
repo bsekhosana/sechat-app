@@ -342,10 +342,8 @@ class SeSessionService {
         try {
           final sessionData = SessionData.fromJson(jsonDecode(sessionJson));
           _currentSession = sessionData;
-          print('🔍 SeSessionService: Session loaded from JSON successfully');
           return sessionData;
         } catch (e) {
-          print('🔍 SeSessionService: Error loading session from JSON: $e');
           // Fall back to individual fields
         }
       }
@@ -379,15 +377,12 @@ class SeSessionService {
             passwordHash: passwordHash,
           );
           _currentSession = sessionData;
-          print(
-              '🔍 SeSessionService: Session reconstructed from individual fields');
           return sessionData;
         } catch (e) {
           print('🔍 SeSessionService: Error reconstructing session: $e');
         }
       }
 
-      print('🔍 SeSessionService: No valid session data found');
       return null;
     } catch (e) {
       print('🔍 SeSessionService: Error loading session: $e');
@@ -503,7 +498,7 @@ class SeSessionService {
     return false;
   }
 
-  // Logout - set isLoggedIn to false but keep session data
+  // Logout - set isLoggedIn to false but keep session data and device token
   Future<bool> logout() async {
     final session = await loadSession();
     if (session == null) return false;
@@ -523,10 +518,12 @@ class SeSessionService {
     await _storeSession(updatedSession);
     _currentSession = updatedSession;
 
-    // Unregister device token from notification services
-    await unregisterDeviceToken();
+    // Note: Device token is NOT deregistered on logout
+    // User can still receive push notifications even when logged out
+    // Token is only deregistered when account is deleted
 
-    print('🔍 SeSessionService: User logged out successfully');
+    print(
+        '🔍 SeSessionService: User logged out successfully (device token preserved)');
     return true;
   }
 
@@ -572,10 +569,10 @@ class SeSessionService {
     return result;
   }
 
-  // Delete current session
+  // Delete current session (completely removes account and deregisters device token)
   Future<void> deleteSession() async {
     try {
-      // Unregister device token from notification services
+      // Unregister device token from notification services (only on account deletion)
       await unregisterDeviceToken();
 
       // Remove main session data

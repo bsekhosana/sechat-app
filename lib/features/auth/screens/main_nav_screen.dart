@@ -38,12 +38,8 @@ class _MainNavScreenState extends State<MainNavScreen> {
   }
 
   void _loadAllData() {
-    print('📱 MainNavScreen: Loading all local data on app startup...');
-
     // Load notifications only (other providers temporarily disabled)
     context.read<NotificationProvider>().loadNotifications();
-
-    print('📱 MainNavScreen: ✅ All local data loading initiated');
   }
 
   void _shareApp() {
@@ -80,7 +76,6 @@ Download now and let's chat securely!
 
   void _setupNotificationHandler() {
     // Set up notification handling for deep linking
-    print('🔔 MainNavScreen: Notification handler setup complete');
   }
 
   static final List<Widget> _screens = <Widget>[
@@ -159,9 +154,8 @@ Download now and let's chat securely!
             ),
             child: SafeArea(
               child: Container(
-                height: 65,
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
@@ -181,26 +175,35 @@ Download now and let's chat securely!
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _selectedIndex == index;
-    return GestureDetector(
-      onTap: () => _onItemTapped(index),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FaIcon(
-            icon,
-            color: isSelected ? const Color(0xFFFF6B35) : Colors.grey,
-            size: 20,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? const Color(0xFFFF6B35) : Colors.grey,
-              fontSize: 12,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _onItemTapped(index),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FaIcon(
+                  icon,
+                  color: isSelected ? const Color(0xFFFF6B35) : Colors.grey,
+                  size: 18,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected ? const Color(0xFFFF6B35) : Colors.grey,
+                    fontSize: 10,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }

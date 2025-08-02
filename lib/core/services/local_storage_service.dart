@@ -1,51 +1,37 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
 import '../../shared/models/chat.dart';
 import '../../shared/models/message.dart';
 import '../../shared/models/user.dart';
+import 'se_shared_preference_service.dart';
 
 class LocalStorageService extends ChangeNotifier {
   static LocalStorageService? _instance;
   static LocalStorageService get instance =>
       _instance ??= LocalStorageService._();
 
-  late Box<dynamic> _chatsBox;
-  late Box<dynamic> _messagesBox;
-  late Box<dynamic> _usersBox;
-  late Box<dynamic> _pendingMessagesBox;
-  late Box<dynamic> _deletedMessagesBox;
-  late Box<dynamic> _storageStatsBox;
-  late Box<dynamic> _invitationsBox;
-  late Box<dynamic> _notificationsBox;
-
+  final SeSharedPreferenceService _prefsService = SeSharedPreferenceService();
   final Uuid _uuid = const Uuid();
   Directory? _appDocumentsDir;
   Directory? _imagesDir;
   Directory? _tempDir;
+  bool _isInitialized = false;
 
   LocalStorageService._();
 
   Future<void> initialize() async {
-    print('📱 LocalStorageService: Initializing...');
-
-    // Initialize Hive boxes
-    _chatsBox = await Hive.openBox('chats');
-    _messagesBox = await Hive.openBox('messages');
-    _usersBox = await Hive.openBox('users');
-    _pendingMessagesBox = await Hive.openBox('pending_messages');
-    _deletedMessagesBox = await Hive.openBox('deleted_messages');
-    _storageStatsBox = await Hive.openBox('storage_stats');
-    _invitationsBox = await Hive.openBox('invitations');
-    _notificationsBox = await Hive.openBox('notifications');
-
-    // Create directories for file storage
-    await _createDirectories();
-
-    print('📱 LocalStorageService: Initialized successfully');
+    if (_isInitialized) return;
+    
+    try {
+      // Create directories for file storage
+      await _createDirectories();
+      _isInitialized = true;
+    } catch (e) {
+      print('📱 LocalStorageService: Error initializing: $e');
+    }
   }
 
   Future<void> _createDirectories() async {
@@ -73,261 +59,293 @@ class LocalStorageService extends ChangeNotifier {
   // ==================== CHAT MANAGEMENT ====================
 
   Future<void> saveChat(Chat chat) async {
-    await _chatsBox.put(chat.id, chat.toJson());
+    final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+    final existingIndex = chatsJson.indexWhere((c) => c['id'] == chat.id);
+
+    if (existingIndex != -1) {
+      chatsJson[existingIndex] = chat.toJson();
+    } else {
+      chatsJson.add(chat.toJson());
+    }
+
+    await _prefsService.setJsonList('chats', chatsJson);
     notifyListeners();
   }
 
   Future<void> saveChats(List<Chat> chats) async {
-    final batch = _chatsBox.toMap();
-    for (final chat in chats) {
-      batch[chat.id] = chat.toJson();
-    }
-    await _chatsBox.putAll(batch);
+    final chatsJson = chats.map((chat) => chat.toJson()).toList();
+    await _prefsService.setJsonList('chats', chatsJson);
     notifyListeners();
   }
 
-  List<Chat> getAllChats() {
+  Future<List<Chat>> getAllChats() async {
     final chats = <Chat>[];
-    for (final value in _chatsBox.values) {
-      try {
-        chats.add(Chat.fromJson(value));
-      } catch (e) {
-        print('📱 LocalStorageService: Error parsing chat: $e');
+    try {
+      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      for (final chatJson in chatsJson) {
+        try {
+          chats.add(Chat.fromJson(chatJson));
+        } catch (e) {
+          print('📱 LocalStorageService: Error parsing chat: $e');
+        }
       }
+    } catch (e) {
+      print('📱 LocalStorageService: Error loading chats: $e');
     }
     return chats;
   }
 
-  Chat? getChat(String chatId) {
-    final data = _chatsBox.get(chatId);
-    if (data != null) {
-      try {
-        return Chat.fromJson(data);
-      } catch (e) {
-        print('📱 LocalStorageService: Error parsing chat $chatId: $e');
-      }
-    }
-    return null;
-  }
-
   Future<void> deleteChat(String chatId) async {
-    await _chatsBox.delete(chatId);
-    // Also delete all messages for this chat
-    await deleteMessagesForChat(chatId);
+    final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+    chatsJson.removeWhere((chat) => chat['id'] == chatId);
+    await _prefsService.setJsonList('chats', chatsJson);
     notifyListeners();
-  }
-
-  Future<void> updateChatLastMessage(String chatId, Message message) async {
-    final chat = getChat(chatId);
-    if (chat != null) {
-      final updatedChat = chat.copyWith(
-        lastMessageAt: message.createdAt,
-        lastMessage: message.toJson(),
-      );
-      await saveChat(updatedChat);
-    }
   }
 
   // ==================== MESSAGE MANAGEMENT ====================
 
   Future<void> saveMessage(Message message) async {
-    await _messagesBox.put('${message.chatId}_${message.id}', message.toJson());
+    final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+    final existingIndex = messagesJson.indexWhere((m) => m['id'] == message.id);
 
-    // Update chat's last message
-    await updateChatLastMessage(message.chatId, message);
+    if (existingIndex != -1) {
+      messagesJson[existingIndex] = message.toJson();
+    } else {
+      messagesJson.add(message.toJson());
+    }
 
+    await _prefsService.setJsonList('messages', messagesJson);
     notifyListeners();
   }
 
   Future<void> saveMessages(List<Message> messages) async {
-    final batch = <String, dynamic>{};
-    for (final message in messages) {
-      batch['${message.chatId}_${message.id}'] = message.toJson();
-    }
-    await _messagesBox.putAll(batch);
+    final messagesJson = messages.map((message) => message.toJson()).toList();
+    await _prefsService.setJsonList('messages', messagesJson);
     notifyListeners();
   }
 
-  List<Message> getMessagesForChat(String chatId) {
+  Future<List<Message>> getMessagesForChat(String chatId) async {
     final messages = <Message>[];
-    final prefix = '${chatId}_';
-
-    for (final key in _messagesBox.keys) {
-      if (key.toString().startsWith(prefix)) {
+    try {
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      for (final messageJson in messagesJson) {
         try {
-          final data = _messagesBox.get(key);
-          if (data != null) {
-            messages.add(Message.fromJson(data));
+          final message = Message.fromJson(messageJson);
+          if (message.chatId == chatId) {
+            messages.add(message);
           }
         } catch (e) {
           print('📱 LocalStorageService: Error parsing message: $e');
         }
       }
+    } catch (e) {
+      print('📱 LocalStorageService: Error loading messages: $e');
     }
-
-    // Sort by creation time (oldest first)
-    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return messages;
   }
 
-  Message? getMessage(String chatId, String messageId) {
-    final data = _messagesBox.get('${chatId}_$messageId');
-    if (data != null) {
-      try {
-        return Message.fromJson(data);
-      } catch (e) {
-        print('📱 LocalStorageService: Error parsing message $messageId: $e');
-      }
-    }
-    return null;
-  }
-
-  Future<void> updateMessageStatus(
-      String chatId, String messageId, String status) async {
-    final message = getMessage(chatId, messageId);
-    if (message != null) {
-      final updatedMessage = message.copyWith(
-        status: status,
-        updatedAt: DateTime.now(),
-      );
-      await saveMessage(updatedMessage);
-    }
-  }
-
-  Future<void> deleteMessage(String chatId, String messageId,
-      {bool deleteForEveryone = false}) async {
-    if (deleteForEveryone) {
-      // Mark for deletion on all devices
-      await _deletedMessagesBox.put('${chatId}_$messageId', {
-        'chatId': chatId,
-        'messageId': messageId,
-        'deletedAt': DateTime.now().toIso8601String(),
-        'deleteForEveryone': true,
-      });
-    }
-
-    // Delete locally
-    await _messagesBox.delete('${chatId}_$messageId');
+  Future<void> deleteMessage(String messageId) async {
+    final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+    messagesJson.removeWhere((message) => message['id'] == messageId);
+    await _prefsService.setJsonList('messages', messagesJson);
     notifyListeners();
-  }
-
-  Future<void> deleteMessagesForChat(String chatId) async {
-    final prefix = '${chatId}_';
-    final keysToDelete = <String>[];
-
-    for (final key in _messagesBox.keys) {
-      if (key.toString().startsWith(prefix)) {
-        keysToDelete.add(key.toString());
-      }
-    }
-
-    await _messagesBox.deleteAll(keysToDelete);
-    notifyListeners();
-  }
-
-  // ==================== PENDING MESSAGES (OFFLINE QUEUE) ====================
-
-  Future<void> addPendingMessage(Message message) async {
-    await _pendingMessagesBox.put('${message.chatId}_${message.id}', {
-      ...message.toJson(),
-      'pending': true,
-      'queuedAt': DateTime.now().toIso8601String(),
-    });
-    notifyListeners();
-  }
-
-  List<Map<String, dynamic>> getPendingMessages() {
-    final pending = <Map<String, dynamic>>[];
-    for (final value in _pendingMessagesBox.values) {
-      pending.add(Map<String, dynamic>.from(value));
-    }
-    return pending;
-  }
-
-  Future<void> removePendingMessage(String chatId, String messageId) async {
-    await _pendingMessagesBox.delete('${chatId}_$messageId');
-    notifyListeners();
-  }
-
-  Future<void> clearPendingMessages() async {
-    await _pendingMessagesBox.clear();
-    notifyListeners();
-  }
-
-  Future<void> markMessageAsDeleted(
-      String chatId, String messageId, String deleteType) async {
-    try {
-      // Get the message from local storage
-      final messages = getMessagesForChat(chatId);
-      final messageIndex = messages.indexWhere((m) => m.id == messageId);
-
-      if (messageIndex != -1) {
-        final message = messages[messageIndex];
-        final updatedMessage = message.copyWith(
-          isDeleted: true,
-          deleteType: deleteType,
-        );
-
-        // Update in local storage
-        await _messagesBox.put(messageId, updatedMessage.toJson());
-
-        print(
-            '📱 LocalStorageService: Marked message $messageId as deleted ($deleteType)');
-      }
-    } catch (e) {
-      print('📱 LocalStorageService: Error marking message as deleted: $e');
-      throw e;
-    }
   }
 
   // ==================== USER MANAGEMENT ====================
 
   Future<void> saveUser(User user) async {
-    await _usersBox.put(user.id, user.toJson());
+    final usersJson = await _prefsService.getJsonList('users') ?? [];
+    final existingIndex = usersJson.indexWhere((u) => u['id'] == user.id);
+
+    if (existingIndex != -1) {
+      usersJson[existingIndex] = user.toJson();
+    } else {
+      usersJson.add(user.toJson());
+    }
+
+    await _prefsService.setJsonList('users', usersJson);
     notifyListeners();
   }
 
-  User? getUser(String userId) {
-    final data = _usersBox.get(userId);
-    if (data != null) {
-      try {
-        return User.fromJson(data);
-      } catch (e) {
-        print('📱 LocalStorageService: Error parsing user $userId: $e');
-      }
-    }
-    return null;
-  }
-
-  List<User> getAllUsers() {
+  Future<List<User>> getAllUsers() async {
     final users = <User>[];
-    for (final value in _usersBox.values) {
-      try {
-        users.add(User.fromJson(value));
-      } catch (e) {
-        print('📱 LocalStorageService: Error parsing user: $e');
+    try {
+      final usersJson = await _prefsService.getJsonList('users') ?? [];
+      for (final userJson in usersJson) {
+        try {
+          users.add(User.fromJson(userJson));
+        } catch (e) {
+          print('📱 LocalStorageService: Error parsing user: $e');
+        }
       }
+    } catch (e) {
+      print('📱 LocalStorageService: Error loading users: $e');
     }
     return users;
   }
 
-  Future<void> saveUsers(List<Map<String, dynamic>> usersData) async {
-    final batch = <String, dynamic>{};
-    for (final userData in usersData) {
-      batch[userData['id']] = userData;
+  // ==================== INVITATION MANAGEMENT ====================
+
+  Future<void> saveInvitation(Map<String, dynamic> invitation) async {
+    final invitationsJson =
+        await _prefsService.getJsonList('invitations') ?? [];
+    final existingIndex =
+        invitationsJson.indexWhere((inv) => inv['id'] == invitation['id']);
+
+    if (existingIndex != -1) {
+      invitationsJson[existingIndex] = invitation;
+    } else {
+      invitationsJson.add(invitation);
     }
-    await _usersBox.putAll(batch);
+
+    await _prefsService.setJsonList('invitations', invitationsJson);
     notifyListeners();
   }
 
-  // ==================== IMAGE STORAGE ====================
+  Future<Map<String, dynamic>?> getInvitation(String invitationId) async {
+    try {
+      final invitationsJson =
+          await _prefsService.getJsonList('invitations') ?? [];
+      for (final invitationJson in invitationsJson) {
+        if (invitationJson['id'] == invitationId) {
+          return invitationJson;
+        }
+      }
+    } catch (e) {
+      print('📱 LocalStorageService: Error loading invitation: $e');
+    }
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> getAllInvitations() async {
+    try {
+      final invitationsJson =
+          await _prefsService.getJsonList('invitations') ?? [];
+      return invitationsJson;
+    } catch (e) {
+      print('📱 LocalStorageService: Error loading invitations: $e');
+      return [];
+    }
+  }
+
+  // ==================== NOTIFICATION MANAGEMENT ====================
+
+  Future<void> saveNotification(Map<String, dynamic> notification) async {
+    final notificationsJson =
+        await _prefsService.getJsonList('notifications') ?? [];
+    final existingIndex = notificationsJson
+        .indexWhere((notif) => notif['id'] == notification['id']);
+
+    if (existingIndex != -1) {
+      notificationsJson[existingIndex] = notification;
+    } else {
+      notificationsJson.add(notification);
+    }
+
+    await _prefsService.setJsonList('notifications', notificationsJson);
+    notifyListeners();
+  }
+
+  Future<List<Map<String, dynamic>>> getAllNotifications() async {
+    try {
+      final notificationsJson =
+          await _prefsService.getJsonList('notifications') ?? [];
+      return notificationsJson;
+    } catch (e) {
+      print('📱 LocalStorageService: Error loading notifications: $e');
+      return [];
+    }
+  }
+
+  // ==================== STORAGE MANAGEMENT ====================
+
+  Future<Map<String, dynamic>> getStorageStats() async {
+    try {
+      final stats = <String, dynamic>{};
+
+      // Count chats
+      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      stats['totalChats'] = chatsJson.length;
+
+      // Count messages
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      stats['totalMessages'] = messagesJson.length;
+
+      // Count users
+      final usersJson = await _prefsService.getJsonList('users') ?? [];
+      stats['totalUsers'] = usersJson.length;
+
+      // Count invitations
+      final invitationsJson =
+          await _prefsService.getJsonList('invitations') ?? [];
+      stats['totalInvitations'] = invitationsJson.length;
+
+      // Count notifications
+      final notificationsJson =
+          await _prefsService.getJsonList('notifications') ?? [];
+      stats['totalNotifications'] = notificationsJson.length;
+
+      return stats;
+    } catch (e) {
+      print('📱 LocalStorageService: Error getting storage stats: $e');
+      return {};
+    }
+  }
+
+  Future<void> clearOldMessages({int daysToKeep = 30}) async {
+    try {
+      print(
+          '📱 LocalStorageService: Clearing old messages (keeping last $daysToKeep days)...');
+
+      final cutoffDate = DateTime.now().subtract(Duration(days: daysToKeep));
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      final updatedMessages = <Map<String, dynamic>>[];
+
+      for (final messageJson in messagesJson) {
+        try {
+          final createdAt = DateTime.parse(
+              messageJson['createdAt'] ?? DateTime.now().toIso8601String());
+          if (createdAt.isAfter(cutoffDate)) {
+            updatedMessages.add(messageJson);
+          }
+        } catch (e) {
+          print('📱 LocalStorageService: Error parsing message date: $e');
+          // Keep message if we can't parse the date
+          updatedMessages.add(messageJson);
+        }
+      }
+
+      await _prefsService.setJsonList('messages', updatedMessages);
+      notifyListeners();
+      print(
+          '📱 LocalStorageService: ✅ Old messages cleared (${messagesJson.length - updatedMessages.length} messages removed)');
+    } catch (e) {
+      print('📱 LocalStorageService: Error clearing old messages: $e');
+    }
+  }
+
+  Future<void> clearAllData() async {
+    try {
+      print('📱 LocalStorageService: Clearing all data...');
+
+      await _prefsService.remove('chats');
+      await _prefsService.remove('messages');
+      await _prefsService.remove('users');
+      await _prefsService.remove('invitations');
+      await _prefsService.remove('notifications');
+
+      notifyListeners();
+      print('📱 LocalStorageService: ✅ All data cleared');
+    } catch (e) {
+      print('📱 LocalStorageService: Error clearing all data: $e');
+    }
+  }
+
+  // ==================== FILE STORAGE ====================
 
   Future<String> saveImage(Uint8List imageData, String fileName) async {
     if (kIsWeb) {
-      // Web platform - store in memory or use alternative storage
-      print(
-          '📱 LocalStorageService: Web platform - image storage not implemented');
-      return 'web://$fileName';
+      throw UnsupportedError('File storage not supported on web');
     }
 
     final file = File('${_imagesDir!.path}/$fileName');
@@ -335,362 +353,53 @@ class LocalStorageService extends ChangeNotifier {
     return file.path;
   }
 
-  Future<String> saveImageFromFile(File imageFile) async {
+  Future<Uint8List?> loadImage(String filePath) async {
     if (kIsWeb) {
-      // Web platform - store in memory or use alternative storage
-      print(
-          '📱 LocalStorageService: Web platform - image storage not implemented');
-      return 'web://${_uuid.v4()}.jpg';
+      throw UnsupportedError('File storage not supported on web');
     }
 
-    final fileName = '${_uuid.v4()}.jpg';
-    final destinationFile = File('${_imagesDir!.path}/$fileName');
-    await imageFile.copy(destinationFile.path);
-    return destinationFile.path;
-  }
-
-  Future<File?> getImageFile(String fileName) async {
-    if (kIsWeb) {
-      // Web platform - return null for now
-      print(
-          '📱 LocalStorageService: Web platform - image retrieval not implemented');
-      return null;
-    }
-
-    final file = File('${_imagesDir!.path}/$fileName');
+    final file = File(filePath);
     if (await file.exists()) {
-      return file;
+      return await file.readAsBytes();
     }
     return null;
   }
 
-  Future<void> deleteImage(String fileName) async {
+  Future<void> deleteImage(String filePath) async {
     if (kIsWeb) {
-      // Web platform - no-op for now
-      print(
-          '📱 LocalStorageService: Web platform - image deletion not implemented');
-      return;
+      throw UnsupportedError('File storage not supported on web');
     }
 
-    final file = File('${_imagesDir!.path}/$fileName');
+    final file = File(filePath);
     if (await file.exists()) {
       await file.delete();
     }
   }
 
-  // ==================== STORAGE STATISTICS ====================
-
-  Future<Map<String, dynamic>> getStorageStats() async {
-    final stats = <String, dynamic>{};
-
-    // Calculate message statistics
-    final allMessages = <Message>[];
-    for (final value in _messagesBox.values) {
-      try {
-        allMessages.add(Message.fromJson(value));
-      } catch (e) {
-        // Skip invalid messages
-      }
+  Future<String> getTempFilePath(String fileName) async {
+    if (kIsWeb) {
+      throw UnsupportedError('File storage not supported on web');
     }
 
-    final textMessages =
-        allMessages.where((m) => m.type == MessageType.text).length;
-    final imageMessages =
-        allMessages.where((m) => m.type == MessageType.image).length;
-    final voiceMessages =
-        allMessages.where((m) => m.type == MessageType.voice).length;
-    final fileMessages =
-        allMessages.where((m) => m.type == MessageType.file).length;
+    return '${_tempDir!.path}/$fileName';
+  }
 
-    // Calculate file sizes
-    int totalImageSize = 0;
-    int totalVoiceSize = 0;
-    int totalFileSize = 0;
-
-    if (!kIsWeb && _imagesDir != null && await _imagesDir!.exists()) {
-      await for (final file in _imagesDir!.list(recursive: true)) {
-        if (file is File) {
-          totalImageSize += await file.length();
-        }
-      }
+  Future<void> cleanupTempFiles() async {
+    if (kIsWeb) {
+      return;
     }
 
-    stats['totalMessages'] = allMessages.length;
-    stats['textMessages'] = textMessages;
-    stats['imageMessages'] = imageMessages;
-    stats['voiceMessages'] = voiceMessages;
-    stats['fileMessages'] = fileMessages;
-    stats['totalImageSize'] = totalImageSize;
-    stats['totalVoiceSize'] = totalVoiceSize;
-    stats['totalFileSize'] = totalFileSize;
-    stats['totalStorageSize'] = totalImageSize + totalVoiceSize + totalFileSize;
-    stats['chatsCount'] = _chatsBox.length;
-    stats['usersCount'] = _usersBox.length;
-    stats['pendingMessagesCount'] = _pendingMessagesBox.length;
-
-    return stats;
-  }
-
-  // Clear all data
-  Future<void> clearAllData() async {
-    await _chatsBox.clear();
-    await _messagesBox.clear();
-    await _usersBox.clear();
-    await _pendingMessagesBox.clear();
-    await _deletedMessagesBox.clear();
-    await _storageStatsBox.clear();
-    await _invitationsBox.clear();
-    await _notificationsBox.clear();
-    notifyListeners();
-  }
-
-  // Public methods for provider compatibility
-
-  // Get all chats
-  List<Chat> getChats() {
-    return getAllChats();
-  }
-
-  // Get messages for a chat
-  List<Message> getMessages(String chatId) {
-    return getMessagesForChat(chatId);
-  }
-
-  // Get invitations (Session contacts)
-  List<Map<String, dynamic>> getInvitations() {
-    final invitations = <Map<String, dynamic>>[];
-    for (final value in _invitationsBox.values) {
-      try {
-        if (value is Map<String, dynamic>) {
-          invitations.add(value);
-        }
-      } catch (e) {
-        print('📱 LocalStorageService: Error parsing invitation: $e');
-      }
-    }
-    return invitations;
-  }
-
-  // Save invitations (Session contacts)
-  Future<void> saveInvitations(List<Map<String, dynamic>> invitations) async {
-    final batch = <String, dynamic>{};
-    for (int i = 0; i < invitations.length; i++) {
-      batch['invitation_$i'] = invitations[i];
-    }
-    await _invitationsBox.putAll(batch);
-    notifyListeners();
-  }
-
-  // Session Protocol specific methods
-
-  // Save Session identity
-  Future<void> saveSessionIdentity(Map<String, dynamic> identity) async {
-    await _storageStatsBox.put('session_identity', identity);
-    notifyListeners();
-  }
-
-  // Get Session identity
-  Map<String, dynamic>? getSessionIdentity() {
-    final data = _storageStatsBox.get('session_identity');
-    if (data is Map<String, dynamic>) {
-      return data;
-    }
-    return null;
-  }
-
-  // Save Session contacts
-  Future<void> saveSessionContacts(List<Map<String, dynamic>> contacts) async {
-    final batch = <String, dynamic>{};
-    for (int i = 0; i < contacts.length; i++) {
-      batch['contact_$i'] = contacts[i];
-    }
-    await _usersBox.putAll(batch);
-    notifyListeners();
-  }
-
-  // Get Session contacts
-  List<Map<String, dynamic>> getSessionContacts() {
-    final contacts = <Map<String, dynamic>>[];
-    for (final value in _usersBox.values) {
-      try {
-        if (value is Map<String, dynamic>) {
-          contacts.add(value);
-        }
-      } catch (e) {
-        print('📱 LocalStorageService: Error parsing contact: $e');
-      }
-    }
-    return contacts;
-  }
-
-  Future<void> clearOldMessages({int daysToKeep = 30}) async {
-    final cutoffDate = DateTime.now().subtract(Duration(days: daysToKeep));
-    final keysToDelete = <String>[];
-
-    for (final key in _messagesBox.keys) {
-      try {
-        final data = _messagesBox.get(key);
-        if (data != null) {
-          final message = Message.fromJson(data);
-          if (message.createdAt.isBefore(cutoffDate)) {
-            keysToDelete.add(key.toString());
+    try {
+      final tempDir = _tempDir!;
+      if (await tempDir.exists()) {
+        await for (final file in tempDir.list()) {
+          if (file is File) {
+            await file.delete();
           }
         }
-      } catch (e) {
-        // Skip invalid messages
       }
+    } catch (e) {
+      print('📱 LocalStorageService: Error cleaning up temp files: $e');
     }
-
-    await _messagesBox.deleteAll(keysToDelete);
-    notifyListeners();
-  }
-
-  // ==================== INVITATION MANAGEMENT ====================
-
-  Future<void> saveInvitation(Map<String, dynamic> invitationData) async {
-    await _invitationsBox.put(invitationData['id'], invitationData);
-    notifyListeners();
-  }
-
-  Map<String, dynamic>? getInvitation(String invitationId) {
-    final data = _invitationsBox.get(invitationId);
-    if (data != null && data is Map<String, dynamic>) {
-      return data;
-    }
-    return null;
-  }
-
-  Future<void> deleteInvitation(String invitationId) async {
-    await _invitationsBox.delete(invitationId);
-    notifyListeners();
-  }
-
-  Future<void> clearAllInvitations() async {
-    await _invitationsBox.clear();
-    notifyListeners();
-  }
-
-  // ==================== NOTIFICATION MANAGEMENT ====================
-
-  Future<void> saveNotification(Map<String, dynamic> notificationData) async {
-    await _notificationsBox.put(notificationData['id'], notificationData);
-    notifyListeners();
-  }
-
-  Future<void> saveNotifications(
-      List<Map<String, dynamic>> notifications) async {
-    final batch = <String, dynamic>{};
-    for (final notification in notifications) {
-      batch[notification['id']] = notification;
-    }
-    await _notificationsBox.putAll(batch);
-    notifyListeners();
-  }
-
-  List<Map<String, dynamic>> getNotifications(
-      {int limit = 10, int offset = 0}) {
-    final notifications = <Map<String, dynamic>>[];
-    final keys = _notificationsBox.keys.toList();
-
-    // Sort by timestamp (newest first)
-    keys.sort((a, b) {
-      final aData = _notificationsBox.get(a);
-      final bData = _notificationsBox.get(b);
-      if (aData == null || bData == null) return 0;
-
-      final aTimestamp = DateTime.parse(
-          aData['timestamp'] ?? DateTime.now().toIso8601String());
-      final bTimestamp = DateTime.parse(
-          bData['timestamp'] ?? DateTime.now().toIso8601String());
-      return bTimestamp.compareTo(aTimestamp);
-    });
-
-    // Apply pagination
-    final startIndex = offset;
-    final endIndex = (offset + limit).clamp(0, keys.length);
-
-    for (int i = startIndex; i < endIndex; i++) {
-      final data = _notificationsBox.get(keys[i]);
-      if (data != null && data is Map<String, dynamic>) {
-        notifications.add(data);
-      }
-    }
-
-    return notifications;
-  }
-
-  Future<void> markNotificationAsRead(String notificationId) async {
-    final data = _notificationsBox.get(notificationId);
-    if (data != null && data is Map<String, dynamic>) {
-      data['isRead'] = true;
-      await _notificationsBox.put(notificationId, data);
-      notifyListeners();
-    }
-  }
-
-  Future<void> deleteNotification(String notificationId) async {
-    await _notificationsBox.delete(notificationId);
-    notifyListeners();
-  }
-
-  Future<void> clearAllNotifications() async {
-    await _notificationsBox.clear();
-    notifyListeners();
-  }
-
-  int getUnreadNotificationCount() {
-    int count = 0;
-    for (final value in _notificationsBox.values) {
-      if (value is Map<String, dynamic> && value['isRead'] != true) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  // ==================== RECENT SEARCHES ====================
-
-  Future<void> saveRecentSearches(List<User> recentSearches) async {
-    final searchesData = recentSearches.map((user) => user.toJson()).toList();
-    await _usersBox.put('recent_searches', searchesData);
-    notifyListeners();
-  }
-
-  List<User> getRecentSearches() {
-    final data = _usersBox.get('recent_searches');
-    if (data != null && data is List) {
-      try {
-        return data.map((userData) => User.fromJson(userData)).toList();
-      } catch (e) {
-        print('📱 LocalStorageService: Error parsing recent searches: $e');
-      }
-    }
-    return [];
-  }
-
-  Future<void> clearRecentSearches() async {
-    await _usersBox.delete('recent_searches');
-    notifyListeners();
-  }
-
-  // ==================== UTILITY METHODS ====================
-
-  String generateMessageId() {
-    return _uuid.v4();
-  }
-
-  String generateChatId() {
-    return _uuid.v4();
-  }
-
-  Future<void> close() async {
-    await _chatsBox.close();
-    await _messagesBox.close();
-    await _usersBox.close();
-    await _pendingMessagesBox.close();
-    await _deletedMessagesBox.close();
-    await _storageStatsBox.close();
-    await _invitationsBox.close();
-    await _notificationsBox.close();
   }
 }

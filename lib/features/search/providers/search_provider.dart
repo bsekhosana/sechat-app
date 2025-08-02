@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:hive/hive.dart';
 import 'dart:async';
 import 'dart:convert'; // Added for json.encode and json.decode
 import 'package:flutter/material.dart';
@@ -8,7 +7,7 @@ import '../../../shared/models/invitation.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/network_service.dart';
-import '../../../core/services/local_storage_service.dart';
+import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/global_user_service.dart';
 
 // Search state enum
@@ -20,6 +19,7 @@ class SearchProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   String _lastSearchQuery = '';
+  final SeSharedPreferenceService _prefsService = SeSharedPreferenceService();
 
   List<User> get searchResults => _searchResults;
   List<User> get recentSearches => _recentSearches;
@@ -168,8 +168,8 @@ class SearchProvider extends ChangeNotifier {
   // Load recent searches from local storage
   Future<void> _loadRecentSearches() async {
     try {
-      final box = await Hive.openBox('recent_searches');
-      final searchesJson = box.get('searches', defaultValue: '[]');
+      final searchesJson =
+          await _prefsService.getString('recent_searches') ?? '[]';
       final searches = json.decode(searchesJson) as List;
 
       _recentSearches =
@@ -200,10 +200,9 @@ class SearchProvider extends ChangeNotifier {
   // Save recent searches to local storage
   Future<void> _saveRecentSearches() async {
     try {
-      final box = await Hive.openBox('recent_searches');
       final searchesJson =
           json.encode(_recentSearches.map((user) => user.toJson()).toList());
-      await box.put('searches', searchesJson);
+      await _prefsService.setString('recent_searches', searchesJson);
     } catch (e) {
       print('🔍 SearchProvider: Error saving recent searches: $e');
     }
@@ -212,8 +211,7 @@ class SearchProvider extends ChangeNotifier {
   // Clear recent searches
   Future<void> clearRecentSearches() async {
     try {
-      final box = await Hive.openBox('recent_searches');
-      await box.delete('searches');
+      await _prefsService.remove('recent_searches');
       _recentSearches.clear();
       notifyListeners();
     } catch (e) {

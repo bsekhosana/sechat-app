@@ -6,12 +6,13 @@ class CustomElevatedButton extends StatelessWidget {
   final String text;
   final IconData? icon;
   final bool isPrimary;
-
+  final bool orangeLoading;
   const CustomElevatedButton({
     super.key,
     required this.isLoading,
     required this.onPressed,
     required this.text,
+    this.orangeLoading = false,
     this.isPrimary = true,
     this.icon,
   });
@@ -26,10 +27,12 @@ class CustomElevatedButton extends StatelessWidget {
             ? SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.white,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      orangeLoading ? Color(0xFFFF6B35) : Colors.white,
+                    ),
                   ),
                 ),
               )

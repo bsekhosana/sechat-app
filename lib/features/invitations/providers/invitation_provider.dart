@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import '../../../shared/models/user.dart';
+import '../../../shared/models/chat.dart';
 import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/airnotifier_service.dart';
+import '../../../core/services/simple_notification_service.dart';
+import '../../../core/utils/guid_generator.dart';
 
 enum InvitationStatus {
   pending,
@@ -94,6 +97,8 @@ class InvitationProvider extends ChangeNotifier {
 
   InvitationProvider() {
     _loadInvitations();
+    // Connect to SimpleNotificationService for real-time updates
+    SimpleNotificationService.instance.setInvitationProvider(this);
   }
 
   Future<void> _loadInvitations() async {
@@ -113,6 +118,30 @@ class InvitationProvider extends ChangeNotifier {
       _isLoading = false;
       _error = 'Failed to load invitations: $e';
       notifyListeners();
+    }
+  }
+
+  // Public method to refresh invitations (called by SimpleNotificationService)
+  Future<void> refreshInvitations() async {
+    await _loadInvitations();
+  }
+
+  // Save chat to SharedPreferences
+  Future<void> _saveChat(Chat chat) async {
+    try {
+      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      final existingIndex = chatsJson.indexWhere((c) => c['id'] == chat.id);
+
+      if (existingIndex != -1) {
+        chatsJson[existingIndex] = chat.toJson();
+      } else {
+        chatsJson.add(chat.toJson());
+      }
+
+      await _prefsService.setJsonList('chats', chatsJson);
+      print('📱 InvitationProvider: ✅ Chat saved to SharedPreferences');
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error saving chat: $e');
     }
   }
 
@@ -187,6 +216,8 @@ class InvitationProvider extends ChangeNotifier {
 
   Future<bool> acceptInvitation(String invitationId) async {
     try {
+      print('📱 InvitationProvider: Accepting invitation: $invitationId');
+
       final invitation = _invitations.firstWhere(
         (inv) => inv.id == invitationId,
         orElse: () => throw Exception('Invitation not found'),
@@ -197,6 +228,28 @@ class InvitationProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       }
+
+      print(
+          '📱 InvitationProvider: Found invitation: ${invitation.fromUsername} -> ${invitation.toUsername}');
+
+      // Generate chat GUID for the new conversation
+      final chatGuid = GuidGenerator.generateGuid();
+      print('📱 InvitationProvider: Generated chat GUID: $chatGuid');
+
+      // Create chat conversation
+      final chat = Chat(
+        id: chatGuid,
+        user1Id: invitation.fromUserId,
+        user2Id: invitation.toUserId,
+        status: 'active',
+        lastMessageAt: DateTime.now(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Save chat to SharedPreferences
+      await _saveChat(chat);
+      print('📱 InvitationProvider: ✅ Chat conversation created: $chatGuid');
 
       // Update invitation status
       final updatedInvitation = Invitation(
@@ -214,15 +267,24 @@ class InvitationProvider extends ChangeNotifier {
       if (index != -1) {
         _invitations[index] = updatedInvitation;
         await _saveInvitations();
+        print('📱 InvitationProvider: ✅ Invitation status updated to accepted');
       }
 
-      // Send acceptance notification
-      await _sendAcceptanceNotification(updatedInvitation);
+      // Send acceptance notification with chat GUID (don't let this fail the whole operation)
+      try {
+        await _sendAcceptanceNotification(updatedInvitation, chatGuid);
+      } catch (e) {
+        print(
+            '📱 InvitationProvider: ⚠️ Failed to send acceptance notification: $e');
+        // Don't fail the whole operation if notification fails
+      }
 
       _error = null;
       notifyListeners();
+      print('📱 InvitationProvider: ✅ Invitation accepted successfully');
       return true;
     } catch (e) {
+      print('📱 InvitationProvider: ❌ Error accepting invitation: $e');
       _error = 'Failed to accept invitation: $e';
       notifyListeners();
       return false;
@@ -231,6 +293,8 @@ class InvitationProvider extends ChangeNotifier {
 
   Future<bool> declineInvitation(String invitationId) async {
     try {
+      print('📱 InvitationProvider: Declining invitation: $invitationId');
+
       final invitation = _invitations.firstWhere(
         (inv) => inv.id == invitationId,
         orElse: () => throw Exception('Invitation not found'),
@@ -241,6 +305,9 @@ class InvitationProvider extends ChangeNotifier {
         notifyListeners();
         return false;
       }
+
+      print(
+          '📱 InvitationProvider: Found invitation: ${invitation.fromUsername} -> ${invitation.toUsername}');
 
       // Update invitation status
       final updatedInvitation = Invitation(
@@ -258,15 +325,24 @@ class InvitationProvider extends ChangeNotifier {
       if (index != -1) {
         _invitations[index] = updatedInvitation;
         await _saveInvitations();
+        print('📱 InvitationProvider: ✅ Invitation status updated to declined');
       }
 
-      // Send decline notification
-      await _sendDeclineNotification(updatedInvitation);
+      // Send decline notification (don't let this fail the whole operation)
+      try {
+        await _sendDeclineNotification(updatedInvitation);
+      } catch (e) {
+        print(
+            '📱 InvitationProvider: ⚠️ Failed to send decline notification: $e');
+        // Don't fail the whole operation if notification fails
+      }
 
       _error = null;
       notifyListeners();
+      print('📱 InvitationProvider: ✅ Invitation declined successfully');
       return true;
     } catch (e) {
+      print('📱 InvitationProvider: ❌ Error declining invitation: $e');
       _error = 'Failed to decline invitation: $e';
       notifyListeners();
       return false;
@@ -335,9 +411,21 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _sendAcceptanceNotification(Invitation invitation) async {
+  Future<void> _sendAcceptanceNotification(
+      Invitation invitation, String chatGuid) async {
     try {
-      await AirNotifierService.instance.sendNotificationToSession(
+      // Check if the target session ID is valid
+      if (invitation.fromUserId.isEmpty || invitation.fromUserId == 'null') {
+        print(
+            '⚠️ InvitationProvider: Cannot send acceptance notification - invalid fromUserId: ${invitation.fromUserId}');
+        return;
+      }
+
+      print(
+          '📱 InvitationProvider: Sending acceptance notification to: ${invitation.fromUserId} with chat GUID: $chatGuid');
+
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
         sessionId: invitation.fromUserId,
         title: 'Invitation Accepted',
         body: '${invitation.toUsername} accepted your invitation',
@@ -346,16 +434,37 @@ class InvitationProvider extends ChangeNotifier {
           'invitationId': invitation.id,
           'toUserId': invitation.toUserId,
           'toUsername': invitation.toUsername,
+          'chatGuid': chatGuid, // Include chat GUID for sender
         },
       );
+
+      if (success) {
+        print(
+            '📱 InvitationProvider: ✅ Acceptance notification sent successfully with chat GUID: $chatGuid');
+      } else {
+        print(
+            '📱 InvitationProvider: ❌ Failed to send acceptance notification');
+      }
     } catch (e) {
-      print('Failed to send acceptance notification: $e');
+      print(
+          '📱 InvitationProvider: ❌ Error sending acceptance notification: $e');
     }
   }
 
   Future<void> _sendDeclineNotification(Invitation invitation) async {
     try {
-      await AirNotifierService.instance.sendNotificationToSession(
+      // Check if the target session ID is valid
+      if (invitation.fromUserId.isEmpty || invitation.fromUserId == 'null') {
+        print(
+            '⚠️ InvitationProvider: Cannot send decline notification - invalid fromUserId: ${invitation.fromUserId}');
+        return;
+      }
+
+      print(
+          '📱 InvitationProvider: Sending decline notification to: ${invitation.fromUserId}');
+
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
         sessionId: invitation.fromUserId,
         title: 'Invitation Declined',
         body: '${invitation.toUsername} declined your invitation',
@@ -366,14 +475,32 @@ class InvitationProvider extends ChangeNotifier {
           'toUsername': invitation.toUsername,
         },
       );
+
+      if (success) {
+        print(
+            '📱 InvitationProvider: ✅ Decline notification sent successfully');
+      } else {
+        print('📱 InvitationProvider: ❌ Failed to send decline notification');
+      }
     } catch (e) {
-      print('Failed to send decline notification: $e');
+      print('📱 InvitationProvider: ❌ Error sending decline notification: $e');
     }
   }
 
   Future<void> _sendCancellationNotification(Invitation invitation) async {
     try {
-      await AirNotifierService.instance.sendNotificationToSession(
+      // Check if the target session ID is valid
+      if (invitation.toUserId.isEmpty || invitation.toUserId == 'null') {
+        print(
+            '⚠️ InvitationProvider: Cannot send cancellation notification - invalid toUserId: ${invitation.toUserId}');
+        return;
+      }
+
+      print(
+          '📱 InvitationProvider: Sending cancellation notification to: ${invitation.toUserId}');
+
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
         sessionId: invitation.toUserId,
         title: 'Invitation Cancelled',
         body: '${invitation.fromUsername} cancelled their invitation',
@@ -384,8 +511,17 @@ class InvitationProvider extends ChangeNotifier {
           'fromUsername': invitation.fromUsername,
         },
       );
+
+      if (success) {
+        print(
+            '📱 InvitationProvider: ✅ Cancellation notification sent successfully');
+      } else {
+        print(
+            '📱 InvitationProvider: ❌ Failed to send cancellation notification');
+      }
     } catch (e) {
-      print('Failed to send cancellation notification: $e');
+      print(
+          '📱 InvitationProvider: ❌ Error sending cancellation notification: $e');
     }
   }
 
