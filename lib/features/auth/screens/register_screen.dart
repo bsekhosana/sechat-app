@@ -92,7 +92,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        backgroundColor: const Color(0xFF2C2C2C),
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -140,9 +140,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Your SeChat account has been created successfully.',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
                       ),
                       const SizedBox(height: 24),
 
@@ -285,7 +285,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Text(
       title,
       style: const TextStyle(
-        color: Colors.white,
+        color: Colors.black,
         fontWeight: FontWeight.bold,
         fontSize: 16,
       ),
@@ -297,9 +297,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: Colors.grey[50],
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[700]!),
+        border: Border.all(color: Colors.grey[300]!),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,8 +310,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.grey,
+                  style: TextStyle(
+                    color: Colors.grey[600],
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -320,7 +320,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Text(
                   value,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: Colors.black,
                     fontSize: 14,
                     fontFamily: 'monospace',
                   ),
@@ -332,9 +332,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             const SizedBox(width: 8),
             IconButton(
               onPressed: onCopy,
-              icon: Icon(copyIcon, size: 18, color: Colors.blue),
+              icon: Icon(copyIcon, size: 18, color: const Color(0xFFFF6B35)),
               style: IconButton.styleFrom(
-                backgroundColor: Colors.blue.withOpacity(0.1),
+                backgroundColor: const Color(0xFFFF6B35).withOpacity(0.1),
                 shape: const CircleBorder(),
                 padding: const EdgeInsets.all(4),
               ),
@@ -445,10 +445,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
+                          color: const Color(0xFFFF6B35).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
-                          border:
-                              Border.all(color: Colors.blue.withOpacity(0.3)),
+                          border: Border.all(
+                              color: const Color(0xFFFF6B35).withOpacity(0.3)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,12 +456,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Row(
                               children: [
                                 Icon(Icons.security,
-                                    color: Colors.blue, size: 20),
+                                    color: const Color(0xFFFF6B35), size: 20),
                                 const SizedBox(width: 8),
                                 const Text(
                                   'Why Choose SeChat?',
                                   style: TextStyle(
-                                    color: Colors.blue,
+                                    color: Color(0xFFFF6B35),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -485,21 +485,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
+                          color: Colors.grey[50],
                           borderRadius: BorderRadius.circular(8),
-                          border:
-                              Border.all(color: Colors.orange.withOpacity(0.3)),
+                          border: Border.all(color: Colors.grey[300]!),
                         ),
                         child: Row(
                           children: [
                             Icon(Icons.info_outline,
-                                color: Colors.orange, size: 20),
+                                color: Colors.grey[600], size: 20),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 'Your SeChat account is completely private. We don\'t ask for personal information.',
                                 style: TextStyle(
-                                    color: Colors.orange, fontSize: 12),
+                                    color: Colors.grey[600], fontSize: 12),
                               ),
                             ),
                           ],

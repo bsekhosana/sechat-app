@@ -68,19 +68,19 @@ class _LoginScreenState extends State<LoginScreen> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF2C2C2C),
+          backgroundColor: Colors.white,
           title: const Text(
             'Forgot Password',
             style: TextStyle(
-              color: Colors.white,
+              color: Colors.black,
               fontSize: 20,
               fontWeight: FontWeight.w600,
             ),
           ),
-          content: const Text(
+          content: Text(
             'Since SeChat uses local encryption, passwords cannot be recovered. You\'ll need to create a new account to start fresh.',
             style: TextStyle(
-              color: Colors.white70,
+              color: Colors.grey[600],
               fontSize: 16,
             ),
           ),
@@ -90,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.of(context).pop();
               },
               style: TextButton.styleFrom(
-                foregroundColor: Colors.white70,
+                foregroundColor: Colors.grey[600],
               ),
               child: const Text(
                 'Cancel',
@@ -133,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
       builder: (context) => Container(
         padding: const EdgeInsets.all(20),
         decoration: const BoxDecoration(
-          color: Color(0xFF1E1E1E),
+          color: Colors.white,
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
@@ -147,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.grey[600],
+                color: Colors.grey[300],
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -157,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
             const Text(
               'Create New Account',
               style: TextStyle(
-                color: Colors.white,
+                color: Colors.black,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
@@ -165,10 +165,10 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 16),
 
             // Message
-            const Text(
+            Text(
               'This will delete your current session and all associated data. You\'ll need to create a new account with a new password.',
               style: TextStyle(
-                color: Colors.white70,
+                color: Colors.grey[600],
                 fontSize: 16,
               ),
               textAlign: TextAlign.center,

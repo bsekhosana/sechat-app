@@ -22,6 +22,11 @@ class _InvitationsScreenState extends State<InvitationsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+
+    // Force refresh invitations when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<InvitationProvider>().refreshInvitations();
+    });
   }
 
   @override
@@ -205,6 +210,9 @@ class _InvitationsScreenState extends State<InvitationsScreen>
   Widget _buildSentInvitations() {
     return Consumer<InvitationProvider>(
       builder: (context, invitationProvider, child) {
+        print(
+            '📱 InvitationsScreen: Consumer triggered - isLoading: ${invitationProvider.isLoading}');
+
         if (invitationProvider.isLoading) {
           return const Center(
             child: CircularProgressIndicator(
@@ -214,6 +222,19 @@ class _InvitationsScreenState extends State<InvitationsScreen>
         }
 
         final sentInvitations = invitationProvider.sentInvitations;
+        print(
+            '📱 InvitationsScreen: Sent invitations count: ${sentInvitations.length}');
+        print(
+            '📱 InvitationsScreen: All invitations count: ${invitationProvider.invitations.length}');
+        print(
+            '📱 InvitationsScreen: Current session ID: ${SeSessionService().currentSessionId}');
+
+        // Debug: Print all invitations to see what's in the list
+        for (int i = 0; i < invitationProvider.invitations.length; i++) {
+          final inv = invitationProvider.invitations[i];
+          print(
+              '📱 InvitationsScreen: Invitation $i: fromUserId=${inv.fromUserId}, toUserId=${inv.toUserId}, status=${inv.status}');
+        }
 
         if (sentInvitations.isEmpty) {
           return _buildEmptyState(
@@ -228,6 +249,8 @@ class _InvitationsScreenState extends State<InvitationsScreen>
           itemCount: sentInvitations.length,
           itemBuilder: (context, index) {
             final invitation = sentInvitations[index];
+            print(
+                '📱 InvitationsScreen: Building sent invitation card: ${invitation.id}');
             return _buildInvitationCard(invitation, false);
           },
         );
@@ -241,40 +264,45 @@ class _InvitationsScreenState extends State<InvitationsScreen>
     required String subtitle,
   }) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(50),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: Icon(
+                icon,
+                size: 40,
+                color: Colors.grey[400],
+              ),
             ),
-            child: Icon(
-              icon,
-              size: 48,
-              color: Colors.grey[400],
+            const SizedBox(height: 20),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.black,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
             ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 14,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -304,7 +332,7 @@ class _InvitationsScreenState extends State<InvitationsScreen>
           ),
         ),
         title: Text(
-          invitation.displayName ?? 'Unknown User',
+          isReceived ? invitation.fromUsername : invitation.toUsername,
           style: const TextStyle(
             color: Colors.black,
             fontSize: 16,
@@ -312,7 +340,7 @@ class _InvitationsScreenState extends State<InvitationsScreen>
           ),
         ),
         subtitle: Text(
-          invitation.sessionId ?? 'No session ID',
+          isReceived ? invitation.fromUserId : invitation.toUserId,
           style: TextStyle(
             color: Colors.grey[600],
             fontSize: 12,
@@ -379,7 +407,7 @@ class _InvitationsScreenState extends State<InvitationsScreen>
     // TODO: Implement accept invitation logic
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Accepted invitation from ${invitation.displayName}'),
+        content: Text('Accepted invitation from ${invitation.fromUsername}'),
         backgroundColor: Colors.green,
       ),
     );
@@ -389,7 +417,7 @@ class _InvitationsScreenState extends State<InvitationsScreen>
     // TODO: Implement decline invitation logic
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Declined invitation from ${invitation.displayName}'),
+        content: Text('Declined invitation from ${invitation.fromUsername}'),
         backgroundColor: Colors.red,
       ),
     );

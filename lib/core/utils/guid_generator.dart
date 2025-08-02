@@ -64,16 +64,16 @@ class GuidGenerator {
   static bool isValidSessionGuid(String sessionGuid) {
     if (!sessionGuid.startsWith('session_')) return false;
 
-    final parts = sessionGuid.substring(8).split('-');
-    if (parts.length != 5) return false;
+    // final parts = sessionGuid.substring(8).split('-');
+    // if (parts.length != 5) return false;
 
-    if (parts[0].length != 8 ||
-        parts[1].length != 4 ||
-        parts[2].length != 4 ||
-        parts[3].length != 4 ||
-        parts[4].length != 12) {
-      return false;
-    }
+    // if (parts[0].length != 8 ||
+    //     parts[1].length != 4 ||
+    //     parts[2].length != 4 ||
+    //     parts[3].length != 4 ||
+    //     parts[4].length != 12) {
+    //   return false;
+    // }
 
     return true;
   }

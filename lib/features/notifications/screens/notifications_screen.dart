@@ -109,7 +109,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   }
 
                   return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.only(
+                        bottom: 24, left: 24, right: 24, top: 24),
                     itemCount: notificationProvider.notifications.length,
                     itemBuilder: (context, index) {
                       final notification =
@@ -200,7 +201,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     NotificationProvider provider,
   ) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -212,7 +213,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
+        contentPadding:
+            const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 8),
         leading: _buildNotificationIcon(notification),
         title: Text(
           notification.title,
@@ -225,7 +227,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 4),
+            // const SizedBox(height: 4),
             Text(
               notification.body,
               style: TextStyle(

@@ -5,7 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 // import 'package:sechat_app/shared/providers/auth_provider.dart'; // Temporarily disabled
 import 'package:sechat_app/shared/widgets/qr_image_upload_widget.dart';
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
-// import '../../features/invitations/providers/invitation_provider.dart'; // Temporarily disabled
+import '../../features/invitations/providers/invitation_provider.dart';
 import '../../core/services/se_session_service.dart';
 import '../../core/services/simple_notification_service.dart';
 import '../../core/services/global_user_service.dart';
@@ -576,72 +576,51 @@ class _InviteOptionsSheet extends StatelessWidget {
 
         print(
             '📱 InviteUserWidget: Sending invitation for sessionId: $sessionId with displayName: $extractedDisplayName');
-        // Add timeout to prevent hanging - temporarily disabled
-        // final success = await context
-        //     // .read<InvitationProvider>() // Temporarily disabled
-        //     .sendInvitation(sessionId, displayName: extractedDisplayName)
-        //     .timeout(
-        //   const Duration(seconds: 15),
-        //   onTimeout: () {
-        //     throw Exception('Invitation request timed out');
-        //   },
-        // ).catchError((error) {
-        //   print('📱 InviteUserWidget: Error sending invitation: $error');
-        //   return false; // Return false on error instead of throwing
-        // });
-        // print('📱 InviteUserWidget: Invitation send result: $success');
 
-        // No local notification for sender - only recipient should get notification
+        // Send invitation using InvitationProvider
+        final success = await context
+            .read<InvitationProvider>()
+            .sendInvitationBySessionId(sessionId,
+                displayName: extractedDisplayName)
+            .timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw Exception('Invitation request timed out');
+          },
+        ).catchError((error) {
+          print('📱 InviteUserWidget: Error sending invitation: $error');
+          return false; // Return false on error instead of throwing
+        });
+
+        print('📱 InviteUserWidget: Invitation send result: $success');
 
         if (context.mounted) {
-          // Temporarily show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content:
-                  Text('Contact added: ${extractedDisplayName ?? sessionId}'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-          // } else {
-          //   // Check if it's a validation error - temporarily disabled
-          //   final invitationProvider = context.read<InvitationProvider>();
-          //   if (invitationProvider.isUserInvited(sessionId)) {
-          //     ScaffoldMessenger.of(context).showSnackBar(
-          //       SnackBar(
-          //         content:
-          //             Text('${extractedDisplayName ?? sessionId} is already in your contacts'),
-          //         backgroundColor: Colors.blue,
-          //         duration: const Duration(seconds: 3),
-          //       ),
-          //     );
-          //   } else if (invitationProvider.isUserQueued(sessionId)) {
-          //     ScaffoldMessenger.of(context).showSnackBar(
-          //       SnackBar(
-          //         content:
-          //             Text('Invitation to ${extractedDisplayName ?? sessionId} is already pending'),
-          //         backgroundColor: Colors.orange,
-          //         duration: const Duration(seconds: 3),
-          //       ),
-          //     );
-          //   } else {
-          //     // Show specific error message from InvitationProvider
-          //     final invitationProvider = context.read<InvitationProvider>();
-          //     final errorMessage = invitationProvider.error ??
-          //         'Failed to send invitation. Recipient may be offline or not registered.';
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Invitation sent to ${extractedDisplayName ?? sessionId}'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          } else {
+            // Show specific error message from InvitationProvider
+            final invitationProvider = context.read<InvitationProvider>();
+            final errorMessage = invitationProvider.error ??
+                'Failed to send invitation. Recipient may be offline or not registered.';
 
-          //     ScaffoldMessenger.of(context).showSnackBar(
-          //       SnackBar(
-          //         content: Text(errorMessage),
-          //         backgroundColor: Colors.red,
-          //         duration: const Duration(seconds: 4),
-          //       ),
-          //     );
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(errorMessage),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
+              ),
+            );
 
-          //     // Clear the error after showing it
-          //     invitationProvider.clearError();
-          //   }
-          // }
+            // Clear the error after showing it
+            invitationProvider.clearError();
+          }
         }
       } else {
         throw Exception('Invalid QR code format');

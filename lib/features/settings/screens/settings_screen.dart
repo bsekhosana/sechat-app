@@ -297,7 +297,7 @@ Download now and let's chat securely!
                     'Settings',
                     style: TextStyle(
                       color: Colors.black,
-                      fontSize: 20,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

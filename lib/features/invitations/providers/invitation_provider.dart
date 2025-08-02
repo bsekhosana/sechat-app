@@ -89,9 +89,22 @@ class InvitationProvider extends ChangeNotifier {
       .toList();
 
   // Get invitations sent by current user
-  List<Invitation> get sentInvitations => _invitations
-      .where((inv) => inv.fromUserId == _sessionService.currentSessionId)
-      .toList();
+  List<Invitation> get sentInvitations {
+    final currentSessionId = _sessionService.currentSessionId;
+    print('📱 InvitationProvider: Getting sent invitations');
+    print('📱 InvitationProvider: Current session ID: $currentSessionId');
+    print('📱 InvitationProvider: Total invitations: ${_invitations.length}');
+
+    final sent = _invitations.where((inv) {
+      final matches = inv.fromUserId == currentSessionId;
+      print(
+          '📱 InvitationProvider: Invitation ${inv.id}: fromUserId=${inv.fromUserId}, matches=$matches');
+      return matches;
+    }).toList();
+
+    print('📱 InvitationProvider: Found ${sent.length} sent invitations');
+    return sent;
+  }
 
   // Get pending invitations
   List<Invitation> get pendingInvitations => _invitations
@@ -110,14 +123,24 @@ class InvitationProvider extends ChangeNotifier {
       notifyListeners();
 
       final invitationsJson = await _prefsService.getJsonList('invitations');
+      print(
+          '📱 InvitationProvider: Loading invitations from storage: ${invitationsJson?.length ?? 0} found');
+
       _invitations =
           invitationsJson?.map((json) => Invitation.fromJson(json)).toList() ??
               [];
+
+      print('📱 InvitationProvider: Loaded ${_invitations.length} invitations');
+      print(
+          '📱 InvitationProvider: Sent invitations: ${sentInvitations.length}');
+      print(
+          '📱 InvitationProvider: Received invitations: ${receivedInvitations.length}');
 
       _isLoading = false;
       _error = null;
       notifyListeners();
     } catch (e) {
+      print('📱 InvitationProvider: ❌ Error loading invitations: $e');
       _isLoading = false;
       _error = 'Failed to load invitations: $e';
       notifyListeners();
@@ -213,8 +236,12 @@ class InvitationProvider extends ChangeNotifier {
   Future<void> _saveInvitations() async {
     try {
       final invitationsJson = _invitations.map((inv) => inv.toJson()).toList();
+      print(
+          '📱 InvitationProvider: Saving ${invitationsJson.length} invitations to storage');
       await _prefsService.setJsonList('invitations', invitationsJson);
+      print('📱 InvitationProvider: ✅ Invitations saved successfully');
     } catch (e) {
+      print('📱 InvitationProvider: ❌ Error saving invitations: $e');
       _error = 'Failed to save invitations: $e';
       notifyListeners();
     }
@@ -355,7 +382,15 @@ class InvitationProvider extends ChangeNotifier {
       );
 
       _invitations.add(invitation);
+      print(
+          '📱 InvitationProvider: Added invitation to list: ${invitation.id}');
+      print(
+          '📱 InvitationProvider: Current invitations count: ${_invitations.length}');
+      print(
+          '📱 InvitationProvider: Sent invitations count: ${sentInvitations.length}');
+
       await _saveInvitations();
+      print('📱 InvitationProvider: Saved invitations to storage');
 
       // Send push notification to the other user
       await _sendInvitationNotification(invitation);
@@ -608,8 +643,8 @@ class InvitationProvider extends ChangeNotifier {
         data: {
           'type': 'invitation',
           'invitationId': invitation.id,
-          'fromUserId': invitation.fromUserId,
-          'fromUsername': invitation.fromUsername,
+          'senderId': invitation.fromUserId, // Changed from fromUserId
+          'senderName': invitation.fromUsername, // Changed from fromUsername
         },
       );
     } catch (e) {

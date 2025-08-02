@@ -18,6 +18,7 @@ import '../../shared/models/chat.dart';
 import '../../shared/models/message.dart' as app_message;
 import '../utils/guid_generator.dart';
 import 'indicator_service.dart';
+import 'package:flutter/material.dart';
 
 /// Simple, consolidated notification service with end-to-end encryption
 class SimpleNotificationService {
@@ -436,6 +437,51 @@ class SimpleNotificationService {
 
     print(
         '🔔 SimpleNotificationService: Processing invitation from $senderName ($senderId)');
+
+    // Check for existing invitations from this sender
+    final prefsService = SeSharedPreferenceService();
+    final existingInvitationsJson =
+        await prefsService.getJsonList('invitations') ?? [];
+
+    // Check for existing invitation from this sender
+    final existingInvitation = existingInvitationsJson.firstWhere(
+      (inv) =>
+          inv['fromUserId'] == senderId &&
+          inv['toUserId'] == (SeSessionService().currentSessionId ?? ''),
+      orElse: () => <String, dynamic>{},
+    );
+
+    if (existingInvitation.isNotEmpty) {
+      final status = existingInvitation['status'] as String?;
+
+      if (status == 'accepted') {
+        print(
+            '🔔 SimpleNotificationService: Already in contacts with $senderName');
+        // Show toast message
+        _showToastMessage('Already in contacts with $senderName');
+        return;
+      } else if (status == 'declined') {
+        print(
+            '🔔 SimpleNotificationService: Previously declined invitation from $senderName');
+        // Show toast message
+        _showToastMessage('Previously declined invitation from $senderName');
+        return;
+      } else if (status == 'pending') {
+        print(
+            '🔔 SimpleNotificationService: Invitation already pending from $senderName');
+        // Show toast message
+        _showToastMessage('Invitation already pending from $senderName');
+        return;
+      }
+    }
+
+    // Check if sender is blocked (you can implement this logic)
+    // final isBlocked = await _checkIfUserIsBlocked(senderId);
+    // if (isBlocked) {
+    //   print('🔔 SimpleNotificationService: Sender $senderName is blocked');
+    //   _showToastMessage('Invitation from blocked user ignored');
+    //   return;
+    // }
 
     // Show local notification
     await showLocalNotification(
@@ -1433,6 +1479,33 @@ class SimpleNotificationService {
     } catch (e) {
       print('🔔 SimpleNotificationService: ❌ Encryption test failed: $e');
       return false;
+    }
+  }
+
+  /// Show a toast message (for web, console, or native)
+  void _showToastMessage(String message) {
+    if (kIsWeb) {
+      print('🔔 SimpleNotificationService: Web toast: $message');
+    } else {
+      // For native platforms, you would typically use a platform channel
+      // to communicate with the native side.
+      // This is a placeholder for a native implementation.
+      print('🔔 SimpleNotificationService: Native toast: $message');
+    }
+  }
+
+  /// Show a toast message using ScaffoldMessenger if context is available
+  void showToastMessage(String message, {BuildContext? context}) {
+    if (context != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 3),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } else {
+      _showToastMessage(message);
     }
   }
 }
