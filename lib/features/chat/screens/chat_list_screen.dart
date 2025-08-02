@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
+import '../../../shared/models/message.dart';
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/se_session_service.dart';
@@ -273,18 +274,27 @@ Download now and let's chat securely!
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      chat.lastMessage != null
-                          ? chat.lastMessage!['content'] ?? 'No messages yet'
-                          : 'No messages yet',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: chat.getBlockedStatus()
-                            ? Colors.grey[500]
-                            : Colors.grey[600],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    FutureBuilder<List<Message>>(
+                      future: _getLastMessage(chat.id),
+                      builder: (context, snapshot) {
+                        String lastMessageText = 'No messages yet';
+                        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                          final lastMessage = snapshot.data!.first;
+                          lastMessageText = lastMessage.content;
+                        }
+
+                        return Text(
+                          lastMessageText,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: chat.getBlockedStatus()
+                                ? Colors.grey[500]
+                                : Colors.grey[600],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -320,6 +330,31 @@ Download now and let's chat securely!
       return '${difference.inDays}d';
     } else {
       return '${dateTime.day}/${dateTime.month}';
+    }
+  }
+
+  Future<List<Message>> _getLastMessage(String chatId) async {
+    try {
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      final chatMessages = <Message>[];
+
+      for (final messageJson in messagesJson) {
+        try {
+          final message = Message.fromJson(messageJson);
+          if (message.chatId == chatId && !message.isDeleted) {
+            chatMessages.add(message);
+          }
+        } catch (e) {
+          print('📱 ChatListScreen: Error parsing message: $e');
+        }
+      }
+
+      // Sort by creation time and return the last message
+      chatMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      return chatMessages.isNotEmpty ? [chatMessages.last] : [];
+    } catch (e) {
+      print('📱 ChatListScreen: Error getting last message: $e');
+      return [];
     }
   }
 

@@ -9,6 +9,7 @@ import '../../../core/services/airnotifier_service.dart';
 import '../../../core/services/simple_notification_service.dart';
 import '../../../core/services/indicator_service.dart';
 import '../../../core/utils/guid_generator.dart';
+import '../../../core/services/se_shared_preference_service.dart';
 
 enum InvitationStatus {
   pending,
@@ -174,6 +175,41 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
+  // Create local notification for invitation actions
+  Future<void> _createLocalNotification({
+    required String title,
+    required String body,
+    required String type,
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+      final existingNotificationsJson =
+          await prefsService.getJsonList('notifications') ?? [];
+
+      final notification = {
+        'id': 'invitation_${DateTime.now().millisecondsSinceEpoch}',
+        'title': title,
+        'body': body,
+        'type': type,
+        'data': data,
+        'timestamp': DateTime.now().toIso8601String(),
+        'isRead': false,
+      };
+
+      existingNotificationsJson.add(notification);
+      await prefsService.setJsonList(
+          'notifications', existingNotificationsJson);
+
+      // Trigger indicator for new notification
+      IndicatorService().setNewNotification();
+
+      print('📱 InvitationProvider: ✅ Local notification created: $title');
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error creating local notification: $e');
+    }
+  }
+
   Future<void> _saveInvitations() async {
     try {
       final invitationsJson = _invitations.map((inv) => inv.toJson()).toList();
@@ -233,12 +269,115 @@ class InvitationProvider extends ChangeNotifier {
       // Send notification
       await _sendInvitationNotification(invitation);
 
+      // Create local notification for invitation sent
+      await _createLocalNotification(
+        title: 'Invitation Sent',
+        body: 'Invitation sent to ${invitation.toUsername}',
+        type: 'invitation_sent',
+        data: {
+          'invitationId': invitation.id,
+          'toUsername': invitation.toUsername,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+
       _error = null;
       notifyListeners();
-      
+
       // Trigger indicator for new invitation
       IndicatorService().setNewInvitation();
-      
+
+      return true;
+    } catch (e) {
+      _error = 'Failed to send invitation: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // New method for sending invitation by session ID
+  Future<bool> sendInvitationBySessionId(String sessionId,
+      {String? displayName}) async {
+    try {
+      final currentSession = _sessionService.currentSession;
+      if (currentSession == null) {
+        _error = 'No active session';
+        notifyListeners();
+        return false;
+      }
+
+      // Validate session ID format
+      if (!GuidGenerator.isValidSessionGuid(sessionId)) {
+        _error = 'Invalid session ID format';
+        notifyListeners();
+        return false;
+      }
+
+      // Check if it's the current user's session ID
+      if (sessionId == currentSession.sessionId) {
+        _error = 'Cannot invite yourself';
+        notifyListeners();
+        return false;
+      }
+
+      // Check if invitation already exists
+      final existingInvitation = _invitations.firstWhere(
+        (inv) =>
+            inv.fromUserId == currentSession.sessionId &&
+            inv.toUserId == sessionId &&
+            inv.status == InvitationStatus.pending,
+        orElse: () => Invitation(
+          id: '',
+          fromUserId: '',
+          fromUsername: '',
+          toUserId: '',
+          toUsername: '',
+          status: InvitationStatus.pending,
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      if (existingInvitation.id.isNotEmpty) {
+        _error = 'Invitation already sent';
+        notifyListeners();
+        return false;
+      }
+
+      // Create new invitation
+      final invitation = Invitation(
+        id: _generateInvitationId(),
+        fromUserId: currentSession.sessionId,
+        fromUsername: currentSession.displayName,
+        toUserId: sessionId,
+        toUsername: displayName ?? 'Unknown User',
+        status: InvitationStatus.pending,
+        createdAt: DateTime.now(),
+      );
+
+      _invitations.add(invitation);
+      await _saveInvitations();
+
+      // Send push notification to the other user
+      await _sendInvitationNotification(invitation);
+
+      // Create local notification for invitation sent
+      await _createLocalNotification(
+        title: 'Invitation Sent',
+        body: 'Invitation sent to ${invitation.toUsername}',
+        type: 'invitation_sent',
+        data: {
+          'invitationId': invitation.id,
+          'toUsername': invitation.toUsername,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+
+      _error = null;
+      notifyListeners();
+
+      // Trigger indicator for new invitation
+      IndicatorService().setNewInvitation();
+
       return true;
     } catch (e) {
       _error = 'Failed to send invitation: $e';
@@ -317,12 +456,25 @@ class InvitationProvider extends ChangeNotifier {
         // Don't fail the whole operation if notification fails
       }
 
+      // Create local notification for invitation accepted
+      await _createLocalNotification(
+        title: 'Invitation Accepted',
+        body: 'You accepted invitation from ${invitation.fromUsername}',
+        type: 'invitation_accepted',
+        data: {
+          'invitationId': invitation.id,
+          'fromUsername': invitation.fromUsername,
+          'chatId': chatGuid,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+
       _error = null;
       notifyListeners();
-      
+
       // Trigger indicator for new chat
       IndicatorService().setNewChat();
-      
+
       print('📱 InvitationProvider: ✅ Invitation accepted successfully');
       return true;
     } catch (e) {
@@ -378,6 +530,18 @@ class InvitationProvider extends ChangeNotifier {
             '📱 InvitationProvider: ⚠️ Failed to send decline notification: $e');
         // Don't fail the whole operation if notification fails
       }
+
+      // Create local notification for invitation declined
+      await _createLocalNotification(
+        title: 'Invitation Declined',
+        body: 'You declined invitation from ${invitation.fromUsername}',
+        type: 'invitation_declined',
+        data: {
+          'invitationId': invitation.id,
+          'fromUsername': invitation.fromUsername,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
 
       _error = null;
       notifyListeners();

@@ -32,41 +32,77 @@ class _InvitationsScreenState extends State<InvitationsScreen>
 
   @override
   Widget build(BuildContext context) {
+    double height = MediaQuery.of(context).size.height;
+    double width = MediaQuery.of(context).size.width;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(40), // adjust height as needed
+        preferredSize:
+            Size(width, height * 0.05), // Fixed height for consistent layout
         child: Container(
           color: Colors.white,
           alignment: Alignment.bottomCenter,
           padding: const EdgeInsets.only(left: 25, right: 25),
           child: TabBar(
-            indicatorSize: TabBarIndicatorSize.tab, // ← this is the key line!
             controller: _tabController,
             indicatorColor: const Color(0xFFFF6B35),
             labelColor: const Color(0xFFFF6B35),
             unselectedLabelColor: Colors.grey,
-            indicatorWeight: 3,
-            labelStyle:
-                const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            unselectedLabelStyle:
-                const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
-            indicator: const BoxDecoration(
+            indicatorWeight: 2,
+            labelStyle: TextStyle(
+              fontSize: width * 0.04,
+              fontWeight: FontWeight.w600,
+            ),
+            unselectedLabelStyle: TextStyle(
+              fontSize: width * 0.04,
+              fontWeight: FontWeight.w400,
+            ),
+            indicator: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
                   color: Color(0xFFFF6B35),
-                  width: 3,
+                  width: width * 0.003,
                 ),
               ),
             ),
-            tabs: const [
+            // Ensure tabs are evenly distributed
+            labelPadding: EdgeInsets.symmetric(horizontal: width * 0.02),
+            tabs: [
               Tab(
-                icon: FaIcon(FontAwesomeIcons.inbox),
-                text: 'Received',
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FaIcon(
+                      FontAwesomeIcons.inbox,
+                      size: width * 0.04,
+                    ),
+                    SizedBox(height: height * 0.005),
+                    Text(
+                      'Received',
+                      style: TextStyle(fontSize: width * 0.03),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
               Tab(
-                icon: FaIcon(FontAwesomeIcons.paperPlane),
-                text: 'Sent',
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FaIcon(
+                      FontAwesomeIcons.paperPlane,
+                      size: width * 0.04,
+                    ),
+                    SizedBox(height: height * 0.005),
+                    Text(
+                      'Sent',
+                      style: TextStyle(fontSize: width * 0.03),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

@@ -38,24 +38,16 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
     GeneratedPluginRegistrant.register(with: self)
     print("📱 iOS: Generated plugin registrant registered")
     
-    // Set up SessionApi implementation
-    let controller = window?.rootViewController as! FlutterViewController
-    let sessionApiImpl = SessionApiImpl()
-    SetUpSessionApiHandler(controller.binaryMessenger, sessionApiImpl)
-    print("📱 iOS: SessionApi implementation registered")
+    // SessionApi implementation removed - using SeSessionService instead
+    print("📱 iOS: SessionApi implementation removed - using SeSessionService")
     
     // Set up push notifications
     setupPushNotifications(application)
     
-    // Set up method channel for Session Protocol
-    let sessionChannel = FlutterMethodChannel(
-      name: "session_protocol",
-      binaryMessenger: controller.binaryMessenger
-    )
+    // Session Protocol method channel removed - using SeSessionService instead
     
-    sessionChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
-      self?.handleMethodCall(call, result: result)
-    }
+    // Get the Flutter view controller for method channels
+    let controller = window?.rootViewController as! FlutterViewController
     
     // Set up push notifications channel
     let pushChannel = FlutterMethodChannel(

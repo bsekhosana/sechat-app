@@ -15,7 +15,6 @@ import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:sechat_app/core/services/airnotifier_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
-// import '../../invitations/providers/invitation_provider.dart'; // Temporarily disabled
 import 'package:sechat_app/features/notifications/providers/notification_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -59,157 +58,136 @@ Download now and let's chat securely!
         return Container(
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Handle bar
               Container(
+                margin: const EdgeInsets.only(top: 8),
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.only(top: 12, bottom: 16),
                 decoration: BoxDecoration(
                   color: Colors.grey[300],
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              // Title
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Text(
-                  'Logout',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                  ),
+
+              // Header
+              Container(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    // Icon
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: const Icon(
+                        Icons.logout,
+                        color: Colors.red,
+                        size: 30,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Title
+                    const Text(
+                      'Logout',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Subtitle
+                    const Text(
+                      'Are you sure you want to log out? You\'ll need to enter your password to log back in.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
-              // Description
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Text(
-                  'Are you sure you want to log out? You\'ll need to enter your password to log back in.',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 16,
+
+              // Action Buttons
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(
+                    top: BorderSide(color: Colors.grey[300]!),
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 20),
-              // Action buttons
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[200],
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
                             borderRadius: BorderRadius.circular(12),
                           ),
-                        ),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          Navigator.of(context)
-                              .pop(); // Close action sheet first
-
-                          try {
-                            print('🔍 Settings: Starting logout process...');
-
-                            // Show loading dialog
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (context) => const Center(
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFFFF6B35),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            );
-
-                            // Perform logout using SeSessionService
-                            final seSessionService = SeSessionService();
-                            final logoutSuccess =
-                                await seSessionService.logout();
-
-                            print('🔍 Settings: Logout result: $logoutSuccess');
-
-                            // Close loading dialog
-                            if (context.mounted) {
-                              Navigator.of(context)
-                                  .pop(); // Close loading dialog
-                            }
-
-                            // Check if widget is still mounted before navigation
-                            if (context.mounted) {
-                              print(
-                                  '🔍 Settings: Navigating to login screen...');
-                              // Navigate to login screen without back button
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(
-                                  builder: (_) => const LoginScreen(),
-                                ),
-                                (route) => false,
-                              );
-                              print('🔍 Settings: Navigation completed');
-                            } else {
-                              print(
-                                  '🔍 Settings: Context not mounted after logout');
-                              // Force navigation even if context is not mounted
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                Navigator.of(context).pushAndRemoveUntil(
-                                  MaterialPageRoute(
-                                    builder: (_) => const LoginScreen(),
-                                  ),
-                                  (route) => false,
-                                );
-                              });
-                            }
-                          } catch (e) {
-                            print('🔍 Settings: Logout error: $e');
-                            // Close loading dialog if there's an error
-                            if (context.mounted) {
-                              Navigator.of(context)
-                                  .pop(); // Close loading dialog
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Logout failed: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF6B35),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            ],
                           ),
                         ),
-                        child: const Text('Logout'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => _performLogout(context),
+                        child: Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.logout,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Logout',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
             ],
           ),
         );
@@ -217,83 +195,70 @@ Download now and let's chat securely!
     );
   }
 
-  void _showSessionBackupDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF2C2C2C),
-          title: const Text(
-            'Session Backup',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          content: const Text(
-            'This will create a backup of your current session data including all messages. The backup is stored locally on your device.',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white70,
-              ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.of(context).pop(); // Close dialog first
+  void _performLogout(BuildContext context) async {
+    Navigator.of(context).pop(); // Close action sheet first
 
-                try {
-                  await SeSessionService().backupSession();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Session backup created successfully'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error creating backup: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF6B35),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Create Backup',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+    try {
+      print('🔍 Settings: Starting logout process...');
+
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFFFF6B35),
+          ),
+        ),
+      );
+
+      // Perform logout using SeSessionService
+      final seSessionService = SeSessionService();
+      final logoutSuccess = await seSessionService.logout();
+
+      print('🔍 Settings: Logout result: $logoutSuccess');
+
+      // Close loading dialog
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+      }
+
+      // Check if widget is still mounted before navigation
+      if (context.mounted) {
+        print('🔍 Settings: Navigating to login screen...');
+        // Navigate to login screen without back button
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const LoginScreen(),
+          ),
+          (route) => false,
         );
-      },
-    );
+        print('🔍 Settings: Navigation completed');
+      } else {
+        print('🔍 Settings: Context not mounted after logout');
+        // Force navigation even if context is not mounted
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (_) => const LoginScreen(),
+            ),
+            (route) => false,
+          );
+        });
+      }
+    } catch (e) {
+      print('🔍 Settings: Logout error: $e');
+      // Close loading dialog if there's an error
+      if (context.mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logout failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -314,11 +279,6 @@ Download now and let's chat securely!
                         title: 'Storage & Data',
                         subtitle: 'Manage your data and storage',
                         onTap: () => _showStorageManagementSheet(context),
-                      ),
-                      _buildSettingsItem(
-                        title: 'Session Backup',
-                        subtitle: 'Create a backup of your session data',
-                        onTap: () => _showSessionBackupDialog(context),
                       ),
                       _buildSettingsItem(
                         title: 'Logout',
@@ -371,18 +331,34 @@ Download now and let's chat securely!
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: const Color(0xFF2C2C2C),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[300]!),
             ),
             child: Row(
               children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDestructive
+                        ? Colors.red.withValues(alpha: 0.1)
+                        : const Color(0xFFFF6B35).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isDestructive ? Icons.logout : Icons.settings,
+                    color: isDestructive ? Colors.red : const Color(0xFFFF6B35),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -390,11 +366,9 @@ Download now and let's chat securely!
                       Text(
                         title,
                         style: TextStyle(
-                          color: isDestructive
-                              ? const Color(0xFFFF5555)
-                              : Colors.white,
+                          color: isDestructive ? Colors.red : Colors.black,
                           fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       if (subtitle != null) ...[
@@ -402,8 +376,8 @@ Download now and let's chat securely!
                         Text(
                           subtitle,
                           style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontSize: 14,
                           ),
                         ),
                       ],
@@ -412,9 +386,7 @@ Download now and let's chat securely!
                 ),
                 Icon(
                   Icons.arrow_forward_ios,
-                  color: isDestructive
-                      ? const Color(0xFFFF5555)
-                      : const Color(0xFF666666),
+                  color: Colors.grey[400],
                   size: 16,
                 ),
               ],
@@ -462,25 +434,26 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
+        backgroundColor: Colors.white,
         title: const Text(
           'Clear Old Messages',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.black),
         ),
         content: const Text(
-          'This will delete messages older than 30 days. This action cannot be undone.',
-          style: TextStyle(color: Colors.white70),
+          'This will permanently delete messages older than 30 days. This action cannot be undone.',
+          style: TextStyle(color: Colors.grey),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child:
-                const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: const Text('Clear'),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Clear',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -489,24 +462,20 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
     if (confirmed == true) {
       try {
         await LocalStorageService.instance.clearOldMessages();
-        await _loadStorageStats();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Old messages cleared successfully'),
-              backgroundColor: Color(0xFF4CAF50),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Old messages cleared successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadStorageStats(); // Refresh stats
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error clearing messages: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing messages: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -515,25 +484,26 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2C2C),
+        backgroundColor: Colors.white,
         title: const Text(
-          'Delete Account & Clear All Data',
-          style: TextStyle(color: Colors.red),
+          'Clear All Data',
+          style: TextStyle(color: Colors.black),
         ),
         content: const Text(
-          'This will permanently delete your account and ALL your data including:\n\n• Session identity and keys\n• All contacts and conversations\n• All messages and files\n• All invitations and notifications\n\nThis action cannot be undone.',
-          style: TextStyle(color: Colors.white70),
+          'This will permanently delete all your messages, invitations, and app data. This action cannot be undone.',
+          style: TextStyle(color: Colors.grey),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child:
-                const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete Account'),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Clear All',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -541,56 +511,21 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
 
     if (confirmed == true) {
       try {
-        print('🗑️ Settings: Starting account deletion process...');
-
-        // Clear all session data first
-        final seSessionService = SeSessionService();
-        await seSessionService.deleteSession();
-        print('🗑️ Settings: ✅ Session data cleared');
-
-        // Clear all local storage data
         await LocalStorageService.instance.clearAllData();
-        print('🗑️ Settings: ✅ Local storage data cleared');
-
-        // Clear all SharedPreferences data
-        final prefsService = SeSharedPreferenceService();
-        await prefsService.clear();
-        print('🗑️ Settings: ✅ All SharedPreferences data cleared');
-
-        // Clear all provider data
-        // context.read<InvitationProvider>().clearAllData(); // Temporarily disabled
-        context.read<NotificationProvider>().clearAllData();
-        print('🗑️ Settings: ✅ Provider data cleared');
-
-        await _loadStorageStats();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content:
-                  Text('Account deleted and all data cleared successfully'),
-              backgroundColor: Color(0xFF4CAF50),
-              duration: Duration(seconds: 3),
-            ),
-          );
-
-          // Navigate to welcome screen after account deletion
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-            (route) => false,
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All data cleared successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadStorageStats(); // Refresh stats
       } catch (e) {
-        print('🗑️ Settings: Error during account deletion: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error deleting account: $e'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error clearing data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -611,7 +546,7 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
       maxChildSize: 0.95,
       builder: (context, scrollController) => Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF232323),
+          color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.all(24),
@@ -625,7 +560,7 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.grey[300],
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -635,7 +570,7 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
             const Text(
               'Storage & Data',
               style: TextStyle(
-                color: Colors.white,
+                color: Colors.black,
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
@@ -645,7 +580,7 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
             Text(
               'Manage your local data and storage',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
+                color: Colors.grey[600],
                 fontSize: 16,
               ),
               textAlign: TextAlign.center,
@@ -663,8 +598,9 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2C2C2C),
+                  color: Colors.grey[50],
                   borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey[300]!),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,7 +608,7 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
                     const Text(
                       'Storage Overview',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Colors.black,
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
@@ -701,123 +637,23 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // Data Statistics
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2C2C2C),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Data Statistics',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDataItem(
-                      'Total Messages',
-                      '${_storageStats['totalMessages'] ?? 0}',
-                      Icons.message,
-                    ),
-                    _buildDataItem(
-                      'Text Messages',
-                      '${_storageStats['textMessages'] ?? 0}',
-                      Icons.text_fields,
-                    ),
-                    _buildDataItem(
-                      'Image Messages',
-                      '${_storageStats['imageMessages'] ?? 0}',
-                      Icons.image,
-                    ),
-                    _buildDataItem(
-                      'Voice Messages',
-                      '${_storageStats['voiceMessages'] ?? 0}',
-                      Icons.mic,
-                    ),
-                    _buildDataItem(
-                      'File Messages',
-                      '${_storageStats['fileMessages'] ?? 0}',
-                      Icons.file_present,
-                    ),
-                    _buildDataItem(
-                      'Chats',
-                      '${_storageStats['chatsCount'] ?? 0}',
-                      Icons.chat,
-                    ),
-                    _buildDataItem(
-                      'Users',
-                      '${_storageStats['usersCount'] ?? 0}',
-                      Icons.people,
-                    ),
-                    _buildDataItem(
-                      'Pending Messages',
-                      '${_storageStats['pendingMessagesCount'] ?? 0}',
-                      Icons.schedule,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
               // Action Buttons
-              ElevatedButton.icon(
-                onPressed: _clearOldMessages,
-                icon: const Icon(Icons.delete_sweep),
-                label: const Text('Clear Old Messages (30+ days)'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+              _buildActionButton(
+                'Clear Old Messages',
+                'Delete messages older than 30 days',
+                Icons.delete_sweep,
+                _clearOldMessages,
+                Colors.orange,
               ),
               const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: _clearAllData,
-                icon: const Icon(Icons.delete_forever),
-                label: const Text('Clear All Data'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Refresh Button
-              TextButton.icon(
-                onPressed: _loadStorageStats,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Refresh Statistics'),
-                style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xFFFF6B35),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Close Button
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text(
-                  'Close',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 16,
-                  ),
-                ),
+              _buildActionButton(
+                'Clear All Data',
+                'Delete all messages and app data',
+                Icons.delete_forever,
+                _clearAllData,
+                Colors.red,
               ),
             ],
           ],
@@ -826,28 +662,33 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
     );
   }
 
-  Widget _buildStorageItem(String label, String value, IconData icon) {
+  Widget _buildStorageItem(String label, String size, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFFFF6B35), size: 20),
+          Icon(
+            icon,
+            color: const Color(0xFFFF6B35),
+            size: 20,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
               style: const TextStyle(
-                color: Colors.white70,
+                color: Colors.black,
                 fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
           Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
+            size,
+            style: TextStyle(
+              color: Colors.grey[600],
               fontSize: 14,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -855,31 +696,67 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
     );
   }
 
-  Widget _buildDataItem(String label, String value, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFFFF6B35), size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
+  Widget _buildActionButton(
+    String title,
+    String subtitle,
+    IconData icon,
+    VoidCallback onTap,
+    Color color,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 20,
               ),
             ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.grey[400],
+              size: 16,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
@@ -9,16 +10,22 @@ class NetworkService extends ChangeNotifier {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   Timer? _reconnectionTimer;
+  Timer? _connectionTestTimer;
   int _reconnectionCountdown = 0;
   bool _isPollingEnabled = true;
 
   bool _isConnected = true;
   bool _isReconnecting = false;
+  bool _isInternetAvailable = true;
   String? _lastError;
   bool _hasNotifiedReconnection = false;
+  bool _hasNotifiedDisconnection = false;
+  DateTime? _lastConnectionLoss;
+  DateTime? _lastReconnection;
 
   NetworkService._() {
     _initConnectivity();
+    _startInternetConnectivityTesting();
   }
 
   void _initConnectivity() {
@@ -31,12 +38,38 @@ class NetworkService extends ChangeNotifier {
       },
       onError: (error) {
         print('🌐 NetworkService: Connectivity error: $error');
-        _isConnected = false;
-        _lastError = 'Network connectivity error';
-        _startReconnectionPolling();
-        notifyListeners();
+        _handleConnectionLoss('Network connectivity error');
       },
     );
+  }
+
+  void _startInternetConnectivityTesting() {
+    // Test internet connectivity every 10 seconds
+    _connectionTestTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _testInternetConnectivity();
+    });
+  }
+
+  Future<void> _testInternetConnectivity() async {
+    try {
+      // Test with a reliable host
+      final result = await InternetAddress.lookup('google.com');
+      final hasInternet =
+          result.isNotEmpty && result.first.rawAddress.isNotEmpty;
+
+      if (!hasInternet && _isInternetAvailable) {
+        _handleConnectionLoss('Internet connectivity lost');
+      } else if (hasInternet && !_isInternetAvailable) {
+        _handleInternetReconnection();
+      }
+
+      _isInternetAvailable = hasInternet;
+    } catch (e) {
+      if (_isInternetAvailable) {
+        _handleConnectionLoss('Internet connectivity test failed');
+      }
+      _isInternetAvailable = false;
+    }
   }
 
   void _updateConnectionStatus(ConnectivityResult result) {
@@ -56,25 +89,14 @@ class NetworkService extends ChangeNotifier {
         if (!wasConnected && !_hasNotifiedReconnection) {
           print('🌐 NetworkService: Network reconnection successful');
           _hasNotifiedReconnection = true;
-          notifyListeners();
-
-          // Reset the flag after a delay to allow for future reconnections
-          Timer(const Duration(seconds: 5), () {
-            _hasNotifiedReconnection = false;
-          });
+          _handleInternetReconnection();
         }
         break;
       case ConnectivityResult.none:
-        _isConnected = false;
-        _lastError = 'No internet connection available';
-        _startReconnectionPolling();
-        print('🌐 NetworkService: Network disconnected');
+        _handleConnectionLoss('No internet connection available');
         break;
       default:
-        _isConnected = false;
-        _lastError = 'Unknown network status';
-        _startReconnectionPolling();
-        print('🌐 NetworkService: Unknown network status: $result');
+        _handleConnectionLoss('Unknown network status');
     }
 
     // Always notify listeners when status changes
@@ -83,6 +105,39 @@ class NetworkService extends ChangeNotifier {
           '🌐 NetworkService: Connection status changed from $wasConnected to $_isConnected');
       notifyListeners();
     }
+  }
+
+  void _handleConnectionLoss(String reason) {
+    final wasConnected = _isConnected;
+    _isConnected = false;
+    _isInternetAvailable = false;
+    _lastError = reason;
+    _lastConnectionLoss = DateTime.now();
+    _hasNotifiedDisconnection = false;
+    _startReconnectionPolling();
+    print('🌐 NetworkService: Connection lost - $reason');
+
+    if (wasConnected) {
+      notifyListeners();
+    }
+  }
+
+  void _handleInternetReconnection() {
+    _isConnected = true;
+    _isInternetAvailable = true;
+    _lastError = null;
+    _isReconnecting = false;
+    _lastReconnection = DateTime.now();
+    _hasNotifiedReconnection = true;
+    _stopReconnectionPolling();
+    print('🌐 NetworkService: Internet reconnection successful');
+
+    // Reset the flag after a delay to allow for future reconnections
+    Timer(const Duration(seconds: 5), () {
+      _hasNotifiedReconnection = false;
+    });
+
+    notifyListeners();
   }
 
   void _startReconnectionPolling() {
@@ -257,13 +312,17 @@ class NetworkService extends ChangeNotifier {
 
   bool get isConnected => _isConnected;
   bool get isReconnecting => _isReconnecting;
+  bool get isInternetAvailable => _isInternetAvailable;
   String? get lastError => _lastError;
   int get reconnectionCountdown => _reconnectionCountdown;
+  DateTime? get lastConnectionLoss => _lastConnectionLoss;
+  DateTime? get lastReconnection => _lastReconnection;
 
   @override
   void dispose() {
     _connectivitySubscription?.cancel();
     _reconnectionTimer?.cancel();
+    _connectionTestTimer?.cancel();
     super.dispose();
   }
 }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../shared/providers/auth_provider.dart';
+// import '../../../shared/providers/auth_provider.dart'; // Removed - no longer needed
 import '../../../shared/models/user.dart';
 import '../../invitations/providers/invitation_provider.dart';
+import '../../../core/services/se_session_service.dart';
 
 class ChatInvitationScreen extends StatefulWidget {
   final User recipient;
@@ -38,8 +39,10 @@ class _ChatInvitationScreenState extends State<ChatInvitationScreen> {
     });
 
     try {
-      final currentUser = context.read<AuthProvider>().currentUser;
-      if (currentUser == null) {
+      // Check if user is authenticated via SeSessionService
+      final sessionService = SeSessionService();
+      final currentSession = sessionService.currentSession;
+      if (currentSession == null) {
         setState(() {
           _error = 'User not authenticated';
         });

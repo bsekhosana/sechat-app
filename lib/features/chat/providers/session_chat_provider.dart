@@ -267,17 +267,12 @@ class SessionChatProvider extends ChangeNotifier {
         id: userId,
         user1Id: _airNotifier.currentUserId ?? '',
         user2Id: userId,
+        user1DisplayName: 'Me',
+        user2DisplayName: user.username,
+        status: 'active',
         lastMessageAt: message.createdAt,
         createdAt: message.createdAt,
         updatedAt: message.createdAt,
-        otherUser: {
-          'id': userId,
-          'username': user.username,
-          'is_online': user.isOnline,
-          'last_seen': user.lastSeen?.toIso8601String() ??
-              DateTime.now().toIso8601String(),
-        },
-        lastMessage: _convertToMessageMap(message),
       );
 
       _chats.add(chat);

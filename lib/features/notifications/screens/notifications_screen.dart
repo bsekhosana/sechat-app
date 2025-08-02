@@ -30,6 +30,42 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // Header with Clear All button
+            Consumer<NotificationProvider>(
+              builder: (context, notificationProvider, child) {
+                if (notificationProvider.notifications.isNotEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Notifications',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => _showClearAllDialog(
+                              context, notificationProvider),
+                          child: const Text(
+                            'Clear All',
+                            style: TextStyle(
+                              color: Color(0xFFFF6B35),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+
             // Notifications List
             Expanded(
               child: Consumer<NotificationProvider>(
@@ -92,6 +128,41 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearAllDialog(
+      BuildContext context, NotificationProvider notificationProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Notifications'),
+        content: const Text(
+          'This will permanently delete all notifications. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              notificationProvider.clearAll();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('All notifications cleared'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.orange,
+            ),
+            child: const Text('Clear All'),
           ),
         ],
       ),

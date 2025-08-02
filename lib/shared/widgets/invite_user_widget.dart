@@ -47,7 +47,7 @@ class InviteUserWidget extends StatelessWidget {
 class _InviteOptionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.of(context).size.height * 0.5;
     final statusBarHeight = MediaQuery.of(context).padding.top;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     final availableHeight = screenHeight - statusBarHeight - bottomPadding;
@@ -109,14 +109,14 @@ class _InviteOptionsSheet extends StatelessWidget {
               child: Column(
                 children: [
                   // Scan QR Code Option
-                  _buildOptionCard(
-                    context,
-                    icon: Icons.qr_code_scanner,
-                    title: 'Scan QR Code',
-                    subtitle: 'Scan a contact\'s QR code to add them',
-                    color: Colors.blue,
-                    onTap: () => _scanQRCode(context),
-                  ),
+                  // _buildOptionCard(
+                  //   context,
+                  //   icon: Icons.qr_code_scanner,
+                  //   title: 'Scan QR Code',
+                  //   subtitle: 'Scan a contact\'s QR code to add them',
+                  //   color: Colors.blue,
+                  //   onTap: () => _scanQRCode(context),
+                  // ),
 
                   const SizedBox(height: 16),
 
@@ -145,14 +145,14 @@ class _InviteOptionsSheet extends StatelessWidget {
                   const SizedBox(height: 16),
 
                   // Share My QR Code Option
-                  _buildOptionCard(
-                    context,
-                    icon: Icons.qr_code,
-                    title: 'Show My QR Code',
-                    subtitle: 'Share your QR code with others',
-                    color: Colors.purple,
-                    onTap: () => _showMyQRCode(context),
-                  ),
+                  // _buildOptionCard(
+                  //   context,
+                  //   icon: Icons.qr_code,
+                  //   title: 'Show My QR Code',
+                  //   subtitle: 'Share your QR code with others',
+                  //   color: Colors.purple,
+                  //   onTap: () => _showMyQRCode(context),
+                  // ),
 
                   const SizedBox(height: 24),
 

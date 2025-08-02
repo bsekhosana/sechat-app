@@ -10,6 +10,7 @@ import '../../../shared/models/user.dart';
 import '../../../shared/widgets/connection_status_widget.dart';
 import '../../../shared/widgets/invite_user_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
+import '../../../shared/widgets/invite_contact_dialog.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../invitations/screens/invitations_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
@@ -133,8 +134,37 @@ Download now and let's chat securely!
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
-                          child: InviteUserWidget(),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (context) =>
+                                    const InviteContactDialog(),
+                              );
+                            },
+                            child: Container(
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFF6B35)
+                                    .withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.person_add,
+                                    size: 22,
+                                    color: const Color(0xFFFF6B35),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         const ProfileIconWidget(),
