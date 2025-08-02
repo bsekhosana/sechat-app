@@ -24,7 +24,7 @@ class LocalStorageService extends ChangeNotifier {
 
   Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
     try {
       // Create directories for file storage
       await _createDirectories();

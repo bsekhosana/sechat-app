@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import '../../../shared/models/user.dart';
 import '../../../shared/models/chat.dart';
+import '../../../shared/models/message.dart';
 import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/airnotifier_service.dart';
@@ -145,6 +146,33 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
+  // Create initial welcome message
+  Future<void> _createInitialMessage(
+      String chatId, Invitation invitation) async {
+    try {
+      final initialMessage = Message(
+        id: GuidGenerator.generateShortId(),
+        chatId: chatId,
+        senderId: 'system',
+        content:
+            'Welcome! You are now connected with ${invitation.fromUsername}. Start chatting!',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        status: 'sent',
+      );
+
+      // Save message to SharedPreferences
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      messagesJson.add(initialMessage.toJson());
+      await _prefsService.setJsonList('messages', messagesJson);
+
+      print(
+          '📱 InvitationProvider: ✅ Initial message created for chat: $chatId');
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error creating initial message: $e');
+    }
+  }
+
   Future<void> _saveInvitations() async {
     try {
       final invitationsJson = _invitations.map((inv) => inv.toJson()).toList();
@@ -241,6 +269,8 @@ class InvitationProvider extends ChangeNotifier {
         id: chatGuid,
         user1Id: invitation.fromUserId,
         user2Id: invitation.toUserId,
+        user1DisplayName: invitation.fromUsername,
+        user2DisplayName: invitation.toUsername,
         status: 'active',
         lastMessageAt: DateTime.now(),
         createdAt: DateTime.now(),
@@ -250,6 +280,9 @@ class InvitationProvider extends ChangeNotifier {
       // Save chat to SharedPreferences
       await _saveChat(chat);
       print('📱 InvitationProvider: ✅ Chat conversation created: $chatGuid');
+
+      // Create initial welcome message
+      await _createInitialMessage(chatGuid, invitation);
 
       // Update invitation status
       final updatedInvitation = Invitation(

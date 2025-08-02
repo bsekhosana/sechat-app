@@ -99,42 +99,12 @@ Download now and let's chat securely!
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
+        top: false,
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: _shareApp,
-                    child: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF6B35),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.share,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: InviteUserWidget(),
-                  ),
-                  const SizedBox(width: 12),
-                  const ProfileIconWidget(),
-                ],
-              ),
-            ),
-
             // Title
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 20),
               child: Row(
                 children: [
                   const Text(
@@ -240,17 +210,18 @@ Download now and let's chat securely!
 
   Widget _buildChatCard(Chat chat) {
     final currentUserId = SeSessionService().currentSessionId ?? '';
-    final otherUserId = chat.getOtherUserId(currentUserId);
+    final otherUserDisplayName = chat.getOtherUserDisplayName(currentUserId);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: Colors.white,
+      color: chat.getBlockedStatus() ? Colors.grey[100] : Colors.white,
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
       child: InkWell(
         onTap: () => _openChat(chat),
+        onLongPress: () => _showChatActions(context, chat),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -259,9 +230,11 @@ Download now and let's chat securely!
               // Avatar
               CircleAvatar(
                 radius: 24,
-                backgroundColor: const Color(0xFFFF6B35),
+                backgroundColor: chat.getBlockedStatus()
+                    ? Colors.grey
+                    : const Color(0xFFFF6B35),
                 child: Text(
-                  otherUserId.substring(0, 1).toUpperCase(),
+                  otherUserDisplayName.substring(0, 1).toUpperCase(),
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -276,13 +249,40 @@ Download now and let's chat securely!
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      otherUserId,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            otherUserDisplayName,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: chat.getBlockedStatus()
+                                  ? Colors.grey[600]
+                                  : Colors.black,
+                            ),
+                          ),
+                        ),
+                        if (chat.getBlockedStatus())
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.red[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'BLOCKED',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red[700],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -291,7 +291,9 @@ Download now and let's chat securely!
                           : 'No messages yet',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.grey[600],
+                        color: chat.getBlockedStatus()
+                            ? Colors.grey[500]
+                            : Colors.grey[600],
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -300,12 +302,12 @@ Download now and let's chat securely!
                 ),
               ),
 
-              // Timestamp
-              Text(
-                _formatTimestamp(chat.lastMessageAt ?? chat.createdAt),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[500],
+              // Menu button
+              IconButton(
+                onPressed: () => _showChatActions(context, chat),
+                icon: Icon(
+                  Icons.more_vert,
+                  color: Colors.grey[600],
                 ),
               ),
             ],
@@ -330,6 +332,252 @@ Download now and let's chat securely!
       return '${difference.inDays}d';
     } else {
       return '${dateTime.day}/${dateTime.month}';
+    }
+  }
+
+  void _showChatActions(BuildContext context, Chat chat) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: Icon(
+                chat.getBlockedStatus() ? Icons.block : Icons.block_outlined,
+                color: chat.getBlockedStatus() ? Colors.red : Colors.grey[600],
+              ),
+              title: Text(
+                chat.getBlockedStatus() ? 'Unblock User' : 'Block User',
+                style: TextStyle(
+                  color: chat.getBlockedStatus() ? Colors.red : Colors.black,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _toggleBlockChat(chat);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_sweep,
+                color: Colors.orange,
+              ),
+              title: const Text(
+                'Clear All Messages',
+                style: TextStyle(color: Colors.orange),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _showClearMessagesConfirmation(context, chat);
+              },
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_forever,
+                color: Colors.red,
+              ),
+              title: const Text(
+                'Delete Chat',
+                style: TextStyle(color: Colors.red),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteChatConfirmation(context, chat);
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _toggleBlockChat(Chat chat) async {
+    try {
+      final updatedChat = chat.copyWith(
+        isBlocked: !chat.getBlockedStatus(),
+        blockedAt: !chat.getBlockedStatus() ? DateTime.now() : null,
+        updatedAt: DateTime.now(),
+      );
+
+      // Update chat in SharedPreferences
+      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      final index = chatsJson.indexWhere((c) => c['id'] == chat.id);
+
+      if (index != -1) {
+        chatsJson[index] = updatedChat.toJson();
+        await _prefsService.setJsonList('chats', chatsJson);
+
+        // Refresh the chat list
+        _loadChats();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              updatedChat.getBlockedStatus()
+                  ? 'User blocked'
+                  : 'User unblocked',
+            ),
+            backgroundColor:
+                updatedChat.getBlockedStatus() ? Colors.red : Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('📱 ChatListScreen: ❌ Error toggling block status: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to update block status'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _showClearMessagesConfirmation(BuildContext context, Chat chat) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Messages'),
+        content: const Text(
+          'This will permanently delete all messages in this conversation. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _clearAllMessages(chat);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.orange,
+            ),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteChatConfirmation(BuildContext context, Chat chat) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Chat'),
+        content: const Text(
+          'This will permanently delete this conversation and all its messages. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteChat(chat);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _clearAllMessages(Chat chat) async {
+    try {
+      // Remove all messages for this chat
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      final filteredMessages =
+          messagesJson.where((m) => m['chat_id'] != chat.id).toList();
+      await _prefsService.setJsonList('messages', filteredMessages);
+
+      // Update chat to remove last message info
+      final updatedChat = chat.copyWith(
+        lastMessageAt: null,
+        updatedAt: DateTime.now(),
+      );
+
+      // Update chat in SharedPreferences
+      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      final index = chatsJson.indexWhere((c) => c['id'] == chat.id);
+
+      if (index != -1) {
+        chatsJson[index] = updatedChat.toJson();
+        await _prefsService.setJsonList('chats', chatsJson);
+
+        // Refresh the chat list
+        _loadChats();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All messages cleared'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      print('📱 ChatListScreen: ❌ Error clearing messages: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to clear messages'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _deleteChat(Chat chat) async {
+    try {
+      // Remove all messages for this chat
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      final filteredMessages =
+          messagesJson.where((m) => m['chat_id'] != chat.id).toList();
+      await _prefsService.setJsonList('messages', filteredMessages);
+
+      // Remove chat from SharedPreferences
+      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      final filteredChats = chatsJson.where((c) => c['id'] != chat.id).toList();
+      await _prefsService.setJsonList('chats', filteredChats);
+
+      // Refresh the chat list
+      _loadChats();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Chat deleted'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      print('📱 ChatListScreen: ❌ Error deleting chat: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to delete chat'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 }

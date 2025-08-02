@@ -13,6 +13,7 @@ import '../../../core/services/se_session_service.dart';
 import '../../invitations/screens/invitations_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
 import '../../settings/screens/settings_screen.dart';
+import '../../chat/screens/chat_list_screen.dart';
 
 class MainNavScreen extends StatefulWidget {
   final Map<String, dynamic>? notificationPayload;
@@ -79,8 +80,7 @@ Download now and let's chat securely!
   }
 
   static final List<Widget> _screens = <Widget>[
-    const Center(
-        child: Text('Chats - Temporarily Disabled')), // Chats - disabled
+    const ChatListScreen(), // Chats
     InvitationsScreen(), // Invitations
     NotificationsScreen(), // Notifications
     SettingsScreen(), // Settings

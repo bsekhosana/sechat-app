@@ -624,6 +624,8 @@ class SimpleNotificationService {
         id: conversationGuid,
         user1Id: currentUserId,
         user2Id: responderId,
+        user1DisplayName: currentUserName,
+        user2DisplayName: responderName,
         status: 'active',
         lastMessageAt: DateTime.now(),
         createdAt: DateTime.now(),
@@ -691,6 +693,8 @@ class SimpleNotificationService {
         id: chatGuid,
         user1Id: fromUserId,
         user2Id: toUserId,
+        user1DisplayName: fromUsername,
+        user2DisplayName: toUsername,
         status: 'active',
         lastMessageAt: DateTime.now(),
         createdAt: DateTime.now(),
@@ -726,6 +730,30 @@ class SimpleNotificationService {
     if (senderId == null || senderName == null || message == null) {
       print('🔔 SimpleNotificationService: Invalid message notification data');
       return;
+    }
+
+    // Check if sender is blocked
+    final currentUserId = SeSessionService().currentSessionId;
+    if (currentUserId != null) {
+      final prefsService = SeSharedPreferenceService();
+      final chatsJson = await prefsService.getJsonList('chats') ?? [];
+
+      // Find chat with this sender
+      for (final chatJson in chatsJson) {
+        try {
+          final chat = Chat.fromJson(chatJson);
+          final otherUserId = chat.getOtherUserId(currentUserId);
+
+          if (otherUserId == senderId && chat.getBlockedStatus()) {
+            print(
+                '🔔 SimpleNotificationService: Message from blocked user ignored: $senderName');
+            return; // Ignore message from blocked user
+          }
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: Error parsing chat for blocking check: $e');
+        }
+      }
     }
 
     // Show local notification

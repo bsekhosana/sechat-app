@@ -53,7 +53,8 @@ class _SearchWidgetState extends State<SearchWidget> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 2),
+                    borderSide:
+                        const BorderSide(color: Color(0xFFFF6B35), width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.white,
@@ -132,7 +133,8 @@ class _SearchWidgetState extends State<SearchWidget> {
                           : ListView.builder(
                               itemCount: searchProvider.searchResults.length,
                               itemBuilder: (context, index) {
-                                final user = searchProvider.searchResults[index];
+                                final user =
+                                    searchProvider.searchResults[index];
                                 return _UserCard(user: user);
                               },
                             ),

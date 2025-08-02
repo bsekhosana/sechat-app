@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../providers/invitation_provider.dart';
 import '../../../core/services/se_session_service.dart';
+import '../../../core/services/se_shared_preference_service.dart';
+import '../../../shared/models/chat.dart';
+import '../../chat/screens/chat_screen.dart';
 
 class InvitationsScreen extends StatefulWidget {
   const InvitationsScreen({super.key});
@@ -31,37 +34,42 @@ class _InvitationsScreenState extends State<InvitationsScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: const Color(0xFFFF6B35),
-          labelColor: const Color(0xFFFF6B35),
-          unselectedLabelColor: Colors.grey,
-          indicatorWeight: 3,
-          labelStyle:
-              const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          unselectedLabelStyle:
-              const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
-          indicator: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: Color(0xFFFF6B35),
-                width: 3,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(40), // adjust height as needed
+        child: Container(
+          color: Colors.white,
+          alignment: Alignment.bottomCenter,
+          padding: const EdgeInsets.only(left: 25, right: 25),
+          child: TabBar(
+            indicatorSize: TabBarIndicatorSize.tab, // ← this is the key line!
+            controller: _tabController,
+            indicatorColor: const Color(0xFFFF6B35),
+            labelColor: const Color(0xFFFF6B35),
+            unselectedLabelColor: Colors.grey,
+            indicatorWeight: 3,
+            labelStyle:
+                const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            unselectedLabelStyle:
+                const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+            indicator: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: Color(0xFFFF6B35),
+                  width: 3,
+                ),
               ),
             ),
+            tabs: const [
+              Tab(
+                icon: FaIcon(FontAwesomeIcons.inbox),
+                text: 'Received',
+              ),
+              Tab(
+                icon: FaIcon(FontAwesomeIcons.paperPlane),
+                text: 'Sent',
+              ),
+            ],
           ),
-          tabs: const [
-            Tab(
-              icon: FaIcon(FontAwesomeIcons.inbox),
-              text: 'Received',
-            ),
-            Tab(
-              icon: FaIcon(FontAwesomeIcons.paperPlane),
-              text: 'Sent',
-            ),
-          ],
         ),
       ),
       body: TabBarView(
@@ -263,12 +271,28 @@ class _InvitationCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                _buildActionButtons(context),
+                Column(
+                  children: [
+                    _buildActionButtons(context),
+                    if (invitation.status == InvitationStatus.accepted)
+                      Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        child: GestureDetector(
+                          onTap: () => _chat(context),
+                          child: Icon(
+                            Icons.chat_bubble_outline,
+                            color: const Color(0xFFFF6B35),
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Text(
-              _getInvitationMessage(),
+              _getInvitationMessage(invitation.status),
               style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 14,
@@ -372,11 +396,20 @@ class _InvitationCard extends StatelessWidget {
     }
   }
 
-  String _getInvitationMessage() {
+  String _getInvitationMessage(InvitationStatus status) {
+    // if invitatoin accepted show invitattion accepted instead of wants to connect with you
     if (isReceived) {
-      return '${invitation.fromUsername} wants to connect with you';
+      if (status == InvitationStatus.accepted) {
+        return 'You accepted ${invitation.fromUsername}\'s invitation';
+      } else {
+        return '${invitation.fromUsername} wants to connect with you';
+      }
     } else {
-      return 'You invited ${invitation.toUsername} to connect';
+      if (status == InvitationStatus.accepted) {
+        return 'You accepted ${invitation.toUsername}\'s invitation';
+      } else {
+        return 'You invited ${invitation.toUsername} to connect';
+      }
     }
   }
 
@@ -461,6 +494,73 @@ class _InvitationCard extends StatelessWidget {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _chat(BuildContext context) async {
+    try {
+      // Find the chat that corresponds to this accepted invitation
+      final prefsService = SeSharedPreferenceService();
+      final chatsJson = await prefsService.getJsonList('chats') ?? [];
+
+      // Find chat with matching participants
+      Chat? targetChat;
+      for (final chatJson in chatsJson) {
+        try {
+          final chat = Chat.fromJson(chatJson);
+          final currentUserId = SeSessionService().currentSessionId ?? '';
+
+          // Check if this chat involves the same users as the invitation
+          if (isReceived) {
+            // For received invitations, check if chat involves fromUserId and current user
+            if (chat.user1Id == invitation.fromUserId &&
+                    chat.user2Id == currentUserId ||
+                chat.user1Id == currentUserId &&
+                    chat.user2Id == invitation.fromUserId) {
+              targetChat = chat;
+              break;
+            }
+          } else {
+            // For sent invitations, check if chat involves toUserId and current user
+            if (chat.user1Id == invitation.toUserId &&
+                    chat.user2Id == currentUserId ||
+                chat.user1Id == currentUserId &&
+                    chat.user2Id == invitation.toUserId) {
+              targetChat = chat;
+              break;
+            }
+          }
+        } catch (e) {
+          print('Error parsing chat: $e');
+        }
+      }
+
+      if (targetChat != null && context.mounted) {
+        // Navigate to the chat screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(chat: targetChat!),
+          ),
+        );
+      } else if (context.mounted) {
+        // Show error if chat not found
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chat not found. Please try again later.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error navigating to chat: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening chat: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }
