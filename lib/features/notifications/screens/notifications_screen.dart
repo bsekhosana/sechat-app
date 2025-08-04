@@ -201,7 +201,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     NotificationProvider provider,
   ) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 24),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),

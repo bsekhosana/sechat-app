@@ -81,8 +81,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
+      // With reverse: true, scrolling to 0 means the bottom (newest messages)
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        0,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
@@ -106,15 +107,17 @@ class _ChatScreenState extends State<ChatScreen> {
         updatedAt: DateTime.now(),
       );
 
-      // Add to local list
+      // Add to local list (newest messages will appear at bottom with reverse: true)
       setState(() {
         _messages.add(newMessage);
+        // Sort to ensure proper order
+        _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       });
 
       // Clear input
       _messageController.clear();
 
-      // Scroll to bottom
+      // Scroll to bottom (newest message)
       _scrollToBottom();
 
       // Save message to SharedPreferences
@@ -170,14 +173,51 @@ class _ChatScreenState extends State<ChatScreen> {
       final currentUserDisplayName =
           widget.chat.getOtherUserDisplayName(otherUserId);
 
-      await SimpleNotificationService.instance.sendMessage(
+      // Send regular message notification
+      final success = await SimpleNotificationService.instance.sendMessage(
         recipientId: otherUserId,
         senderName: currentUserDisplayName,
         message: message.content,
         conversationId: widget.chat.id,
       );
+
+      if (!success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'Failed to send message notification. Please check your internet connection.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Also send encrypted version for enhanced security
+      try {
+        await SimpleNotificationService.instance.sendEncryptedMessage(
+          recipientId: otherUserId,
+          senderName: currentUserDisplayName,
+          message: message.content,
+          conversationId: widget.chat.id,
+        );
+      } catch (e) {
+        print('📱 ChatScreen: ⚠️ Failed to send encrypted message: $e');
+        // Don't fail the whole operation if encrypted message fails
+      }
     } catch (e) {
       print('📱 ChatScreen: Error sending push notification: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sending message: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -370,10 +410,13 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildMessagesList() {
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.all(16),
+      reverse: true, // Messages start from bottom
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: _messages.length,
       itemBuilder: (context, index) {
-        final message = _messages[index];
+        // Reverse the index to show newest messages at the bottom
+        final reversedIndex = _messages.length - 1 - index;
+        final message = _messages[reversedIndex];
         final isMyMessage = message.senderId == _currentUserId;
 
         return _buildMessageBubble(message, isMyMessage);
@@ -414,7 +457,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 2,
                       offset: const Offset(0, 1),
                     ),
@@ -438,7 +481,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           _formatMessageTime(message.createdAt),
                           style: TextStyle(
                             color: isMyMessage
-                                ? Colors.white.withOpacity(0.7)
+                                ? Colors.white.withValues(alpha: 0.7)
                                 : Colors.grey[600],
                             fontSize: 11,
                           ),

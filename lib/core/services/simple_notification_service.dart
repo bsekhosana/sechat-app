@@ -188,12 +188,8 @@ class SimpleNotificationService {
       // Create invitation response data
       final responseData = {
         'type': 'invitation_response',
-        'invitationId': invitationId,
-        'responderId': SeSessionService().currentSessionId,
-        'responderName': senderName,
         'response': response, // 'accepted' or 'declined'
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'version': '1.0',
+        'responderName': senderName,
       };
 
       // Add conversation GUID if invitation was accepted
@@ -201,34 +197,25 @@ class SimpleNotificationService {
         responseData['conversationGuid'] = conversationGuid;
       }
 
-      // Encrypt the response data
-      final encryptedData = await _encryptData(responseData, recipientId);
-      final checksum = _generateChecksum(responseData);
-
-      // Determine notification content based on response
-      final title = response == 'accepted'
-          ? 'Invitation Accepted'
-          : 'Invitation Declined';
-      final body = response == 'accepted'
-          ? '$senderName accepted your invitation'
-          : '$senderName declined your invitation';
-
-      // Send via AirNotifier with encryption
+      // TEMPORARY: Send unencrypted for testing
+      print(
+          '🔔 SimpleNotificationService: 🔧 Sending data to AirNotifier: $responseData');
       final success =
           await AirNotifierService.instance.sendNotificationToSession(
         sessionId: recipientId,
-        title: title,
-        body: body,
-        data: {
-          'encrypted': true,
-          'data': encryptedData,
-          'checksum': checksum,
-        },
+        title: response == 'accepted'
+            ? 'Invitation Accepted'
+            : 'Invitation Declined',
+        body: response == 'accepted'
+            ? '$senderName accepted your invitation'
+            : '$senderName declined your invitation',
+        data: responseData, // Send unencrypted data
         sound: response == 'accepted' ? 'accept.wav' : 'decline.wav',
       );
 
       if (success) {
-        print('🔔 SimpleNotificationService: ✅ Invitation response sent');
+        print(
+            '🔔 SimpleNotificationService: ✅ Invitation response sent (unencrypted)');
         return true;
       } else {
         print(
@@ -291,6 +278,56 @@ class SimpleNotificationService {
       }
     } catch (e) {
       print('🔔 SimpleNotificationService: Error sending message: $e');
+      return false;
+    }
+  }
+
+  /// Send encrypted message notification
+  Future<bool> sendEncryptedMessage({
+    required String recipientId,
+    required String senderName,
+    required String message,
+    required String conversationId,
+  }) async {
+    try {
+      print('🔔 SimpleNotificationService: Sending encrypted message');
+
+      // Create message data
+      final messageData = {
+        'type': 'message',
+        'senderName': senderName,
+        'senderId': SeSessionService().currentSessionId,
+        'message': message,
+        'conversationId': conversationId,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'version': '1.0',
+      };
+
+      // Encrypt the message data
+      final encryptedData = await _encryptData(messageData, recipientId);
+      final checksum = _generateChecksum(messageData);
+
+      // Send via AirNotifier with encryption
+      final success =
+          await AirNotifierService.instance.sendEncryptedMessageNotification(
+        recipientId: recipientId,
+        senderName: senderName,
+        encryptedData: encryptedData,
+        checksum: checksum,
+        conversationId: conversationId,
+      );
+
+      if (success) {
+        print('🔔 SimpleNotificationService: ✅ Encrypted message sent');
+        return true;
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ❌ Failed to send encrypted message');
+        return false;
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error sending encrypted message: $e');
       return false;
     }
   }
@@ -378,21 +415,23 @@ class SimpleNotificationService {
       } else {
         // Check if data is at top level
         actualData = notificationData;
-        print(
-            '🔔 SimpleNotificationService: Using top-level data: $actualData');
       }
 
-      final decryptedData = await processNotification(actualData);
-      if (decryptedData == null) {
-        print('🔔 SimpleNotificationService: ❌ No decrypted data available');
+      print(
+          '🔔 SimpleNotificationService: Processed notification data: $actualData');
+
+      // Process the notification data
+      final processedData = await processNotification(actualData);
+      if (processedData == null) {
+        print(
+            '🔔 SimpleNotificationService: ❌ Failed to process notification data');
         return;
       }
 
-      print('🔔 SimpleNotificationService: Decrypted data: $decryptedData');
-
-      final type = decryptedData['type'] as String?;
+      final type = processedData['type'] as String?;
       if (type == null) {
-        print('🔔 SimpleNotificationService: ❌ No notification type found');
+        print(
+            '🔔 SimpleNotificationService: ❌ No notification type found in data');
         return;
       }
 
@@ -403,22 +442,41 @@ class SimpleNotificationService {
         case 'invitation':
           print(
               '🔔 SimpleNotificationService: 🎯 Processing invitation notification');
-          await _handleInvitationNotification(decryptedData);
+
+          // Check for subtype to determine if this is a response notification
+          final subtype = processedData['subtype'] as String?;
+          if (subtype == 'accepted') {
+            print(
+                '🔔 SimpleNotificationService: 🎯 Processing invitation accepted notification');
+            await _handleInvitationAcceptedNotification(processedData);
+          } else if (subtype == 'declined') {
+            print(
+                '🔔 SimpleNotificationService: 🎯 Processing invitation declined notification');
+            await _handleInvitationDeclinedNotification(processedData);
+          } else {
+            // Regular invitation notification
+            await _handleInvitationNotification(processedData);
+          }
           break;
         case 'invitation_response':
-          await _handleInvitationResponseNotification(decryptedData);
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing invitation response notification');
+          await _handleInvitationResponseNotification(processedData);
           break;
         case 'invitation_accepted':
-          await _handleInvitationAcceptedNotification(decryptedData);
+          await _handleInvitationAcceptedNotification(processedData);
           break;
         case 'invitation_declined':
-          await _handleInvitationDeclinedNotification(decryptedData);
+          await _handleInvitationDeclinedNotification(processedData);
           break;
         case 'message':
-          await _handleMessageNotification(decryptedData);
+          await _handleMessageNotification(processedData);
           break;
         case 'typing_indicator':
-          await _handleTypingIndicatorNotification(decryptedData);
+          await _handleTypingIndicatorNotification(processedData);
+          break;
+        case 'broadcast':
+          await _handleBroadcastNotification(processedData);
           break;
         default:
           print(
@@ -864,24 +922,34 @@ class SimpleNotificationService {
   /// Handle invitation accepted notification
   Future<void> _handleInvitationAcceptedNotification(
       Map<String, dynamic> data) async {
-    final toUserId = data['toUserId'] as String?;
-    final toUsername = data['toUsername'] as String?;
+    print(
+        '🔔 SimpleNotificationService: 🔔 RECEIVED INVITATION ACCEPTED NOTIFICATION');
+    print('🔔 SimpleNotificationService: Raw data: $data');
+
+    final responderId = data['responderId'] as String?;
+    final responderName = data['responderName'] as String?;
     final invitationId = data['invitationId'] as String?;
     final chatGuid = data['chatGuid'] as String?;
 
-    if (toUserId == null || toUsername == null || invitationId == null) {
+    print('🔔 SimpleNotificationService: Parsed data:');
+    print('🔔 SimpleNotificationService: - responderId: $responderId');
+    print('🔔 SimpleNotificationService: - responderName: $responderName');
+    print('🔔 SimpleNotificationService: - invitationId: $invitationId');
+    print('🔔 SimpleNotificationService: - chatGuid: $chatGuid');
+
+    if (responderId == null || responderName == null || invitationId == null) {
       print(
-          '🔔 SimpleNotificationService: Invalid invitation accepted notification data');
+          '🔔 SimpleNotificationService: ❌ Invalid invitation accepted notification data - missing required fields');
       return;
     }
 
     print(
-        '🔔 SimpleNotificationService: Processing invitation accepted from $toUsername ($toUserId)');
+        '🔔 SimpleNotificationService: ✅ Processing invitation accepted from $responderName ($responderId)');
 
     // Show local notification
     await showLocalNotification(
       title: 'Invitation Accepted',
-      body: '$toUsername accepted your invitation',
+      body: '$responderName accepted your invitation',
       type: 'invitation_accepted',
       data: {
         ...data,
@@ -893,7 +961,7 @@ class SimpleNotificationService {
     await _saveNotificationToSharedPrefs(
       id: 'invitation_accepted_${DateTime.now().millisecondsSinceEpoch}',
       title: 'Invitation Accepted',
-      body: '$toUsername accepted your invitation',
+      body: '$responderName accepted your invitation',
       type: 'invitation_accepted',
       data: {
         ...data,
@@ -904,44 +972,63 @@ class SimpleNotificationService {
 
     // If we have a chat GUID, create the chat for the sender
     if (chatGuid != null) {
+      print('🔔 SimpleNotificationService: Creating chat with GUID: $chatGuid');
       await _createChatForSender(data, chatGuid);
+    } else {
+      print(
+          '🔔 SimpleNotificationService: No chat GUID provided, skipping chat creation');
     }
 
     // Handle invitation response in InvitationProvider if available
+    print(
+        '🔔 SimpleNotificationService: Checking if InvitationProvider is available...');
     if (_invitationProvider != null) {
+      print('🔔 SimpleNotificationService: ✅ InvitationProvider is available');
       try {
         await _invitationProvider.handleInvitationResponse(
-            toUserId, toUsername, 'accepted',
+            responderId, responderName, 'accepted',
             conversationGuid: chatGuid);
         print(
             '🔔 SimpleNotificationService: ✅ Invitation accepted handled by InvitationProvider');
       } catch (e) {
         print(
-            '🔔 SimpleNotificationService: Error handling invitation accepted in provider: $e');
+            '🔔 SimpleNotificationService: ❌ Error handling invitation accepted in provider: $e');
       }
+    } else {
+      print(
+          '🔔 SimpleNotificationService: ❌ InvitationProvider is null - notification will not be processed');
     }
   }
 
   /// Handle invitation declined notification
   Future<void> _handleInvitationDeclinedNotification(
       Map<String, dynamic> data) async {
-    final toUserId = data['toUserId'] as String?;
-    final toUsername = data['toUsername'] as String?;
+    print(
+        '🔔 SimpleNotificationService: 🔔 RECEIVED INVITATION DECLINED NOTIFICATION');
+    print('🔔 SimpleNotificationService: Raw data: $data');
+
+    final responderId = data['responderId'] as String?;
+    final responderName = data['responderName'] as String?;
     final invitationId = data['invitationId'] as String?;
 
-    if (toUserId == null || toUsername == null || invitationId == null) {
+    print('🔔 SimpleNotificationService: Parsed data:');
+    print('🔔 SimpleNotificationService: - responderId: $responderId');
+    print('🔔 SimpleNotificationService: - responderName: $responderName');
+    print('🔔 SimpleNotificationService: - invitationId: $invitationId');
+
+    if (responderId == null || responderName == null || invitationId == null) {
       print(
-          '🔔 SimpleNotificationService: Invalid invitation declined notification data');
+          '🔔 SimpleNotificationService: ❌ Invalid invitation declined notification data - missing required fields');
       return;
     }
 
     print(
-        '🔔 SimpleNotificationService: Processing invitation declined from $toUsername ($toUserId)');
+        '🔔 SimpleNotificationService: ✅ Processing invitation declined from $responderName ($responderId)');
 
     // Show local notification
     await showLocalNotification(
       title: 'Invitation Declined',
-      body: '$toUsername declined your invitation',
+      body: '$responderName declined your invitation',
       type: 'invitation_declined',
       data: data,
     );
@@ -950,23 +1037,29 @@ class SimpleNotificationService {
     await _saveNotificationToSharedPrefs(
       id: 'invitation_declined_${DateTime.now().millisecondsSinceEpoch}',
       title: 'Invitation Declined',
-      body: '$toUsername declined your invitation',
+      body: '$responderName declined your invitation',
       type: 'invitation_declined',
       data: data,
       timestamp: DateTime.now(),
     );
 
     // Handle invitation response in InvitationProvider if available
+    print(
+        '🔔 SimpleNotificationService: Checking if InvitationProvider is available...');
     if (_invitationProvider != null) {
+      print('🔔 SimpleNotificationService: ✅ InvitationProvider is available');
       try {
         await _invitationProvider.handleInvitationResponse(
-            toUserId, toUsername, 'declined');
+            responderId, responderName, 'declined');
         print(
             '🔔 SimpleNotificationService: ✅ Invitation declined handled by InvitationProvider');
       } catch (e) {
         print(
-            '🔔 SimpleNotificationService: Error handling invitation declined in provider: $e');
+            '🔔 SimpleNotificationService: ❌ Error handling invitation declined in provider: $e');
       }
+    } else {
+      print(
+          '🔔 SimpleNotificationService: ❌ InvitationProvider is null - notification will not be processed');
     }
   }
 
@@ -1022,6 +1115,39 @@ class SimpleNotificationService {
 
     // Trigger callback (no local notification for typing indicators)
     _onTypingIndicator?.call(senderId, isTyping);
+  }
+
+  /// Handle broadcast notification
+  Future<void> _handleBroadcastNotification(Map<String, dynamic> data) async {
+    final message = data['message'] as String?;
+    final timestamp = data['timestamp'] as int?;
+
+    if (message == null) {
+      print(
+          '🔔 SimpleNotificationService: Invalid broadcast notification data');
+      return;
+    }
+
+    // Show local notification
+    await showLocalNotification(
+      title: 'System Message',
+      body: message,
+      type: 'broadcast',
+      data: data,
+    );
+
+    // Save notification to SharedPreferences
+    await _saveNotificationToSharedPrefs(
+      id: 'broadcast_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'System Message',
+      body: message,
+      type: 'broadcast',
+      data: data,
+      timestamp: DateTime.now(),
+    );
+
+    // Trigger indicator for new notification
+    IndicatorService().setNewNotification();
   }
 
   /// Set device token for push notifications

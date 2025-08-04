@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/message.dart';
 import '../../../core/services/se_shared_preference_service.dart';
@@ -420,7 +421,23 @@ class InvitationProvider extends ChangeNotifier {
       print('📱 InvitationProvider: Saved invitations to storage');
 
       // Send push notification to the other user
-      await _sendInvitationNotification(invitation);
+      final notificationSuccess = await _sendInvitationNotification(invitation);
+
+      if (!notificationSuccess) {
+        _error =
+            'Failed to send invitation notification. Please check your internet connection and try again.';
+        notifyListeners();
+        return false;
+      }
+
+      // Also send encrypted version for enhanced security
+      try {
+        await _sendEncryptedInvitationNotification(invitation);
+      } catch (e) {
+        print(
+            '📱 InvitationProvider: ⚠️ Failed to send encrypted invitation: $e');
+        // Don't fail the whole operation if encrypted notification fails
+      }
 
       // Create local notification for invitation sent
       await _createLocalNotification(
@@ -509,13 +526,43 @@ class InvitationProvider extends ChangeNotifier {
         print('📱 InvitationProvider: ✅ Invitation status updated to accepted');
       }
 
-      // Send acceptance notification with chat GUID (don't let this fail the whole operation)
-      try {
-        await _sendAcceptanceNotification(updatedInvitation, chatGuid);
-      } catch (e) {
+      // Send acceptance notification with chat GUID - CRITICAL: Must succeed for invitation to be accepted
+      final notificationSuccess =
+          await _sendAcceptanceNotification(updatedInvitation, chatGuid);
+
+      if (!notificationSuccess) {
         print(
-            '📱 InvitationProvider: ⚠️ Failed to send acceptance notification: $e');
-        // Don't fail the whole operation if notification fails
+            '📱 InvitationProvider: ❌ Failed to send acceptance notification - reverting invitation acceptance');
+
+        // Revert the invitation status back to pending
+        final revertedInvitation = Invitation(
+          id: invitation.id,
+          fromUserId: invitation.fromUserId,
+          fromUsername: invitation.fromUsername,
+          toUserId: invitation.toUserId,
+          toUsername: invitation.toUsername,
+          status: InvitationStatus.pending,
+          createdAt: invitation.createdAt,
+          respondedAt: null,
+        );
+
+        final index = _invitations.indexWhere((inv) => inv.id == invitationId);
+        if (index != -1) {
+          _invitations[index] = revertedInvitation;
+          await _saveInvitations();
+          print(
+              '📱 InvitationProvider: ✅ Invitation status reverted to pending');
+        }
+
+        // Delete the created chat since invitation failed
+        await _deleteChat(chatGuid);
+        print(
+            '📱 InvitationProvider: ✅ Chat deleted due to notification failure');
+
+        _error =
+            'Unable to reach the invitation sender. They may be offline or have notifications disabled. Please try again later.';
+        notifyListeners();
+        return false;
       }
 
       // Create local notification for invitation accepted
@@ -584,13 +631,38 @@ class InvitationProvider extends ChangeNotifier {
         print('📱 InvitationProvider: ✅ Invitation status updated to declined');
       }
 
-      // Send decline notification (don't let this fail the whole operation)
-      try {
-        await _sendDeclineNotification(updatedInvitation);
-      } catch (e) {
+      // Send decline notification - CRITICAL: Must succeed for invitation to be declined
+      final notificationSuccess =
+          await _sendDeclineNotification(updatedInvitation);
+
+      if (!notificationSuccess) {
         print(
-            '📱 InvitationProvider: ⚠️ Failed to send decline notification: $e');
-        // Don't fail the whole operation if notification fails
+            '📱 InvitationProvider: ❌ Failed to send decline notification - reverting invitation decline');
+
+        // Revert the invitation status back to pending
+        final revertedInvitation = Invitation(
+          id: invitation.id,
+          fromUserId: invitation.fromUserId,
+          fromUsername: invitation.fromUsername,
+          toUserId: invitation.toUserId,
+          toUsername: invitation.toUsername,
+          status: InvitationStatus.pending,
+          createdAt: invitation.createdAt,
+          respondedAt: null,
+        );
+
+        final index = _invitations.indexWhere((inv) => inv.id == invitationId);
+        if (index != -1) {
+          _invitations[index] = revertedInvitation;
+          await _saveInvitations();
+          print(
+              '📱 InvitationProvider: ✅ Invitation status reverted to pending');
+        }
+
+        _error =
+            'Unable to reach the invitation sender. They may be offline or have notifications disabled. Please try again later.';
+        notifyListeners();
+        return false;
       }
 
       // Create local notification for invitation declined
@@ -661,7 +733,7 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _sendInvitationNotification(Invitation invitation) async {
+  Future<bool> _sendInvitationNotification(Invitation invitation) async {
     try {
       print(
           '📱 InvitationProvider: Sending invitation notification to: ${invitation.toUserId}');
@@ -687,89 +759,216 @@ class InvitationProvider extends ChangeNotifier {
       if (success) {
         print(
             '📱 InvitationProvider: ✅ Invitation notification sent successfully');
+        return true;
       } else {
         print(
             '📱 InvitationProvider: ❌ Failed to send invitation notification');
+        return false;
       }
     } catch (e) {
       print(
           '📱 InvitationProvider: ❌ Error sending invitation notification: $e');
+      return false;
     }
   }
 
-  Future<void> _sendAcceptanceNotification(
+  Future<void> _sendEncryptedInvitationNotification(
+      Invitation invitation) async {
+    try {
+      print(
+          '📱 InvitationProvider: Sending encrypted invitation notification to: ${invitation.toUserId}');
+
+      // For now, skip encrypted notifications
+      // TODO: Implement encryption when needed
+      print(
+          '📱 InvitationProvider: Encrypted notifications not yet implemented');
+      return;
+    } catch (e) {
+      print(
+          '📱 InvitationProvider: ❌ Error sending encrypted invitation notification: $e');
+    }
+  }
+
+  Future<bool> _sendAcceptanceNotification(
       Invitation invitation, String chatGuid) async {
     try {
       // Check if the target session ID is valid
       if (invitation.fromUserId.isEmpty || invitation.fromUserId == 'null') {
         print(
             '⚠️ InvitationProvider: Cannot send acceptance notification - invalid fromUserId: ${invitation.fromUserId}');
-        return;
+        return false;
       }
 
       print(
           '📱 InvitationProvider: Sending acceptance notification to: ${invitation.fromUserId} with chat GUID: $chatGuid');
 
-      final success =
-          await AirNotifierService.instance.sendNotificationToSession(
-        sessionId: invitation.fromUserId,
-        title: 'Invitation Accepted',
-        body: '${invitation.toUsername} accepted your invitation',
-        data: {
-          'type': 'invitation_accepted',
-          'invitationId': invitation.id,
-          'toUserId': invitation.toUserId,
-          'toUsername': invitation.toUsername,
-          'chatGuid': chatGuid, // Include chat GUID for sender
-        },
-      );
+      // TEMPORARY: Debug session status
+      print(
+          '📱 InvitationProvider: 🔍 Checking session status for: ${invitation.fromUserId}');
+
+      // TEMPORARY: Send directly to AirNotifier like regular invitations with retry
+      bool success = false;
+      int retryCount = 0;
+      const maxRetries = 3;
+
+      while (!success && retryCount < maxRetries) {
+        retryCount++;
+        print('📱 InvitationProvider: 🔄 Attempt $retryCount of $maxRetries');
+
+        final response = await AirNotifierService.instance
+            .sendNotificationToSessionWithResponse(
+          sessionId: invitation.fromUserId,
+          title: 'Invitation Accepted',
+          body: '${invitation.toUsername} accepted your invitation',
+          data: {
+            'type': 'invitation', // Use same type as working invitations
+            'subtype': 'accepted', // Add subtype for differentiation
+            'invitationId': invitation.id,
+            'senderId': invitation.toUserId,
+            'senderName': invitation.toUsername,
+            'fromUserId': invitation.toUserId,
+            'fromUsername': invitation.toUsername,
+            'toUserId': invitation.fromUserId,
+            'toUsername': invitation.fromUsername,
+            'chatGuid': chatGuid,
+          },
+        );
+
+        // Check if notification was actually delivered
+        if (response != null && response['notifications_sent'] == 0) {
+          print(
+              '📱 InvitationProvider: ❌ Notification sent but not delivered: $response');
+          success = false;
+        } else if (response != null && response['notifications_sent'] > 0) {
+          print('📱 InvitationProvider: ✅ Notification delivered successfully');
+          success = true;
+        } else {
+          success = false;
+        }
+
+        if (!success && retryCount < maxRetries) {
+          print('📱 InvitationProvider: ⏳ Waiting 2 seconds before retry...');
+          await Future.delayed(const Duration(seconds: 2));
+        }
+      }
 
       if (success) {
         print(
             '📱 InvitationProvider: ✅ Acceptance notification sent successfully with chat GUID: $chatGuid');
+        return true;
       } else {
         print(
             '📱 InvitationProvider: ❌ Failed to send acceptance notification');
+        // Set error message for user feedback
+        _error =
+            'Unable to reach the invitation sender. They may be offline or have notifications disabled.';
+        notifyListeners();
+        return false;
       }
     } catch (e) {
       print(
           '📱 InvitationProvider: ❌ Error sending acceptance notification: $e');
+      return false;
     }
   }
 
-  Future<void> _sendDeclineNotification(Invitation invitation) async {
+  // Delete a chat conversation from SharedPreferences
+  Future<void> _deleteChat(String chatId) async {
+    try {
+      print('📱 InvitationProvider: Deleting chat: $chatId');
+
+      // Get current chats
+      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      final chats = chatsJson.map((json) => Chat.fromJson(json)).toList();
+
+      // Remove the chat with the specified ID
+      final updatedChats = chats.where((chat) => chat.id != chatId).toList();
+
+      // Save updated chats back to SharedPreferences
+      final updatedChatsJson =
+          updatedChats.map((chat) => chat.toJson()).toList();
+      await _prefsService.setJsonList('chats', updatedChatsJson);
+
+      print('📱 InvitationProvider: ✅ Chat deleted successfully: $chatId');
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error deleting chat: $e');
+    }
+  }
+
+  Future<bool> _sendDeclineNotification(Invitation invitation) async {
     try {
       // Check if the target session ID is valid
       if (invitation.fromUserId.isEmpty || invitation.fromUserId == 'null') {
         print(
             '⚠️ InvitationProvider: Cannot send decline notification - invalid fromUserId: ${invitation.fromUserId}');
-        return;
+        return false;
       }
 
       print(
           '📱 InvitationProvider: Sending decline notification to: ${invitation.fromUserId}');
 
-      final success =
-          await AirNotifierService.instance.sendNotificationToSession(
-        sessionId: invitation.fromUserId,
-        title: 'Invitation Declined',
-        body: '${invitation.toUsername} declined your invitation',
-        data: {
-          'type': 'invitation_declined',
-          'invitationId': invitation.id,
-          'toUserId': invitation.toUserId,
-          'toUsername': invitation.toUsername,
-        },
-      );
+      // TEMPORARY: Send directly to AirNotifier like regular invitations with retry
+      bool success = false;
+      int retryCount = 0;
+      const maxRetries = 3;
+
+      while (!success && retryCount < maxRetries) {
+        retryCount++;
+        print(
+            '📱 InvitationProvider: 🔄 Attempt $retryCount of $maxRetries (decline)');
+
+        final response = await AirNotifierService.instance
+            .sendNotificationToSessionWithResponse(
+          sessionId: invitation.fromUserId,
+          title: 'Invitation Declined',
+          body: '${invitation.toUsername} declined your invitation',
+          data: {
+            'type': 'invitation', // Use same type as working invitations
+            'subtype': 'declined', // Add subtype for differentiation
+            'invitationId': invitation.id,
+            'senderId': invitation.toUserId,
+            'senderName': invitation.toUsername,
+            'fromUserId': invitation.toUserId,
+            'fromUsername': invitation.toUsername,
+            'toUserId': invitation.fromUserId,
+            'toUsername': invitation.fromUsername,
+          },
+        );
+
+        // Check if notification was actually delivered
+        if (response != null && response['notifications_sent'] == 0) {
+          print(
+              '📱 InvitationProvider: ❌ Decline notification sent but not delivered: $response');
+          success = false;
+        } else if (response != null && response['notifications_sent'] > 0) {
+          print(
+              '📱 InvitationProvider: ✅ Decline notification delivered successfully');
+          success = true;
+        } else {
+          success = false;
+        }
+
+        if (!success && retryCount < maxRetries) {
+          print('📱 InvitationProvider: ⏳ Waiting 2 seconds before retry...');
+          await Future.delayed(const Duration(seconds: 2));
+        }
+      }
 
       if (success) {
         print(
             '📱 InvitationProvider: ✅ Decline notification sent successfully');
+        return true;
       } else {
         print('📱 InvitationProvider: ❌ Failed to send decline notification');
+        // Set error message for user feedback
+        _error =
+            'Unable to reach the invitation sender. They may be offline or have notifications disabled.';
+        notifyListeners();
+        return false;
       }
     } catch (e) {
       print('📱 InvitationProvider: ❌ Error sending decline notification: $e');
+      return false;
     }
   }
 

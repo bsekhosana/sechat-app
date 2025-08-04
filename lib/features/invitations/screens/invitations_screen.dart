@@ -41,6 +41,46 @@ class _InvitationsScreenState extends State<InvitationsScreen>
         top: false,
         child: Column(
           children: [
+            // Show error message if any
+            Consumer<InvitationProvider>(
+              builder: (context, invitationProvider, child) {
+                if (invitationProvider.error != null) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    margin: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+                    decoration: BoxDecoration(
+                      color: Colors.red[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red[200]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline,
+                            color: Colors.red[600], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            invitationProvider.error!,
+                            style: TextStyle(
+                              color: Colors.red[700],
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => invitationProvider.clearError(),
+                          child: Icon(Icons.close,
+                              color: Colors.red[600], size: 20),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
             // Header
             Container(
               padding: const EdgeInsets.all(24),
@@ -307,7 +347,7 @@ class _InvitationsScreenState extends State<InvitationsScreen>
 
   Widget _buildInvitationCard(dynamic invitation, bool isReceived) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -438,9 +478,10 @@ class _InvitationsScreenState extends State<InvitationsScreen>
           ],
         );
       } else if (status == 'accepted') {
-        return Row(
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Accepted status above
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
@@ -453,7 +494,8 @@ class _InvitationsScreenState extends State<InvitationsScreen>
                 size: 20,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(height: 4),
+            // Chat button below
             GestureDetector(
               onTap: () => _openChat(invitation),
               child: Container(

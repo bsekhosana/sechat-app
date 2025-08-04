@@ -229,7 +229,9 @@ Download now and let's chat securely!
       padding: const EdgeInsets.symmetric(horizontal: 20),
       itemCount: _chats.length,
       itemBuilder: (context, index) {
-        final chat = _chats[index];
+        // Reverse the index to show newest chats at the bottom
+        final reversedIndex = _chats.length - 1 - index;
+        final chat = _chats[reversedIndex];
         return _buildChatCard(chat);
       },
     );

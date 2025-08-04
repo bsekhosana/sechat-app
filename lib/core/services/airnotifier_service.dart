@@ -353,6 +353,8 @@ class AirNotifierService {
     Map<String, dynamic>? data,
     String? sound = 'default',
     int badge = 1,
+    bool encrypted = false,
+    String? checksum,
   }) async {
     try {
       print(
@@ -375,6 +377,8 @@ class AirNotifierService {
           'sound': sound,
           'badge': badge,
           'data': data ?? {}, // Use data field for FCM compatibility
+          'encrypted': encrypted,
+          'checksum': checksum,
         }),
       );
 
@@ -398,6 +402,75 @@ class AirNotifierService {
       print(
           '📱 AirNotifierService: ❌ Error sending notification to session: $e');
       return false;
+    }
+  }
+
+  // Send notification to specific session and return response details
+  Future<Map<String, dynamic>?> sendNotificationToSessionWithResponse({
+    required String sessionId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+    String? sound = 'default',
+    int badge = 1,
+    bool encrypted = false,
+    String? checksum,
+  }) async {
+    try {
+      print(
+          '📱 AirNotifierService: Sending notification to session: $sessionId');
+      print('📱 AirNotifierService: Title: $title, Body: $body');
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/v2/notifications/session'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-An-App-Name': _appName,
+          'X-An-App-Key': _appKey,
+        },
+        body: json.encode({
+          'session_id': sessionId,
+          'alert': {
+            'title': title,
+            'body': body,
+          },
+          'sound': sound,
+          'badge': badge,
+          'data': data ?? {}, // Use data field for FCM compatibility
+          'encrypted': encrypted,
+          'checksum': checksum,
+        }),
+      );
+
+      print(
+          '📱 AirNotifierService: Notification response status: ${response.statusCode}');
+      print(
+          '📱 AirNotifierService: Notification response body: ${response.body}');
+
+      if (response.statusCode == 202) {
+        print(
+            '📱 AirNotifierService: ✅ Notification sent successfully to session: $sessionId');
+
+        // Parse response body to get delivery details
+        try {
+          final responseData =
+              json.decode(response.body) as Map<String, dynamic>;
+          return responseData;
+        } catch (e) {
+          print('📱 AirNotifierService: ❌ Failed to parse response: $e');
+          return null;
+        }
+      } else {
+        print(
+            '📱 AirNotifierService: ❌ Failed to send notification to session: $sessionId');
+        print(
+            '📱 AirNotifierService: Status: ${response.statusCode}, Body: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print(
+          '📱 AirNotifierService: ❌ Error sending notification to session: $e');
+      return null;
     }
   }
 
@@ -551,6 +624,35 @@ class AirNotifierService {
     );
   }
 
+  // Send encrypted invitation notification
+  Future<bool> sendEncryptedInvitationNotification({
+    required String recipientId,
+    required String senderName,
+    required String invitationId,
+    required String encryptedData,
+    required String checksum,
+    String? message,
+  }) async {
+    print('📱 AirNotifierService: Sending encrypted invitation notification');
+    print('📱 AirNotifierService: Recipient ID: $recipientId');
+    print('📱 AirNotifierService: Sender Name: $senderName');
+    print('📱 AirNotifierService: Invitation ID: $invitationId');
+
+    return await sendNotificationToSession(
+      sessionId: recipientId,
+      title: 'New Contact Invitation',
+      body: '$senderName would like to connect with you',
+      data: {
+        'encrypted': true,
+        'data': encryptedData,
+        'checksum': checksum,
+      },
+      sound: 'invitation.wav',
+      encrypted: true,
+      checksum: checksum,
+    );
+  }
+
   // Send invitation response notification (updated for session-based API)
   Future<bool> sendInvitationResponseNotification({
     required String recipientId,
@@ -583,6 +685,37 @@ class AirNotifierService {
     );
   }
 
+  // Send encrypted invitation response notification
+  Future<bool> sendEncryptedInvitationResponseNotification({
+    required String recipientId,
+    required String responderName,
+    required String status, // 'accepted' or 'declined'
+    required String invitationId,
+    required String encryptedData,
+    required String checksum,
+    String? chatId, // Include chat ID if accepted
+  }) async {
+    final title =
+        status == 'accepted' ? 'Invitation Accepted' : 'Invitation Declined';
+    final body = status == 'accepted'
+        ? '$responderName accepted your invitation'
+        : '$responderName declined your invitation';
+
+    return await sendNotificationToSession(
+      sessionId: recipientId,
+      title: title,
+      body: body,
+      data: {
+        'encrypted': true,
+        'data': encryptedData,
+        'checksum': checksum,
+      },
+      sound: status == 'accepted' ? 'accepted.wav' : 'declined.wav',
+      encrypted: true,
+      checksum: checksum,
+    );
+  }
+
   // Send message notification (updated for session-based API)
   Future<bool> sendMessageNotification({
     required String recipientId,
@@ -604,6 +737,29 @@ class AirNotifierService {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       },
       sound: 'message.wav',
+    );
+  }
+
+  // Send encrypted message notification
+  Future<bool> sendEncryptedMessageNotification({
+    required String recipientId,
+    required String senderName,
+    required String encryptedData,
+    required String checksum,
+    required String conversationId,
+  }) async {
+    return await sendNotificationToSession(
+      sessionId: recipientId,
+      title: senderName,
+      body: 'You have received an encrypted message',
+      data: {
+        'encrypted': true,
+        'data': encryptedData,
+        'checksum': checksum,
+      },
+      sound: 'message.wav',
+      encrypted: true,
+      checksum: checksum,
     );
   }
 

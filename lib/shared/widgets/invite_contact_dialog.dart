@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import '../../core/utils/guid_generator.dart';
 import '../../core/services/se_session_service.dart';
+import '../../core/services/qr_code_service.dart';
 import '../../features/invitations/providers/invitation_provider.dart';
 import '../widgets/custom_textfield.dart';
 import '../widgets/custom_elevated_button.dart';
@@ -162,28 +163,31 @@ class _InviteContactDialogState extends State<InviteContactDialog> {
         _isLoading = true;
       });
 
-      // For now, we'll simulate QR code processing
-      // In a real implementation, you'd use a QR code scanner library
-      final fileName = image.name;
-      final filePath = image.path;
+      print('📱 InviteContactDialog: Processing QR image: ${image.path}');
 
-      // Simulate QR code data extraction
-      String qrData = '';
+      // Use real QR code processing service
+      final String? qrData =
+          await QRCodeService.instance.extractQRCodeFromImage(image.path);
 
-      // Try to extract session ID from file name or path
-      if (fileName.contains('session_')) {
-        qrData = fileName;
-      } else if (filePath.contains('session_')) {
-        qrData = filePath.split('/').last;
+      if (qrData != null) {
+        print('📱 InviteContactDialog: QR code extracted: $qrData');
+
+        // Process the QR data
+        await _processQRData(qrData);
       } else {
-        // Simulate QR code data - in real app, this would be extracted from QR image
-        qrData =
-            'session_${DateTime.now().millisecondsSinceEpoch}-demo-qr-code';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  'No QR code found in the image. Please try a different image.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
-
-      // Process the QR data
-      await _processQRData(qrData);
     } catch (e) {
+      print('📱 InviteContactDialog: Error processing QR image: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -203,54 +207,52 @@ class _InviteContactDialogState extends State<InviteContactDialog> {
 
   Future<void> _processQRData(String qrData) async {
     try {
-      // Try to parse as JSON first
-      Map<String, dynamic> data;
-      if (qrData.startsWith('{')) {
-        data = Map<String, dynamic>.from(json.decode(qrData));
-      } else {
-        data = {'sessionId': qrData};
-      }
+      print('📱 InviteContactDialog: Processing QR data: $qrData');
 
-      final sessionId = data['sessionId'] as String?;
-      final extractedDisplayName = data['displayName'] as String? ?? '';
+      // Use QR code service to extract session ID
+      final String? sessionId =
+          await QRCodeService.instance.processQRCodeData(qrData);
 
       if (sessionId != null) {
-        // Validate session ID format
-        if (!GuidGenerator.isValidSessionGuid(sessionId)) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Invalid QR code format'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
+        print('📱 InviteContactDialog: Valid session ID found: $sessionId');
 
         // Update the form
         setState(() {
           _sessionIdController.text = sessionId;
-          if (extractedDisplayName.isNotEmpty) {
-            _displayNameController.text = extractedDisplayName;
-          }
           _selectedMethod = 'session_id';
         });
 
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Session ID extracted: $sessionId'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        print('📱 InviteContactDialog: Invalid QR code data');
+
+        // Show error message
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('QR code processed successfully'),
-              backgroundColor: Colors.green,
+              content:
+                  Text('Invalid QR code. Please scan a valid SeChat QR code.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
             ),
           );
         }
       }
     } catch (e) {
+      print('📱 InviteContactDialog: Error processing QR data: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error processing QR data: ${e.toString()}'),
+            content: Text('Error processing QR code: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
