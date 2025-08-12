@@ -1,0 +1,17 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
+#include "Generated.xcconfig"
+
+// Production APNS environment configuration
+CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements
+CODE_SIGN_STYLE = Automatic
+
+// Force production APNS
+PRODUCT_BUNDLE_IDENTIFIER = com.strapblaque.sechat
+PRODUCT_NAME = SeChat
+PRODUCT_TEAM_IDENTIFIER = 8A6FXCA4R9
+
+// Build settings for production
+ENABLE_BITCODE = NO
+ENABLE_STRICT_OBJC_MSGSEND = YES
+GCC_OPTIMIZATION_LEVEL = s
+SWIFT_OPTIMIZATION_LEVEL = -O

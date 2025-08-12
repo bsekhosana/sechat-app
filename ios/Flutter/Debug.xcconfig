@@ -1,2 +1,8 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include "Generated.xcconfig"
+
+// Development APNS environment with proper code signing
+CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements
+CODE_SIGN_IDENTITY = Apple Development
+PROVISIONING_PROFILE_SPECIFIER = 
+CODE_SIGN_STYLE = Automatic

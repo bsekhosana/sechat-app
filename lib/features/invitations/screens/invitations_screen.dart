@@ -4,6 +4,7 @@ import '../providers/invitation_provider.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../chat/screens/chat_screen.dart';
+import '../../../core/services/simple_notification_service.dart';
 
 class InvitationsScreen extends StatefulWidget {
   const InvitationsScreen({super.key});
@@ -15,6 +16,8 @@ class InvitationsScreen extends StatefulWidget {
 class _InvitationsScreenState extends State<InvitationsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _notificationListenersSetup = false;
+  DateTime? _lastRefreshTime;
 
   @override
   void initState() {
@@ -23,8 +26,55 @@ class _InvitationsScreenState extends State<InvitationsScreen>
 
     // Force refresh invitations when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
       context.read<InvitationProvider>().refreshInvitations();
+      _setupNotificationListeners();
     });
+  }
+
+  void _setupNotificationListeners() {
+    // Prevent setting up listeners multiple times
+    if (_notificationListenersSetup) {
+      print(
+          '📱 InvitationsScreen: Notification listeners already setup, skipping...');
+      return;
+    }
+
+    print('📱 InvitationsScreen: Setting up notification listeners...');
+
+    // Listen for invitation response notifications
+    SimpleNotificationService.instance.setOnInvitationResponse(
+        (responderId, responderName, response, {conversationGuid}) {
+      print('📱 InvitationsScreen: Received invitation response notification');
+      print('📱 InvitationsScreen: $responderName ($responderId) $response');
+
+      // Check if widget is still mounted before updating UI
+      if (!mounted) return;
+
+      // Debounce rapid refresh calls to prevent infinite loops
+      final now = DateTime.now();
+      if (_lastRefreshTime != null &&
+          now.difference(_lastRefreshTime!).inMilliseconds < 1000) {
+        print(
+            '📱 InvitationsScreen: ⚠️ Skipping rapid refresh call (debounced)');
+        return;
+      }
+      _lastRefreshTime = now;
+
+      setState(() {
+        // This will trigger a rebuild and refresh the invitations
+      });
+
+      // Force refresh invitations
+      if (mounted) {
+        print('📱 InvitationsScreen: 🔄 Refreshing invitations...');
+        context.read<InvitationProvider>().refreshInvitations();
+      }
+    });
+
+    _notificationListenersSetup = true;
+    print('📱 InvitationsScreen: ✅ Notification listeners setup complete');
   }
 
   @override
@@ -99,110 +149,60 @@ class _InvitationsScreenState extends State<InvitationsScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
-                      Icons.people,
+                      Icons.people_outline,
                       color: Color(0xFFFF6B35),
-                      size: 20,
+                      size: 24,
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
                       'Invitations',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black,
+                        color: Color(0xFF1A1A1A),
                       ),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.share,
-                      color: Colors.grey,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.add,
-                      color: Colors.grey,
-                      size: 20,
-                    ),
-                  ),
                 ],
               ),
             ),
-
             // Tab Bar
             Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey[300]!),
+                ),
+              ),
               child: TabBar(
                 controller: _tabController,
-                indicatorColor: const Color(0xFFFF6B35),
                 labelColor: const Color(0xFFFF6B35),
                 unselectedLabelColor: Colors.grey[600],
-                indicatorWeight: 3,
-                labelStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-                unselectedLabelStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-                indicator: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: const Color(0xFFFF6B35),
-                      width: 3,
-                    ),
-                  ),
-                ),
-                tabs: [
-                  Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.inbox, size: 20),
-                        const SizedBox(width: 8),
-                        const Text('Received'),
-                      ],
-                    ),
-                  ),
-                  Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.send, size: 20),
-                        const SizedBox(width: 8),
-                        const Text('Sent'),
-                      ],
-                    ),
-                  ),
+                indicatorColor: const Color(0xFFFF6B35),
+                tabs: const [
+                  Tab(text: 'Received'),
+                  Tab(text: 'Sent'),
                 ],
               ),
             ),
-
-            // Tab Bar View
+            // Tab Content
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildReceivedInvitations(),
-                  _buildSentInvitations(),
-                ],
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  print('📱 InvitationsScreen: Pull to refresh triggered');
+                  if (!mounted) return;
+
+                  await context.read<InvitationProvider>().forceRefresh();
+                },
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildReceivedTab(),
+                    _buildSentTab(),
+                  ],
+                ),
               ),
             ),
           ],
@@ -211,7 +211,7 @@ class _InvitationsScreenState extends State<InvitationsScreen>
     );
   }
 
-  Widget _buildReceivedInvitations() {
+  Widget _buildReceivedTab() {
     return Consumer<InvitationProvider>(
       builder: (context, invitationProvider, child) {
         if (invitationProvider.isLoading) {
@@ -245,7 +245,7 @@ class _InvitationsScreenState extends State<InvitationsScreen>
     );
   }
 
-  Widget _buildSentInvitations() {
+  Widget _buildSentTab() {
     return Consumer<InvitationProvider>(
       builder: (context, invitationProvider, child) {
         print(
@@ -622,6 +622,8 @@ class _InvitationsScreenState extends State<InvitationsScreen>
       );
 
       // Call the InvitationProvider to accept the invitation
+      if (!mounted) return;
+
       final invitationProvider = context.read<InvitationProvider>();
       final success = await invitationProvider.acceptInvitation(invitation.id);
 
@@ -676,6 +678,8 @@ class _InvitationsScreenState extends State<InvitationsScreen>
       );
 
       // Call the InvitationProvider to decline the invitation
+      if (!mounted) return;
+
       final invitationProvider = context.read<InvitationProvider>();
       final success = await invitationProvider.declineInvitation(invitation.id);
 
@@ -863,6 +867,8 @@ class _InvitationsScreenState extends State<InvitationsScreen>
         );
 
         // Call the InvitationProvider to delete the invitation
+        if (!mounted) return;
+
         final invitationProvider = context.read<InvitationProvider>();
         final success =
             await invitationProvider.deleteInvitation(invitation.id);
@@ -954,6 +960,8 @@ class _InvitationsScreenState extends State<InvitationsScreen>
         );
 
         // Call the InvitationProvider to resend the invitation
+        if (!mounted) return;
+
         final invitationProvider = context.read<InvitationProvider>();
         final success =
             await invitationProvider.resendInvitation(invitation.id);

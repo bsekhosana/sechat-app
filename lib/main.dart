@@ -111,9 +111,11 @@ void _setupSimpleNotifications() {
 }
 
 // Set up provider instances for notification service
-void _setupNotificationProviders() {
-  // Note: Provider instances will be set after the app is built
-  // This will be handled in the widget tree where providers are available
+void _setupNotificationProviders(BuildContext context) {
+  // Connect InvitationProvider to SimpleNotificationService
+  final invitationProvider = context.read<InvitationProvider>();
+  SimpleNotificationService.instance.setInvitationProvider(invitationProvider);
+  print('🔔 Main: ✅ InvitationProvider connected to SimpleNotificationService');
 }
 
 // Set up method channels and event channels for native communication

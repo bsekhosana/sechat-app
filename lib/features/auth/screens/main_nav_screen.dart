@@ -16,6 +16,7 @@ import '../../invitations/screens/invitations_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../../chat/screens/chat_list_screen.dart';
+import '../../invitations/providers/invitation_provider.dart';
 
 class MainNavScreen extends StatefulWidget {
   final Map<String, dynamic>? notificationPayload;
@@ -39,6 +40,7 @@ class _MainNavScreenState extends State<MainNavScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAllData();
       _checkIndicators();
+      _setupNotificationProviders();
     });
   }
 
@@ -85,6 +87,14 @@ Download now and let's chat securely!
 
   void _setupNotificationHandler() {
     // Set up notification handling for deep linking
+  }
+
+  void _setupNotificationProviders() {
+    // Connect InvitationProvider to SimpleNotificationService
+    final invitationProvider = context.read<InvitationProvider>();
+    invitationProvider.ensureConnection();
+    print(
+        '🔔 MainNavScreen: ✅ InvitationProvider connected to SimpleNotificationService');
   }
 
   static final List<Widget> _screens = <Widget>[

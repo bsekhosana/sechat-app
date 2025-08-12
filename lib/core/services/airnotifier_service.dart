@@ -4,16 +4,17 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
+import '../config/airnotifier_config.dart';
 
 class AirNotifierService {
   static AirNotifierService? _instance;
   static AirNotifierService get instance =>
       _instance ??= AirNotifierService._();
 
-  // AirNotifier configuration
-  static const String _baseUrl = 'https://push.strapblaque.com';
-  static const String _appName = 'sechat';
-  static const String _appKey = 'ebea679133a7adfb9c4cd1f8b6a4fdc9';
+  // AirNotifier configuration from config file
+  static String get _baseUrl => AirNotifierConfig.baseUrl;
+  static String get _appName => AirNotifierConfig.appName;
+  static String get _appKey => AirNotifierConfig.appKey;
 
   // Secure storage for session management
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
@@ -24,10 +25,18 @@ class AirNotifierService {
   String? _currentUserId;
   String? _currentDeviceToken;
 
+  // Deduplication: Track recently sent invitations to prevent duplicates
+  final Map<String, DateTime> _recentInvitations = {};
+  static const Duration _invitationDeduplicationWindow = Duration(minutes: 5);
+
   // Test AirNotifier connectivity
   Future<bool> testAirNotifierConnection() async {
     try {
       print('📱 AirNotifierService: Testing connection to AirNotifier...');
+      print('📱 AirNotifierService: Using base URL: $_baseUrl');
+
+      // Print configuration for debugging
+      AirNotifierConfig.printConfig();
 
       // Try to get tokens for current session to test connectivity
       if (_currentSessionId != null) {
@@ -67,6 +76,18 @@ class AirNotifierService {
       }
     } catch (e) {
       print('📱 AirNotifierService: ❌ Connection test failed: $e');
+      print('📱 AirNotifierService: Error details: ${e.toString()}');
+
+      // Provide helpful error information
+      if (e.toString().contains('CERTIFICATE_VERIFY_FAILED')) {
+        print('📱 AirNotifierService: 💡 SSL Certificate issue detected');
+        print('📱 AirNotifierService: 💡 Current URL: $_baseUrl');
+        if (_baseUrl.startsWith('https://')) {
+          print(
+              '📱 AirNotifierService: 💡 Consider using HTTP for development or fix SSL certificate');
+        }
+      }
+
       return false;
     }
   }
@@ -147,6 +168,13 @@ class AirNotifierService {
       print('📱 AirNotifierService: Current session ID: $_currentSessionId');
       print('📱 AirNotifierService: Provided session ID: $sessionId');
 
+      // Check if this token is already registered
+      if (_currentDeviceToken == deviceToken) {
+        print(
+            '📱 AirNotifierService: Device token already registered: $deviceToken');
+        return true;
+      }
+
       _currentDeviceToken = deviceToken;
       await _storage.write(key: 'device_token', value: deviceToken);
 
@@ -211,6 +239,13 @@ class AirNotifierService {
       if (_currentDeviceToken == null) {
         print('📱 AirNotifierService: ❌ No device token available for linking');
         return false;
+      }
+
+      // Check if token is already linked to this session
+      if (_currentSessionId == sessionId) {
+        print(
+            '📱 AirNotifierService: Token already linked to session: $sessionId');
+        return true;
       }
 
       print('📱 AirNotifierService: Linking token to session: $sessionId');
@@ -345,6 +380,213 @@ class AirNotifierService {
     }
   }
 
+  // Helper method to format notification payload for both iOS and Android
+  Map<String, dynamic> _formatNotificationPayload({
+    required String sessionId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+    String? sound,
+    int badge = 1,
+    bool encrypted = false,
+    String? checksum,
+  }) {
+    // Create simple, direct APNS-compliant payload
+    final Map<String, dynamic> payload = {
+      'session_id': sessionId,
+    };
+
+    // iOS APNS: aps dictionary with system-defined keys only
+    final Map<String, dynamic> aps = {
+      'alert': {
+        'title': title,
+        'body': body,
+      },
+      'sound': sound ?? 'default',
+      'badge': badge,
+    };
+
+    // Add content-available for silent notifications if needed
+    if (data != null && data.containsKey('type') && data['type'] == 'silent') {
+      aps['content-available'] = 1;
+      // Remove alert for silent notifications
+      aps.remove('alert');
+    }
+
+    // Add aps to payload
+    payload['aps'] = aps;
+
+    // Add custom metadata OUTSIDE the aps dictionary (Apple's requirement)
+    if (data != null && data.isNotEmpty) {
+      print('📱 AirNotifierService: 🔍 Processing custom data: $data');
+
+      // Add all custom data at the root level (outside aps)
+      data.forEach((key, value) {
+        // Ensure only JSON-compatible types
+        if (value is String ||
+            value is num ||
+            value is bool ||
+            value is List ||
+            value is Map) {
+          payload[key] = value;
+        } else {
+          // Convert non-JSON types to strings
+          payload[key] = value.toString();
+        }
+      });
+    }
+
+    // Add encryption metadata if applicable
+    if (encrypted) {
+      payload['encrypted'] = true;
+      if (checksum != null) {
+        payload['checksum'] = checksum;
+      }
+    }
+
+    print('📱 AirNotifierService: 🔍 Final APNS-compliant payload: $payload');
+    return payload;
+  }
+
+  // Universal notification payload standard for AirNotifier server compatibility
+  Map<String, dynamic> _formatUniversalPayload({
+    required String sessionId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+    String? sound,
+    int badge = 1,
+    bool encrypted = false,
+    String? checksum,
+  }) {
+    // Create universal notification payload standard
+    final Map<String, dynamic> payload = {
+      'session_id': sessionId,
+      'alert': {
+        'title': title,
+        'body': body,
+      },
+      'sound': sound ?? 'default',
+      'badge': badge,
+    };
+
+    // Add custom metadata in data field for consistency
+    if (data != null && data.isNotEmpty) {
+      print('📱 AirNotifierService: 🔍 Processing custom data: $data');
+      
+      // Create data object with all custom fields
+      final Map<String, dynamic> notificationData = {};
+      
+      data.forEach((key, value) {
+        // Ensure only JSON-compatible types
+        if (value is String ||
+            value is num ||
+            value is bool ||
+            value is List ||
+            value is Map) {
+          notificationData[key] = value;
+        } else {
+          // Convert non-JSON types to strings
+          notificationData[key] = value.toString();
+        }
+      });
+      
+      // Add data field to payload
+      payload['data'] = notificationData;
+    }
+
+    // Add encryption metadata if applicable
+    if (encrypted) {
+      if (payload['data'] == null) {
+        payload['data'] = {};
+      }
+      payload['data']['encrypted'] = true;
+      if (checksum != null) {
+        payload['data']['checksum'] = checksum;
+      }
+    }
+
+    print('📱 AirNotifierService: 🔍 Final universal payload: $payload');
+    return payload;
+  }
+
+  // Create iOS-specific APNS payload following Apple's best practices
+  Map<String, dynamic> _createIOSAPNSPayload({
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+    String? sound,
+    int badge = 1,
+    bool silent = false,
+  }) {
+    // iOS APNS payload structure
+    final Map<String, dynamic> payload = {};
+
+    // aps dictionary with system-defined keys only
+    final Map<String, dynamic> aps = {
+      'alert': {
+        'title': title,
+        'body': body,
+      },
+      'sound': sound ?? 'default',
+      'badge': badge,
+    };
+
+    // Add content-available for silent notifications
+    if (silent) {
+      aps['content-available'] = 1;
+      // Remove alert for silent notifications
+      aps.remove('alert');
+    }
+
+    payload['aps'] = aps;
+
+    // Add custom metadata OUTSIDE the aps dictionary (Apple's requirement)
+    if (data != null && data.isNotEmpty) {
+      data.forEach((key, value) {
+        // Ensure only JSON-compatible types
+        if (value is String ||
+            value is num ||
+            value is bool ||
+            value is List ||
+            value is Map) {
+          payload[key] = value;
+        } else {
+          // Convert non-JSON types to strings
+          payload[key] = value.toString();
+        }
+      });
+    }
+
+    return payload;
+  }
+
+  // Create Android FCM payload
+  Map<String, dynamic> _createAndroidFCMPayload({
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+    String? sound,
+    int badge = 1,
+  }) {
+    return {
+      'notification': {
+        'title': title,
+        'body': body,
+        'sound': sound ?? 'default',
+      },
+      'data': data ?? {},
+      'priority': 'high',
+      'android': {
+        'priority': 'high',
+        'notification': {
+          'priority': 'high',
+          'sound': sound ?? 'default',
+        },
+      },
+    };
+  }
+
   // Send notification to specific session
   Future<bool> sendNotificationToSession({
     required String sessionId,
@@ -360,6 +602,46 @@ class AirNotifierService {
       print(
           '📱 AirNotifierService: Sending notification to session: $sessionId');
       print('📱 AirNotifierService: Title: $title, Body: $body');
+      print('📱 AirNotifierService: Data payload: $data');
+      print(
+          '📱 AirNotifierService: Encrypted: $encrypted, Checksum: $checksum');
+
+      // Deduplication: Check if this exact notification was recently sent
+      if (data != null && data.containsKey('invitationId')) {
+        final invitationId = data['invitationId'] as String;
+        final lastSent = _recentInvitations[invitationId];
+        if (lastSent != null &&
+            DateTime.now().difference(lastSent) <
+                _invitationDeduplicationWindow) {
+          print(
+              '📱 AirNotifierService: Skipping duplicate invitation notification for ID: $invitationId');
+          return true; // Indicate success, but don't send
+        }
+
+        // Track this invitation as recently sent
+        _recentInvitations[invitationId] = DateTime.now();
+        print(
+            '📱 AirNotifierService: Tracking invitation notification for deduplication: $invitationId');
+
+        // Clean up old entries periodically (every 10th invitation)
+        if (_recentInvitations.length % 10 == 0) {
+          _cleanupDeduplicationMap();
+        }
+      }
+
+      // Use universal payload for AirNotifier server compatibility
+      final payload = _formatUniversalPayload(
+        sessionId: sessionId,
+        title: title,
+        body: body,
+        data: data,
+        sound: sound,
+        badge: badge,
+        encrypted: encrypted,
+        checksum: checksum,
+      );
+
+      print('📱 AirNotifierService: Universal payload: $payload');
 
       final response = await http.post(
         Uri.parse('$_baseUrl/api/v2/notifications/session'),
@@ -368,18 +650,7 @@ class AirNotifierService {
           'X-An-App-Name': _appName,
           'X-An-App-Key': _appKey,
         },
-        body: json.encode({
-          'session_id': sessionId,
-          'alert': {
-            'title': title,
-            'body': body,
-          },
-          'sound': sound,
-          'badge': badge,
-          'data': data ?? {}, // Use data field for FCM compatibility
-          'encrypted': encrypted,
-          'checksum': checksum,
-        }),
+        body: json.encode(payload),
       );
 
       print(
@@ -388,9 +659,36 @@ class AirNotifierService {
           '📱 AirNotifierService: Notification response body: ${response.body}');
 
       if (response.statusCode == 202) {
-        print(
-            '📱 AirNotifierService: ✅ Notification sent successfully to session: $sessionId');
-        return true;
+        // Parse response body to check actual delivery status
+        try {
+          final responseData = json.decode(response.body);
+          final notificationsSent = responseData['notifications_sent'] ?? 0;
+          final tokensFound = responseData['tokens_found'] ?? 0;
+
+          print('📱 AirNotifierService: Response data: $responseData');
+          print(
+              '📱 AirNotifierService: Tokens found: $tokensFound, Notifications sent: $notificationsSent');
+
+          if (notificationsSent > 0) {
+            print(
+                '📱 AirNotifierService: ✅ Notification delivered successfully to session: $sessionId');
+            return true;
+          } else {
+            print(
+                '📱 AirNotifierService: ⚠️ Notification accepted but not delivered to session: $sessionId');
+            print(
+                '📱 AirNotifierService: ❌ Delivery failed - tokens found: $tokensFound, notifications sent: $notificationsSent');
+            // show snack
+
+            return false;
+          }
+        } catch (parseError) {
+          print(
+              '📱 AirNotifierService: ⚠️ Could not parse response body: $parseError');
+          print('📱 AirNotifierService: ⚠️ Raw response: ${response.body}');
+          // If we can't parse the response, assume it failed
+          return false;
+        }
       } else {
         print(
             '📱 AirNotifierService: ❌ Failed to send notification to session: $sessionId');
@@ -421,6 +719,20 @@ class AirNotifierService {
           '📱 AirNotifierService: Sending notification to session: $sessionId');
       print('📱 AirNotifierService: Title: $title, Body: $body');
 
+      // Use universal payload for AirNotifier server compatibility
+      final payload = _formatUniversalPayload(
+        sessionId: sessionId,
+        title: title,
+        body: body,
+        data: data,
+        sound: sound,
+        badge: badge,
+        encrypted: encrypted,
+        checksum: checksum,
+      );
+
+      print('📱 AirNotifierService: Universal payload: $payload');
+
       final response = await http.post(
         Uri.parse('$_baseUrl/api/v2/notifications/session'),
         headers: {
@@ -428,18 +740,7 @@ class AirNotifierService {
           'X-An-App-Name': _appName,
           'X-An-App-Key': _appKey,
         },
-        body: json.encode({
-          'session_id': sessionId,
-          'alert': {
-            'title': title,
-            'body': body,
-          },
-          'sound': sound,
-          'badge': badge,
-          'data': data ?? {}, // Use data field for FCM compatibility
-          'encrypted': encrypted,
-          'checksum': checksum,
-        }),
+        body: json.encode(payload),
       );
 
       print(
@@ -487,6 +788,23 @@ class AirNotifierService {
       print(
           '📱 AirNotifierService: Sending notification to ${sessionIds.length} sessions');
 
+      // Use universal payload for AirNotifier server compatibility
+      final payload = _formatUniversalPayload(
+        sessionId:
+            sessionIds.first, // Use first session for formatting reference
+        title: title,
+        body: body,
+        data: data,
+        sound: sound,
+        badge: badge,
+      );
+
+      // Override session_id with session_ids for multi-session
+      payload['session_ids'] = sessionIds;
+      payload.remove('session_id');
+
+      print('📱 AirNotifierService: Multi-session universal payload: $payload');
+
       final response = await http.post(
         Uri.parse('$_baseUrl/api/v2/notifications/sessions'),
         headers: {
@@ -494,16 +812,7 @@ class AirNotifierService {
           'X-An-App-Name': _appName,
           'X-An-App-Key': _appKey,
         },
-        body: json.encode({
-          'session_ids': sessionIds,
-          'alert': {
-            'title': title,
-            'body': body,
-          },
-          'sound': sound,
-          'badge': badge,
-          'data': data ?? {}, // Use data field for FCM compatibility
-        }),
+        body: json.encode(payload),
       );
 
       print(
@@ -582,6 +891,15 @@ class AirNotifierService {
     print('📱 AirNotifierService: Sender Name: $senderName');
     print('📱 AirNotifierService: Invitation ID: $invitationId');
     print('📱 AirNotifierService: Current User ID: $_currentUserId');
+
+    // Check if this invitation was recently sent
+    final lastSent = _recentInvitations[invitationId];
+    if (lastSent != null &&
+        DateTime.now().difference(lastSent) < _invitationDeduplicationWindow) {
+      print(
+          '📱 AirNotifierService: Skipping duplicate invitation notification for ID: $invitationId');
+      return true; // Indicate success, but don't send
+    }
 
     // [STEP 4A] Send push notification to recipient via AirNotifier server with complete invitation metadata
     return await sendNotificationToSession(
@@ -956,9 +1274,33 @@ class AirNotifierService {
       _currentUserId = null;
       _currentDeviceToken = null;
 
+      // Clear deduplication map
+      _recentInvitations.clear();
+
       print('📱 AirNotifierService: All data cleared');
     } catch (e) {
       print('📱 AirNotifierService: Error clearing data: $e');
+    }
+  }
+
+  // Clean up old deduplication entries
+  void _cleanupDeduplicationMap() {
+    final now = DateTime.now();
+    final keysToRemove = <String>[];
+
+    _recentInvitations.forEach((key, timestamp) {
+      if (now.difference(timestamp) > _invitationDeduplicationWindow) {
+        keysToRemove.add(key);
+      }
+    });
+
+    for (final key in keysToRemove) {
+      _recentInvitations.remove(key);
+    }
+
+    if (keysToRemove.isNotEmpty) {
+      print(
+          '📱 AirNotifierService: Cleaned up ${keysToRemove.length} old deduplication entries');
     }
   }
 }

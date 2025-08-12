@@ -124,6 +124,14 @@ class InvitationProvider extends ChangeNotifier {
     _loadInvitations();
     // Connect to SimpleNotificationService for real-time updates
     SimpleNotificationService.instance.setInvitationProvider(this);
+    print('📱 InvitationProvider: ✅ Connected to SimpleNotificationService');
+  }
+
+  // Ensure connection to SimpleNotificationService
+  void ensureConnection() {
+    SimpleNotificationService.instance.setInvitationProvider(this);
+    print(
+        '📱 InvitationProvider: ✅ Connection ensured with SimpleNotificationService');
   }
 
   Future<void> _loadInvitations() async {
@@ -158,7 +166,22 @@ class InvitationProvider extends ChangeNotifier {
 
   // Public method to refresh invitations (called by SimpleNotificationService)
   Future<void> refreshInvitations() async {
+    print('📱 InvitationProvider: Refreshing invitations...');
     await _loadInvitations();
+    print('📱 InvitationProvider: ✅ Invitations refreshed');
+  }
+
+  // Force refresh invitations (for UI updates)
+  Future<void> forceRefresh() async {
+    print('📱 InvitationProvider: Force refreshing invitations...');
+    _isLoading = true;
+    notifyListeners();
+
+    await _loadInvitations();
+
+    _isLoading = false;
+    notifyListeners();
+    print('📱 InvitationProvider: ✅ Force refresh completed');
   }
 
   // Save chat to SharedPreferences
@@ -430,14 +453,8 @@ class InvitationProvider extends ChangeNotifier {
         return false;
       }
 
-      // Also send encrypted version for enhanced security
-      try {
-        await _sendEncryptedInvitationNotification(invitation);
-      } catch (e) {
-        print(
-            '📱 InvitationProvider: ⚠️ Failed to send encrypted invitation: $e');
-        // Don't fail the whole operation if encrypted notification fails
-      }
+      // Encrypted notifications disabled for now to prevent duplicates
+      // TODO: Implement encrypted notifications when needed
 
       // Create local notification for invitation sent
       await _createLocalNotification(
@@ -802,6 +819,9 @@ class InvitationProvider extends ChangeNotifier {
       print(
           '📱 InvitationProvider: Sending acceptance notification to: ${invitation.fromUserId} with chat GUID: $chatGuid');
 
+      // Store the chatGuid locally for retrieval when notification is processed
+      await _storeChatGuidForInvitation(invitation.id, chatGuid);
+
       // TEMPORARY: Debug session status
       print(
           '📱 InvitationProvider: 🔍 Checking session status for: ${invitation.fromUserId}');
@@ -824,12 +844,15 @@ class InvitationProvider extends ChangeNotifier {
             'type': 'invitation', // Use same type as working invitations
             'subtype': 'accepted', // Add subtype for differentiation
             'invitationId': invitation.id,
-            'senderId': invitation.toUserId,
-            'senderName': invitation.toUsername,
-            'fromUserId': invitation.toUserId,
-            'fromUsername': invitation.toUsername,
-            'toUserId': invitation.fromUserId,
-            'toUsername': invitation.fromUsername,
+            'responderId': invitation
+                .toUserId, // The person responding (should match toUserId)
+            'responderName': invitation.toUsername,
+            'fromUserId':
+                invitation.fromUserId, // The person who sent the invitation
+            'fromUsername': invitation.fromUsername,
+            'toUserId':
+                invitation.toUserId, // The person who received the invitation
+            'toUsername': invitation.toUsername,
             'chatGuid': chatGuid,
           },
         );
@@ -869,6 +892,43 @@ class InvitationProvider extends ChangeNotifier {
       print(
           '📱 InvitationProvider: ❌ Error sending acceptance notification: $e');
       return false;
+    }
+  }
+
+  // Store chatGuid for invitation for later retrieval
+  Future<void> _storeChatGuidForInvitation(
+      String invitationId, String chatGuid) async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+      final chatGuidsJson =
+          await prefsService.getJson('invitation_chat_guids') ?? {};
+      chatGuidsJson[invitationId] = chatGuid;
+      await prefsService.setJson('invitation_chat_guids', chatGuidsJson);
+      print(
+          '📱 InvitationProvider: ✅ Stored chatGuid $chatGuid for invitation $invitationId');
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error storing chatGuid: $e');
+    }
+  }
+
+  // Retrieve chatGuid for invitation
+  Future<String?> _getChatGuidForInvitation(String invitationId) async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+      final chatGuidsJson =
+          await prefsService.getJson('invitation_chat_guids') ?? {};
+      final chatGuid = chatGuidsJson[invitationId] as String?;
+      if (chatGuid != null) {
+        print(
+            '📱 InvitationProvider: ✅ Retrieved chatGuid $chatGuid for invitation $invitationId');
+      } else {
+        print(
+            '📱 InvitationProvider: ❌ No chatGuid found for invitation $invitationId');
+      }
+      return chatGuid;
+    } catch (e) {
+      print('📱 InvitationProvider: ❌ Error retrieving chatGuid: $e');
+      return null;
     }
   }
 
@@ -926,12 +986,15 @@ class InvitationProvider extends ChangeNotifier {
             'type': 'invitation', // Use same type as working invitations
             'subtype': 'declined', // Add subtype for differentiation
             'invitationId': invitation.id,
-            'senderId': invitation.toUserId,
-            'senderName': invitation.toUsername,
-            'fromUserId': invitation.toUserId,
-            'fromUsername': invitation.toUsername,
-            'toUserId': invitation.fromUserId,
-            'toUsername': invitation.fromUsername,
+            'responderId': invitation
+                .toUserId, // The person responding (should match toUserId)
+            'responderName': invitation.toUsername,
+            'fromUserId':
+                invitation.fromUserId, // The person who sent the invitation
+            'fromUsername': invitation.fromUsername,
+            'toUserId':
+                invitation.toUserId, // The person who received the invitation
+            'toUsername': invitation.toUsername,
           },
         );
 
@@ -1021,19 +1084,100 @@ class InvitationProvider extends ChangeNotifier {
 
   // Handle invitation response from notifications
   Future<void> handleInvitationResponse(
-      String responderId, String responderName, String response,
+      String? responderId, String? responderName, String response,
       {String? conversationGuid}) async {
     try {
+      // Refresh invitations from storage to ensure up-to-date data
+      await _loadInvitations();
+
+      // Validate required parameters
+      if (responderId == null || responderId.isEmpty) {
+        print('📱 InvitationProvider: ❌ Responder ID is null or empty');
+        return;
+      }
+
       print(
           '📱 InvitationProvider: Handling invitation response: $response from $responderName ($responderId)');
+      print(
+          '📱 InvitationProvider: Current session ID: ${_sessionService.currentSessionId}');
+      print('📱 InvitationProvider: Total invitations: ${_invitations.length}');
 
       // Find the invitation that matches this response
-      final invitation = _invitations.firstWhere(
-        (inv) =>
-            inv.toUserId == responderId &&
-            inv.fromUserId == _sessionService.currentSessionId,
-        orElse: () => throw Exception('Invitation not found for response'),
-      );
+      // Check if responderId contains the invitation's toUserId (since responderId might be truncated)
+      print(
+          '📱 InvitationProvider: 🔍 Searching for invitation with responderId: $responderId');
+
+      // Debug: Print invitation matching details
+      print(
+          '📱 InvitationProvider: 🔍 Searching for invitation with responderId: $responderId');
+      print(
+          '📱 InvitationProvider: 🔍 Total invitations to search: ${_invitations.length}');
+      print(
+          '📱 InvitationProvider: 🔍 Expected: responderId should match current session ID');
+      print(
+          '📱 InvitationProvider: 🔍 Expected: fromUserId should match current session');
+
+      for (var inv in _invitations) {
+        print(
+            '📱 InvitationProvider: 🔍 Invitation: ${inv.toUserId} ${inv.fromUserId} ${inv.status}');
+        print(
+            '📱 InvitationProvider: 🔍 Comparing: responderId=$responderId, toUserId=${inv.toUserId}, fromUserId=${inv.fromUserId}, currentSession=${_sessionService.currentSessionId}');
+      }
+
+      // First try: Find invitation by exact responderId match
+      Invitation? invitation;
+      try {
+        invitation = _invitations.firstWhere(
+          (inv) =>
+              inv.toUserId == responderId &&
+              inv.fromUserId == _sessionService.currentSessionId,
+        );
+        print(
+            '📱 InvitationProvider: ✅ Found invitation with exact responderId match');
+      } catch (e) {
+        print(
+            '📱 InvitationProvider: ⚠️ No exact match found, trying fallback strategies...');
+
+        // Fallback 1: Try partial responderId match (for truncated session IDs)
+        try {
+          invitation = _invitations.firstWhere(
+            (inv) =>
+                inv.toUserId.contains(responderId) &&
+                inv.fromUserId == _sessionService.currentSessionId,
+          );
+          print(
+              '📱 InvitationProvider: ✅ Found invitation with partial responderId match');
+        } catch (e) {
+          print(
+              '📱 InvitationProvider: ⚠️ No partial match found, trying username match...');
+
+          // Fallback 2: Try to find by username if we have it
+          // This would require the notification to include the username
+          print(
+              '📱 InvitationProvider: ❌ No invitation found with any matching strategy');
+          throw Exception(
+              'Invitation not found for response - responderId: $responderId, currentSession: ${_sessionService.currentSessionId}');
+        }
+      }
+
+      print('📱 InvitationProvider: ✅ Found invitation with responderId match');
+
+      print('📱 InvitationProvider: Found invitation: ${invitation!.id}');
+      print('📱 InvitationProvider: Current status: ${invitation.status}');
+
+      // Prevent processing the same invitation response multiple times
+      if (invitation!.status == InvitationStatus.accepted &&
+          response == 'accepted') {
+        print(
+            '📱 InvitationProvider: ⚠️ Invitation already accepted, skipping duplicate response');
+        return;
+      }
+      if (invitation.status == InvitationStatus.declined &&
+          response == 'declined') {
+        print(
+            '📱 InvitationProvider: ⚠️ Invitation already declined, skipping duplicate response');
+        return;
+      }
 
       // Update invitation status
       final updatedInvitation = Invitation(
@@ -1050,7 +1194,7 @@ class InvitationProvider extends ChangeNotifier {
       );
 
       // Update in the list
-      final index = _invitations.indexWhere((inv) => inv.id == invitation.id);
+      final index = _invitations.indexWhere((inv) => inv.id == invitation!.id);
       if (index != -1) {
         _invitations[index] = updatedInvitation;
         await _saveInvitations();
@@ -1059,10 +1203,15 @@ class InvitationProvider extends ChangeNotifier {
       }
 
       // If accepted and we have a conversation GUID, create the chat
-      if (response == 'accepted' && conversationGuid != null) {
+      if (response == 'accepted') {
+        conversationGuid = conversationGuid ?? GuidGenerator.generateGuid();
+
+        print(
+            '📱 InvitationProvider: Creating chat with GUID: $conversationGuid');
+
         final chat = Chat(
           id: conversationGuid,
-          user1Id: invitation.fromUserId,
+          user1Id: invitation!.fromUserId,
           user2Id: invitation.toUserId,
           user1DisplayName: invitation.fromUsername,
           user2DisplayName: invitation.toUsername,
@@ -1083,8 +1232,14 @@ class InvitationProvider extends ChangeNotifier {
       }
 
       notifyListeners();
+      print(
+          '📱 InvitationProvider: ✅ Listeners notified of invitation response');
     } catch (e) {
       print('📱 InvitationProvider: ❌ Error handling invitation response: $e');
+      print('📱 InvitationProvider: Error stack trace: ${StackTrace.current}');
+
+      // Re-throw the error so the calling code can handle it
+      rethrow;
     }
   }
 

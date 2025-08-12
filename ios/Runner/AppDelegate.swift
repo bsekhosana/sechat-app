@@ -118,6 +118,13 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
       print("📱 iOS: Alert setting: \(settings.alertSetting.rawValue)")
       print("📱 iOS: Badge setting: \(settings.badgeSetting.rawValue)")
       print("📱 iOS: Sound setting: \(settings.soundSetting.rawValue)")
+      
+      // Force register for remote notifications regardless of current status
+      DispatchQueue.main.async {
+        print("📱 iOS: 🔄 Forcing registration for remote notifications...")
+        application.registerForRemoteNotifications()
+        print("📱 iOS: ✅ Registration for remote notifications completed")
+      }
     }
     
     // Request authorization and register for remote notifications
@@ -132,6 +139,11 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
           }
         } else {
           print("📱 iOS: ❌ Push notification permission denied: \(error?.localizedDescription ?? "Unknown error")")
+          // Still try to register even if permission denied (for testing)
+          DispatchQueue.main.async {
+            print("📱 iOS: 🔄 Attempting registration despite permission denial...")
+            application.registerForRemoteNotifications()
+          }
         }
       }
     )
