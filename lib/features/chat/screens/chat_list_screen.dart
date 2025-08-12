@@ -1,22 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../shared/models/chat.dart';
-import '../../../shared/models/user.dart';
 import '../../../shared/models/message.dart';
-import '../../../shared/widgets/search_widget.dart';
-import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/se_shared_preference_service.dart';
-import '../../../core/services/network_service.dart';
-import 'chat_screen.dart';
-import 'package:flutter/foundation.dart';
-import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
-import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
-import 'package:sechat_app/core/services/se_session_service.dart';
-import 'package:sechat_app/shared/models/user.dart';
-import 'package:sechat_app/core/services/simple_notification_service.dart';
+import '../../../core/services/online_status_service.dart';
 import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
+import 'chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -34,6 +24,21 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void initState() {
     super.initState();
     _loadChats();
+
+    // Initialize online status service
+    OnlineStatusService.instance.initialize();
+  }
+
+  @override
+  void dispose() {
+    // Clean up online status listeners
+    for (final chat in _chats) {
+      final otherUserId =
+          chat.getOtherUserId(SeSessionService().currentSessionId ?? '');
+      OnlineStatusService.instance
+          .removeListener(otherUserId, _updateOnlineStatus);
+    }
+    super.dispose();
   }
 
   Future<void> _loadChats() async {
@@ -58,6 +63,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
         _isLoading = false;
       });
 
+      // Set up online status listeners for each chat
+      for (final chat in _chats) {
+        final otherUserId =
+            chat.getOtherUserId(SeSessionService().currentSessionId ?? '');
+        OnlineStatusService.instance
+            .addListener(otherUserId, _updateOnlineStatus);
+      }
+
       print(
           '📱 ChatListScreen: Loaded ${_chats.length} chats from SharedPreferences');
     } catch (e) {
@@ -71,6 +84,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void _openChat(Chat chat) {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)));
+  }
+
+  /// Update UI when online status changes
+  void _updateOnlineStatus(OnlineStatusInfo status) {
+    // This will trigger a rebuild with the new status
+    setState(() {});
   }
 
   void _shareApp() {
@@ -320,27 +339,39 @@ Download now and let's chat securely!
                       ],
                     ),
                     const SizedBox(height: 4),
-                    FutureBuilder<List<Message>>(
-                      future: _getLastMessage(chat.id),
-                      builder: (context, snapshot) {
-                        String lastMessageText = 'No messages yet';
-                        if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                          final lastMessage = snapshot.data!.first;
-                          lastMessageText = lastMessage.content;
-                        }
+                    Row(
+                      children: [
+                        // Online status indicator
+                        _buildOnlineStatusIndicator(chat),
+                        const SizedBox(width: 6),
 
-                        return Text(
-                          lastMessageText,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: chat.getBlockedStatus()
-                                ? Colors.grey[500]
-                                : Colors.grey[600],
+                        // Last message
+                        Expanded(
+                          child: FutureBuilder<List<Message>>(
+                            future: _getLastMessage(chat.id),
+                            builder: (context, snapshot) {
+                              String lastMessageText = 'No messages yet';
+                              if (snapshot.hasData &&
+                                  snapshot.data!.isNotEmpty) {
+                                final lastMessage = snapshot.data!.first;
+                                lastMessageText = lastMessage.content;
+                              }
+
+                              return Text(
+                                lastMessageText,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: chat.getBlockedStatus()
+                                      ? Colors.grey[500]
+                                      : Colors.grey[600],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        );
-                      },
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -648,5 +679,43 @@ Download now and let's chat securely!
         ),
       );
     }
+  }
+
+  /// Build WhatsApp-style online status indicator for chat list
+  Widget _buildOnlineStatusIndicator(Chat chat) {
+    // Get current user ID and other user ID
+    final currentUserId = SeSessionService().currentSessionId ?? '';
+    final otherUserId = chat.getOtherUserId(currentUserId);
+
+    // Get online status from service
+    final statusInfo = OnlineStatusService.instance.getStatus(otherUserId);
+
+    // Don't show online status for blocked chats
+    if (chat.getBlockedStatus()) {
+      return const SizedBox.shrink();
+    }
+
+    // Online - green dot
+    if (statusInfo.isOnline) {
+      return Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: Colors.green,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 1,
+              spreadRadius: 0.5,
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Offline - show nothing (we'll show last seen in the chat screen)
+    return const SizedBox.shrink();
   }
 }

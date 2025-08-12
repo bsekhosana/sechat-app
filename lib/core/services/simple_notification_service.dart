@@ -14,6 +14,7 @@ import 'global_user_service.dart';
 import 'encryption_service.dart';
 import 'local_storage_service.dart';
 import 'se_shared_preference_service.dart';
+import 'key_exchange_service.dart';
 import '../../shared/models/chat.dart';
 import '../../shared/models/message.dart' as app_message;
 import '../utils/guid_generator.dart';
@@ -44,6 +45,10 @@ class SimpleNotificationService {
   Function(String senderId, String senderName, String message)?
       _onMessageReceived;
   Function(String senderId, bool isTyping)? _onTypingIndicator;
+  Function(String recipientId, String encryptedData, String checksum)?
+      _onEncryptedMessageReceived;
+  Function(String senderId, String messageId, String status)?
+      _onMessageStatusUpdate;
 
   // Provider instances
   dynamic? _invitationProvider;
@@ -293,33 +298,29 @@ class SimpleNotificationService {
     required String senderName,
     required String message,
     required String conversationId,
+    required String encryptedData,
+    required String checksum,
+    String? messageId,
   }) async {
     try {
       print('🔔 SimpleNotificationService: Sending encrypted message');
 
-      // Create message data
-      final messageData = {
-        'type': 'message',
-        'senderName': senderName,
-        'senderId': SeSessionService().currentSessionId,
-        'message': message,
-        'conversationId': conversationId,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'version': '1.0',
-      };
-
-      // Encrypt the message data
-      final encryptedData = await _encryptData(messageData, recipientId);
-      final checksum = _generateChecksum(messageData);
-
       // Send via AirNotifier with encryption
       final success =
-          await AirNotifierService.instance.sendEncryptedMessageNotification(
-        recipientId: recipientId,
-        senderName: senderName,
-        encryptedData: encryptedData,
-        checksum: checksum,
-        conversationId: conversationId,
+          await AirNotifierService.instance.sendNotificationToSession(
+        sessionId: recipientId,
+        title: senderName,
+        body: 'You have received an encrypted message',
+        data: {
+          'encrypted': true,
+          'data': encryptedData,
+          'checksum': checksum,
+          'type': 'message',
+          'messageId': messageId,
+          'conversationId': conversationId,
+        },
+        sound: 'message.wav',
+        encrypted: true,
       );
 
       if (success) {
@@ -356,10 +357,38 @@ class SimpleNotificationService {
         // Get encrypted data from the new structure
         final encryptedData = notificationData['data'] as String?;
         final checksum = notificationData['checksum'] as String?;
+        final notificationType = notificationData['type'] as String?;
+        final messageId = notificationData['messageId'] as String?;
+        final conversationId = notificationData['conversationId'] as String?;
+        final silent = notificationData['silent'] as bool?;
 
         if (encryptedData == null) {
           print('🔔 SimpleNotificationService: ❌ No encrypted data found');
           return null;
+        }
+
+        // Before attempting to decrypt, trigger the encrypted message callback
+        // This allows specialized handlers to decrypt using their own implementation
+        if (_onEncryptedMessageReceived != null &&
+            notificationType == 'message') {
+          final currentUserId = _sessionId ?? '';
+          _onEncryptedMessageReceived!(
+              currentUserId, encryptedData, checksum ?? '');
+        }
+
+        // Handle message status updates (delivery receipts, read receipts)
+        if (notificationType == 'message_delivery_status' &&
+            messageId != null) {
+          if (_onMessageStatusUpdate != null) {
+            final senderId = notificationData['senderId'] as String? ?? '';
+            final status = notificationData['status'] as String? ?? 'delivered';
+            _onMessageStatusUpdate!(senderId, messageId, status);
+          }
+
+          // For silent notifications, we don't need to continue processing
+          if (silent == true) {
+            return {'type': 'silent_notification', 'handled': true};
+          }
         }
 
         // Decrypt the data
@@ -371,7 +400,7 @@ class SimpleNotificationService {
 
         // Verify checksum
         final expectedChecksum = _generateChecksum(decryptedData);
-        if (checksum != expectedChecksum) {
+        if (checksum != null && checksum != expectedChecksum) {
           print('🔔 SimpleNotificationService: ❌ Checksum verification failed');
           return null;
         }
@@ -382,6 +411,15 @@ class SimpleNotificationService {
       } else {
         print(
             '🔔 SimpleNotificationService: Processing plain text notification');
+
+        // Special handling for key exchange notifications which are always unencrypted
+        final notificationType = notificationData['type'] as String?;
+        if (notificationType == 'key_exchange_request' ||
+            notificationType == 'key_exchange_response') {
+          print(
+              '🔔 SimpleNotificationService: Detected unencrypted key exchange notification');
+        }
+
         return notificationData;
       }
     } catch (e) {
@@ -593,6 +631,16 @@ class SimpleNotificationService {
           '🔔 SimpleNotificationService: Processing notification type: $type');
 
       switch (type) {
+        case 'key_exchange_request':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing key exchange request notification');
+          await _handleKeyExchangeRequest(processedData);
+          break;
+        case 'key_exchange_response':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing key exchange response notification');
+          await _handleKeyExchangeResponse(processedData);
+          break;
         case 'invitation':
           print(
               '🔔 SimpleNotificationService: 🎯 Processing invitation notification');
@@ -1377,7 +1425,7 @@ class SimpleNotificationService {
   }
 
   /// Handle device token received from native platform
-  Future<void> handleDeviceTokenReceived(String token) async {
+  Future<bool> handleDeviceTokenReceived(String token) async {
     print(
         '🔔 SimpleNotificationService: Device token received from native: $token');
     print('🔔 SimpleNotificationService: Current session ID: $_sessionId');
@@ -1389,6 +1437,7 @@ class SimpleNotificationService {
           '🔔 SimpleNotificationService: Attempting to link token to existing session: $_sessionId');
       await _linkTokenToSession();
     }
+    return true;
   }
 
   /// Link token to session with retry mechanism
@@ -1645,6 +1694,19 @@ class SimpleNotificationService {
   /// Set typing indicator callback
   void setOnTypingIndicator(Function(String senderId, bool isTyping) callback) {
     _onTypingIndicator = callback;
+  }
+
+  /// Set encrypted message received callback
+  void setOnEncryptedMessageReceived(
+      Function(String recipientId, String encryptedData, String checksum)
+          callback) {
+    _onEncryptedMessageReceived = callback;
+  }
+
+  /// Set message status update callback
+  void setOnMessageStatusUpdate(
+      Function(String senderId, String messageId, String status) callback) {
+    _onMessageStatusUpdate = callback;
   }
 
   /// Show local notification
@@ -2077,6 +2139,70 @@ class SimpleNotificationService {
     }
   }
 
+  /// Handle key exchange request notification
+  Future<void> _handleKeyExchangeRequest(Map<String, dynamic> data) async {
+    try {
+      print('🔔 SimpleNotificationService: Processing key exchange request');
+
+      // Extract key exchange data
+      final senderId = data['sender_id'] as String?;
+      final publicKey = data['public_key'] as String?;
+      final version = data['version'] as String?;
+
+      if (senderId == null || publicKey == null) {
+        print(
+            '🔔 SimpleNotificationService: Invalid key exchange request data');
+        return;
+      }
+
+      print(
+          '🔔 SimpleNotificationService: Key exchange request from $senderId');
+
+      // Process the key exchange request using KeyExchangeService
+      await KeyExchangeService.instance.processKeyExchangeRequest({
+        'sender_id': senderId,
+        'public_key': publicKey,
+        'version': version ?? '1.0',
+      });
+
+      print('🔔 SimpleNotificationService: ✅ Key exchange request processed');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error processing key exchange request: $e');
+    }
+  }
+
+  /// Handle key exchange response notification
+  Future<void> _handleKeyExchangeResponse(Map<String, dynamic> data) async {
+    try {
+      print('🔔 SimpleNotificationService: Processing key exchange response');
+
+      // Extract key exchange data
+      final senderId = data['sender_id'] as String?;
+      final publicKey = data['public_key'] as String?;
+
+      if (senderId == null || publicKey == null) {
+        print(
+            '🔔 SimpleNotificationService: Invalid key exchange response data');
+        return;
+      }
+
+      print(
+          '🔔 SimpleNotificationService: Key exchange response from $senderId');
+
+      // Process the key exchange response using KeyExchangeService
+      await KeyExchangeService.instance.processKeyExchangeResponse({
+        'sender_id': senderId,
+        'public_key': publicKey,
+      });
+
+      print('🔔 SimpleNotificationService: ✅ Key exchange response processed');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error processing key exchange response: $e');
+    }
+  }
+
   /// Generate a unique ID for a notification to prevent duplicates
   String _generateNotificationId(Map<String, dynamic> notificationData) {
     final dataJson = json.encode(notificationData);
@@ -2093,4 +2219,87 @@ class SimpleNotificationService {
 
   /// Get count of processed notifications (for debugging)
   int get processedNotificationsCount => _processedNotifications.length;
+
+  /// Send encrypted invitation notification
+  Future<bool> sendEncryptedInvitationNotification({
+    required String recipientId,
+    required String senderName,
+    required String invitationId,
+    required String encryptedData,
+    required String checksum,
+    String? message,
+  }) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Sending encrypted invitation notification');
+
+      // Send via AirNotifier with encryption
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
+        sessionId: recipientId,
+        title: 'New Contact Invitation',
+        body: '$senderName would like to connect with you',
+        data: {
+          'data': encryptedData,
+          'type': 'invitation',
+          'invitationId': invitationId,
+        },
+        sound: 'invitation.wav',
+        encrypted: true,
+        checksum: checksum,
+      );
+
+      return success;
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error sending encrypted invitation: $e');
+      return false;
+    }
+  }
+
+  /// Send encrypted invitation response notification
+  Future<bool> sendEncryptedInvitationResponseNotification({
+    required String recipientId,
+    required String responderName,
+    required String status, // 'accepted' or 'declined'
+    required String invitationId,
+    required String encryptedData,
+    required String checksum,
+    String? chatId, // Include chat ID if accepted
+  }) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Sending encrypted invitation response');
+
+      final title =
+          status == 'accepted' ? 'Invitation Accepted' : 'Invitation Declined';
+
+      final body = status == 'accepted'
+          ? '$responderName accepted your invitation'
+          : '$responderName declined your invitation';
+
+      // Send via AirNotifier with encryption
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
+        sessionId: recipientId,
+        title: title,
+        body: body,
+        data: {
+          'data': encryptedData,
+          'type': 'invitation_response',
+          'status': status,
+          'invitationId': invitationId,
+        },
+        sound: status == 'accepted' ? 'accepted.wav' : 'declined.wav',
+        encrypted: true,
+        checksum: checksum,
+      );
+
+      return success;
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error sending encrypted invitation response: $e');
+      return false;
+    }
+  }
 }

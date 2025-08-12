@@ -6,6 +6,7 @@ import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/airnotifier_service.dart';
 import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/secure_notification_service.dart';
 import '../../../core/services/indicator_service.dart';
 import '../../../core/utils/guid_generator.dart';
 
@@ -753,38 +754,31 @@ class InvitationProvider extends ChangeNotifier {
   Future<bool> _sendInvitationNotification(Invitation invitation) async {
     try {
       print(
-          '📱 InvitationProvider: Sending invitation notification to: ${invitation.toUserId}');
+          '📱 InvitationProvider: Sending invitation with key exchange to: ${invitation.toUserId}');
       print('📱 InvitationProvider: Invitation data: ${invitation.toJson()}');
 
+      // Use SecureNotificationService for encrypted invitation with key exchange
+      // The updated service will handle key exchange before sending the invitation
       final success =
-          await AirNotifierService.instance.sendNotificationToSession(
-        sessionId: invitation.toUserId,
-        title: 'New Invitation',
-        body: '${invitation.fromUsername} wants to connect with you',
-        data: {
-          'type': 'invitation',
-          'invitationId': invitation.id,
-          'senderId': invitation.fromUserId,
-          'senderName': invitation.fromUsername,
-          'fromUserId': invitation.fromUserId,
-          'fromUsername': invitation.fromUsername,
-          'toUserId': invitation.toUserId,
-          'toUsername': invitation.toUsername,
-        },
+          await SecureNotificationService.instance.sendEncryptedInvitation(
+        recipientId: invitation.toUserId,
+        senderName: invitation.fromUsername,
+        invitationId: invitation.id,
+        message: '${invitation.fromUsername} wants to connect with you',
       );
 
       if (success) {
         print(
-            '📱 InvitationProvider: ✅ Invitation notification sent successfully');
+            '📱 InvitationProvider: ✅ Invitation with key exchange sent successfully');
         return true;
       } else {
         print(
-            '📱 InvitationProvider: ❌ Failed to send invitation notification');
+            '📱 InvitationProvider: ❌ Failed to send invitation with key exchange');
         return false;
       }
     } catch (e) {
       print(
-          '📱 InvitationProvider: ❌ Error sending invitation notification: $e');
+          '📱 InvitationProvider: ❌ Error sending invitation with key exchange: $e');
       return false;
     }
   }
@@ -817,71 +811,28 @@ class InvitationProvider extends ChangeNotifier {
       }
 
       print(
-          '📱 InvitationProvider: Sending acceptance notification to: ${invitation.fromUserId} with chat GUID: $chatGuid');
+          '📱 InvitationProvider: Sending encrypted acceptance notification to: ${invitation.fromUserId} with chat GUID: $chatGuid');
 
       // Store the chatGuid locally for retrieval when notification is processed
       await _storeChatGuidForInvitation(invitation.id, chatGuid);
 
-      // TEMPORARY: Debug session status
-      print(
-          '📱 InvitationProvider: 🔍 Checking session status for: ${invitation.fromUserId}');
-
-      // TEMPORARY: Send directly to AirNotifier like regular invitations with retry
-      bool success = false;
-      int retryCount = 0;
-      const maxRetries = 3;
-
-      while (!success && retryCount < maxRetries) {
-        retryCount++;
-        print('📱 InvitationProvider: 🔄 Attempt $retryCount of $maxRetries');
-
-        final response = await AirNotifierService.instance
-            .sendNotificationToSessionWithResponse(
-          sessionId: invitation.fromUserId,
-          title: 'Invitation Accepted',
-          body: '${invitation.toUsername} accepted your invitation',
-          data: {
-            'type': 'invitation', // Use same type as working invitations
-            'subtype': 'accepted', // Add subtype for differentiation
-            'invitationId': invitation.id,
-            'responderId': invitation
-                .toUserId, // The person responding (should match toUserId)
-            'responderName': invitation.toUsername,
-            'fromUserId':
-                invitation.fromUserId, // The person who sent the invitation
-            'fromUsername': invitation.fromUsername,
-            'toUserId':
-                invitation.toUserId, // The person who received the invitation
-            'toUsername': invitation.toUsername,
-            'chatGuid': chatGuid,
-          },
-        );
-
-        // Check if notification was actually delivered
-        if (response != null && response['notifications_sent'] == 0) {
-          print(
-              '📱 InvitationProvider: ❌ Notification sent but not delivered: $response');
-          success = false;
-        } else if (response != null && response['notifications_sent'] > 0) {
-          print('📱 InvitationProvider: ✅ Notification delivered successfully');
-          success = true;
-        } else {
-          success = false;
-        }
-
-        if (!success && retryCount < maxRetries) {
-          print('📱 InvitationProvider: ⏳ Waiting 2 seconds before retry...');
-          await Future.delayed(const Duration(seconds: 2));
-        }
-      }
+      // Use SecureNotificationService for encrypted invitation response
+      final success = await SecureNotificationService.instance
+          .sendEncryptedInvitationResponse(
+        recipientId: invitation.fromUserId,
+        responderName: invitation.toUsername,
+        status: 'accepted',
+        invitationId: invitation.id,
+        chatId: chatGuid,
+      );
 
       if (success) {
         print(
-            '📱 InvitationProvider: ✅ Acceptance notification sent successfully with chat GUID: $chatGuid');
+            '📱 InvitationProvider: ✅ Encrypted acceptance notification sent successfully with chat GUID: $chatGuid');
         return true;
       } else {
         print(
-            '📱 InvitationProvider: ❌ Failed to send acceptance notification');
+            '📱 InvitationProvider: ❌ Failed to send encrypted acceptance notification');
         // Set error message for user feedback
         _error =
             'Unable to reach the invitation sender. They may be offline or have notifications disabled.';
@@ -890,7 +841,7 @@ class InvitationProvider extends ChangeNotifier {
       }
     } catch (e) {
       print(
-          '📱 InvitationProvider: ❌ Error sending acceptance notification: $e');
+          '📱 InvitationProvider: ❌ Error sending encrypted acceptance notification: $e');
       return false;
     }
   }
@@ -965,64 +916,24 @@ class InvitationProvider extends ChangeNotifier {
       }
 
       print(
-          '📱 InvitationProvider: Sending decline notification to: ${invitation.fromUserId}');
+          '📱 InvitationProvider: Sending encrypted decline notification to: ${invitation.fromUserId}');
 
-      // TEMPORARY: Send directly to AirNotifier like regular invitations with retry
-      bool success = false;
-      int retryCount = 0;
-      const maxRetries = 3;
-
-      while (!success && retryCount < maxRetries) {
-        retryCount++;
-        print(
-            '📱 InvitationProvider: 🔄 Attempt $retryCount of $maxRetries (decline)');
-
-        final response = await AirNotifierService.instance
-            .sendNotificationToSessionWithResponse(
-          sessionId: invitation.fromUserId,
-          title: 'Invitation Declined',
-          body: '${invitation.toUsername} declined your invitation',
-          data: {
-            'type': 'invitation', // Use same type as working invitations
-            'subtype': 'declined', // Add subtype for differentiation
-            'invitationId': invitation.id,
-            'responderId': invitation
-                .toUserId, // The person responding (should match toUserId)
-            'responderName': invitation.toUsername,
-            'fromUserId':
-                invitation.fromUserId, // The person who sent the invitation
-            'fromUsername': invitation.fromUsername,
-            'toUserId':
-                invitation.toUserId, // The person who received the invitation
-            'toUsername': invitation.toUsername,
-          },
-        );
-
-        // Check if notification was actually delivered
-        if (response != null && response['notifications_sent'] == 0) {
-          print(
-              '📱 InvitationProvider: ❌ Decline notification sent but not delivered: $response');
-          success = false;
-        } else if (response != null && response['notifications_sent'] > 0) {
-          print(
-              '📱 InvitationProvider: ✅ Decline notification delivered successfully');
-          success = true;
-        } else {
-          success = false;
-        }
-
-        if (!success && retryCount < maxRetries) {
-          print('📱 InvitationProvider: ⏳ Waiting 2 seconds before retry...');
-          await Future.delayed(const Duration(seconds: 2));
-        }
-      }
+      // Use SecureNotificationService for encrypted invitation response
+      final success = await SecureNotificationService.instance
+          .sendEncryptedInvitationResponse(
+        recipientId: invitation.fromUserId,
+        responderName: invitation.toUsername,
+        status: 'declined',
+        invitationId: invitation.id,
+      );
 
       if (success) {
         print(
-            '📱 InvitationProvider: ✅ Decline notification sent successfully');
+            '📱 InvitationProvider: ✅ Encrypted decline notification sent successfully');
         return true;
       } else {
-        print('📱 InvitationProvider: ❌ Failed to send decline notification');
+        print(
+            '📱 InvitationProvider: ❌ Failed to send encrypted decline notification');
         // Set error message for user feedback
         _error =
             'Unable to reach the invitation sender. They may be offline or have notifications disabled.';
@@ -1030,7 +941,8 @@ class InvitationProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print('📱 InvitationProvider: ❌ Error sending decline notification: $e');
+      print(
+          '📱 InvitationProvider: ❌ Error sending encrypted decline notification: $e');
       return false;
     }
   }
@@ -1045,31 +957,28 @@ class InvitationProvider extends ChangeNotifier {
       }
 
       print(
-          '📱 InvitationProvider: Sending cancellation notification to: ${invitation.toUserId}');
+          '📱 InvitationProvider: Sending encrypted cancellation notification to: ${invitation.toUserId}');
 
-      final success =
-          await AirNotifierService.instance.sendNotificationToSession(
-        sessionId: invitation.toUserId,
-        title: 'Invitation Cancelled',
-        body: '${invitation.fromUsername} cancelled their invitation',
-        data: {
-          'type': 'invitation_cancelled',
-          'invitationId': invitation.id,
-          'fromUserId': invitation.fromUserId,
-          'fromUsername': invitation.fromUsername,
-        },
+      // Use SecureNotificationService for encrypted invitation update
+      final success = await SecureNotificationService.instance
+          .sendEncryptedInvitationUpdate(
+        recipientId: invitation.toUserId,
+        senderName: invitation.fromUsername,
+        invitationId: invitation.id,
+        action: 'cancelled',
+        message: '${invitation.fromUsername} cancelled their invitation',
       );
 
       if (success) {
         print(
-            '📱 InvitationProvider: ✅ Cancellation notification sent successfully');
+            '📱 InvitationProvider: ✅ Encrypted cancellation notification sent successfully');
       } else {
         print(
-            '📱 InvitationProvider: ❌ Failed to send cancellation notification');
+            '📱 InvitationProvider: ❌ Failed to send encrypted cancellation notification');
       }
     } catch (e) {
       print(
-          '📱 InvitationProvider: ❌ Error sending cancellation notification: $e');
+          '📱 InvitationProvider: ❌ Error sending encrypted cancellation notification: $e');
     }
   }
 

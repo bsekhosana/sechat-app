@@ -473,10 +473,10 @@ class AirNotifierService {
     // Add custom metadata in data field for consistency
     if (data != null && data.isNotEmpty) {
       print('📱 AirNotifierService: 🔍 Processing custom data: $data');
-      
+
       // Create data object with all custom fields
       final Map<String, dynamic> notificationData = {};
-      
+
       data.forEach((key, value) {
         // Ensure only JSON-compatible types
         if (value is String ||
@@ -490,19 +490,16 @@ class AirNotifierService {
           notificationData[key] = value.toString();
         }
       });
-      
+
       // Add data field to payload
       payload['data'] = notificationData;
     }
 
-    // Add encryption metadata if applicable
+    // Add encryption metadata at top level (AirNotifier server expects this)
     if (encrypted) {
-      if (payload['data'] == null) {
-        payload['data'] = {};
-      }
-      payload['data']['encrypted'] = true;
+      payload['encrypted'] = true;
       if (checksum != null) {
-        payload['data']['checksum'] = checksum;
+        payload['checksum'] = checksum;
       }
     }
 

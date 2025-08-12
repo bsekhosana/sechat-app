@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/message.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/secure_notification_service.dart';
+import '../../../core/services/encryption_service.dart';
 import '../../../core/utils/guid_generator.dart';
+import '../../../core/utils/encryption_error_handler.dart';
 
 class ChatScreen extends StatefulWidget {
   final Chat chat;
@@ -16,7 +19,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final SeSharedPreferenceService _prefsService = SeSharedPreferenceService();
@@ -24,6 +27,8 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Message> _messages = [];
   bool _isLoading = true;
   bool _isTyping = false;
+  bool _isOtherUserTyping = false;
+  Timer? _typingTimer;
   String? _currentUserId;
   String? _otherUserDisplayName;
 
@@ -33,14 +38,387 @@ class _ChatScreenState extends State<ChatScreen> {
     _currentUserId = SeSessionService().currentSessionId;
     _otherUserDisplayName =
         widget.chat.getOtherUserDisplayName(_currentUserId ?? '');
-    _loadMessages();
+    _loadMessages().then((_) {
+      // When messages are loaded, send read receipts for unread messages
+      _sendReadReceipts();
+    });
+    _setupNotificationListeners();
+  }
+
+  /// Set up listeners for incoming notifications
+  void _setupNotificationListeners() {
+    // Listen for incoming encrypted messages
+    SimpleNotificationService.instance
+        .setOnEncryptedMessageReceived((recipientId, encryptedData, checksum) {
+      _handleEncryptedMessage(encryptedData, checksum);
+    });
+
+    // Listen for message status updates (delivery/read receipts)
+    SimpleNotificationService.instance
+        .setOnMessageStatusUpdate((senderId, messageId, status) {
+      _handleMessageStatusUpdate(senderId, messageId, status);
+    });
+
+    // Listen for typing indicators
+    SimpleNotificationService.instance
+        .setOnTypingIndicator((senderId, isTyping) {
+      _handleTypingIndicator(senderId, isTyping);
+    });
+  }
+
+  /// Handle typing indicator from another user
+  void _handleTypingIndicator(String senderId, bool isTyping) {
+    if (_currentUserId == null) return;
+
+    try {
+      // Verify this is for the current chat
+      final otherUserId = widget.chat.getOtherUserId(_currentUserId!);
+      if (senderId != otherUserId) {
+        // Typing indicator is for a different chat
+        return;
+      }
+
+      // Update the UI to show/hide typing indicator
+      setState(() {
+        _isOtherUserTyping = isTyping;
+      });
+
+      // Set a timer to hide the typing indicator after a delay
+      if (isTyping) {
+        _resetTypingTimeout();
+      }
+
+      print('📱 ChatScreen: Other user typing: $isTyping');
+    } catch (e) {
+      print('📱 ChatScreen: Error handling typing indicator: $e');
+    }
+  }
+
+  /// Handle message status updates (delivery/read receipts)
+  Future<void> _handleMessageStatusUpdate(
+      String senderId, String messageId, String status) async {
+    try {
+      // Check if this message belongs to this chat
+      final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
+      if (messageIndex == -1) {
+        print('📱 ChatScreen: Status update for unknown message: $messageId');
+        return;
+      }
+
+      final message = _messages[messageIndex];
+
+      // Only process updates for messages we sent
+      if (message.senderId != _currentUserId) {
+        print(
+            '📱 ChatScreen: Ignoring status update for message from another user');
+        return;
+      }
+
+      // Update the message status
+      MessageStatus? newStatus;
+      if (status == 'delivered') {
+        newStatus = MessageStatus.delivered;
+      } else if (status == 'read') {
+        newStatus = MessageStatus.read;
+      } else {
+        print('📱 ChatScreen: Unknown message status: $status');
+        return;
+      }
+
+      // Create updated message
+      final updatedMessage = message.copyWith(
+        status: status,
+        messageStatus: newStatus,
+        deliveredAt:
+            status == 'delivered' ? DateTime.now() : message.deliveredAt,
+        readAt: status == 'read' ? DateTime.now() : message.readAt,
+        updatedAt: DateTime.now(),
+      );
+
+      // Update in state
+      setState(() {
+        _messages[messageIndex] = updatedMessage;
+      });
+
+      // Update in storage
+      await _updateMessageInStorage(updatedMessage);
+
+      print('📱 ChatScreen: Updated message $messageId to status: $status');
+    } catch (e) {
+      print('📱 ChatScreen: Error handling message status update: $e');
+    }
+  }
+
+  /// Update a message in storage
+  Future<void> _updateMessageInStorage(Message message) async {
+    try {
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      final storageIndex =
+          messagesJson.indexWhere((msg) => msg['id'] == message.id);
+
+      if (storageIndex != -1) {
+        messagesJson[storageIndex] = message.toJson();
+        await _prefsService.setJsonList('messages', messagesJson);
+      }
+    } catch (e) {
+      print('📱 ChatScreen: Error updating message in storage: $e');
+    }
+  }
+
+  /// Send typing indicator to the other user
+  Future<void> _sendTypingIndicator(bool isTyping) async {
+    if (_currentUserId == null) return;
+
+    try {
+      // Get other user ID
+      final otherUserId = widget.chat.getOtherUserId(_currentUserId!);
+
+      // Send encrypted typing indicator
+      await SecureNotificationService.instance.sendEncryptedTypingIndicator(
+        recipientId: otherUserId,
+        isTyping: isTyping,
+        conversationId: widget.chat.id,
+      );
+
+      print('📱 ChatScreen: Sent typing indicator: $isTyping');
+    } catch (e) {
+      print('📱 ChatScreen: Error sending typing indicator: $e');
+      // Don't show an error message for typing indicators
+    }
+  }
+
+  /// Handle incoming encrypted message (automatically send delivery receipt for step 2)
+  Future<void> _handleEncryptedMessage(
+      String encryptedData, String checksum) async {
+    try {
+      // Try to decrypt the message data with retry mechanism
+      final messageData =
+          await EncryptionService.decryptDataWithRetry(encryptedData);
+      if (messageData == null) {
+        final errorType = EncryptionErrorType.decryptionFailed;
+        EncryptionErrorHandler.instance.logError(
+            'Failed to decrypt message data after retries',
+            type: errorType);
+
+        // Show error only if user is actively using the app
+        if (mounted) {
+          EncryptionErrorHandler.instance.displayError(context,
+              EncryptionErrorHandler.instance.getUserFriendlyMessage(errorType),
+              isWarning: true);
+        }
+        return;
+      }
+
+      // Verify message integrity
+      final isValid = EncryptionService.verifyChecksum(messageData, checksum);
+      if (!isValid) {
+        final errorType = EncryptionErrorType.checksumVerificationFailed;
+        EncryptionErrorHandler.instance
+            .logError('Message checksum verification failed', type: errorType);
+
+        if (mounted) {
+          EncryptionErrorHandler.instance.displayError(context,
+              EncryptionErrorHandler.instance.getUserFriendlyMessage(errorType),
+              isWarning: true);
+        }
+        return;
+      }
+
+      // Extract message details
+      final messageId = messageData['message_id'] as String?;
+      final senderId = messageData['sender_id'] as String?;
+      final conversationId = messageData['conversation_id'] as String?;
+      final messageContent = messageData['message'] as String?;
+      // Sender name is available but not used in this context
+      final _ = messageData['sender_name'] as String?; // ignore unused
+      final timestamp = messageData['timestamp'] as int?;
+
+      // Verify this message is for this chat
+      if (conversationId != widget.chat.id) {
+        print('📱 ChatScreen: Message not for this chat');
+        return;
+      }
+
+      if (messageId == null || senderId == null || messageContent == null) {
+        EncryptionErrorHandler.instance.logError(
+            'Missing required message data',
+            type: EncryptionErrorType.decryptionFailed);
+        return;
+      }
+
+      // Create a new message object
+      final newMessage = Message(
+        id: messageId,
+        chatId: widget.chat.id,
+        senderId: senderId,
+        content: messageContent,
+        type: MessageType.text,
+        status: 'delivered', // Mark as delivered immediately
+        messageStatus: MessageStatus.delivered,
+        createdAt: timestamp != null
+            ? DateTime.fromMillisecondsSinceEpoch(timestamp)
+            : DateTime.now(),
+        updatedAt: DateTime.now(),
+        isEncrypted: true,
+        deliveredAt: DateTime.now(), // Mark delivery time
+      );
+
+      // Check if message already exists
+      bool messageExists = false;
+      for (final msg in _messages) {
+        if (msg.id == messageId) {
+          messageExists = true;
+          break;
+        }
+      }
+
+      // Only add if message doesn't exist
+      if (!messageExists) {
+        setState(() {
+          _messages.add(newMessage);
+          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        });
+
+        // Save message
+        await _saveMessage(newMessage);
+
+        // Update chat's last message
+        await _updateChatLastMessage(newMessage);
+
+        // Send delivery receipt (handshake step 2)
+        await _sendDeliveryReceipt(messageId, senderId, widget.chat.id);
+      }
+    } catch (e) {
+      final errorType = e is Exception
+          ? EncryptionErrorHandler.instance.handleException(e)
+          : EncryptionErrorType.unknownError;
+
+      EncryptionErrorHandler.instance
+          .logError('Error handling encrypted message: $e', type: errorType);
+
+      // Only show errors to the user if they're actively using the app
+      if (mounted) {
+        EncryptionErrorHandler.instance.displayError(
+            context,
+            EncryptionErrorHandler.instance.getUserFriendlyMessage(errorType,
+                details: 'Failed to process incoming message'));
+      }
+    }
+  }
+
+  /// Send delivery receipt (handshake step 2)
+  Future<void> _sendDeliveryReceipt(
+    String messageId,
+    String recipientId,
+    String conversationId,
+  ) async {
+    try {
+      // Send encrypted delivery receipt
+      await SecureNotificationService.instance.sendEncryptedDeliveryReceipt(
+        recipientId: recipientId,
+        messageId: messageId,
+        conversationId: conversationId,
+      );
+
+      print('📱 ChatScreen: Delivery receipt sent for message $messageId');
+    } catch (e) {
+      print('📱 ChatScreen: Error sending delivery receipt: $e');
+    }
+  }
+
+  /// Send read receipts for all unread messages (handshake step 3)
+  Future<void> _sendReadReceipts() async {
+    if (_currentUserId == null) return;
+
+    try {
+      // Find all received messages that need read receipts
+      final unreadMessages = <Message>[];
+      final otherUserId = widget.chat.getOtherUserId(_currentUserId!);
+      final messageIds = <String>[];
+
+      // Only process messages from the other user that need a read receipt
+      for (final message in _messages) {
+        if (message.senderId == otherUserId && message.needsReadReceipt) {
+          unreadMessages.add(message);
+          messageIds.add(message.id);
+
+          // Update local message status to 'read'
+          _updateMessageStatusToRead(message.id);
+        }
+      }
+
+      if (unreadMessages.isEmpty) {
+        print('📱 ChatScreen: No unread messages to mark as read');
+        return;
+      }
+
+      print(
+          '📱 ChatScreen: Sending read receipts for ${messageIds.length} messages');
+
+      // Send a single read receipt for all messages (batch)
+      await SecureNotificationService.instance.sendEncryptedReadReceipt(
+        recipientId: otherUserId,
+        messageIds: messageIds,
+        conversationId: widget.chat.id,
+      );
+
+      print('📱 ChatScreen: Read receipts sent successfully');
+    } catch (e) {
+      print('📱 ChatScreen: Error sending read receipts: $e');
+    }
+  }
+
+  /// Update a message's status to 'read'
+  Future<void> _updateMessageStatusToRead(String messageId) async {
+    try {
+      // Find the message in the list
+      final index = _messages.indexWhere((msg) => msg.id == messageId);
+      if (index == -1) return;
+
+      // Update the message status
+      final message = _messages[index];
+      final updatedMessage = message.markAsRead();
+
+      // Update in the list
+      setState(() {
+        _messages[index] = updatedMessage;
+      });
+
+      // Save to persistent storage
+      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
+      final storageIndex =
+          messagesJson.indexWhere((msg) => msg['id'] == messageId);
+
+      if (storageIndex != -1) {
+        messagesJson[storageIndex] = updatedMessage.toJson();
+        await _prefsService.setJsonList('messages', messagesJson);
+      }
+    } catch (e) {
+      print('📱 ChatScreen: Error updating message status: $e');
+    }
   }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _typingTimer?.cancel();
     super.dispose();
+  }
+
+  /// Reset typing timeout - used to automatically hide typing indicator
+  void _resetTypingTimeout() {
+    // Cancel existing timer if any
+    _typingTimer?.cancel();
+
+    // Start a new timer
+    _typingTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() {
+          _isOtherUserTyping = false;
+        });
+      }
+    });
   }
 
   Future<void> _loadMessages() async {
@@ -95,16 +473,22 @@ class _ChatScreenState extends State<ChatScreen> {
     if (messageText.isEmpty || _currentUserId == null) return;
 
     try {
-      // Create new message
+      // Generate message ID for tracking
+      final messageId = GuidGenerator.generateShortId();
+
+      // Create new message with handshake step 1 status
       final newMessage = Message(
-        id: GuidGenerator.generateShortId(),
+        id: messageId,
         chatId: widget.chat.id,
         senderId: _currentUserId!,
         content: messageText,
         type: MessageType.text,
-        status: 'sent',
+        status: 'sent', // Step 1: Sent
+        messageStatus: MessageStatus.sent,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        isEncrypted: true, // All new messages are encrypted
+        encryptionVersion: '1.0',
       );
 
       // Add to local list (newest messages will appear at bottom with reverse: true)
@@ -126,8 +510,8 @@ class _ChatScreenState extends State<ChatScreen> {
       // Update chat's last message
       await _updateChatLastMessage(newMessage);
 
-      // Send push notification to other user
-      await _sendPushNotification(newMessage);
+      // Send encrypted push notification to other user
+      await _sendEncryptedPushNotification(newMessage);
     } catch (e) {
       print('📱 ChatScreen: Error sending message: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -136,6 +520,108 @@ class _ChatScreenState extends State<ChatScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  /// Send encrypted push notification for a message (handshake step 1)
+  Future<void> _sendEncryptedPushNotification(Message message) async {
+    try {
+      // First verify encryption setup with recipient
+      final otherUserId = widget.chat.getOtherUserId(_currentUserId!);
+
+      // Verify encryption setup before sending
+      final setupValid =
+          await EncryptionService.verifyEncryptionSetup(otherUserId);
+      if (!setupValid) {
+        if (mounted) {
+          EncryptionErrorHandler.instance.displayError(context,
+              'Unable to establish secure connection with recipient. Message will be saved locally but not delivered.',
+              isWarning: true);
+
+          // Update message status to error
+          final index = _messages.indexWhere((m) => m.id == message.id);
+          if (index != -1) {
+            setState(() {
+              _messages[index] = message.copyWith(
+                status: 'error',
+                messageStatus: MessageStatus.error,
+                updatedAt: DateTime.now(),
+              );
+            });
+            await _updateMessageInStorage(_messages[index]);
+          }
+          return;
+        }
+      }
+
+      // Get current user's display name for the notification
+      final currentUserDisplayName =
+          widget.chat.getOtherUserDisplayName(otherUserId);
+
+      // Send encrypted message notification with handshake step 1
+      final success =
+          await SecureNotificationService.instance.sendEncryptedMessage(
+        recipientId: otherUserId,
+        senderName: currentUserDisplayName,
+        message: message.content,
+        conversationId: widget.chat.id,
+        messageId: message.id,
+      );
+
+      if (!success) {
+        final errorType = EncryptionErrorType.networkError;
+        EncryptionErrorHandler.instance.logError(
+            'Failed to send encrypted message notification',
+            type: errorType);
+
+        if (mounted) {
+          EncryptionErrorHandler.instance.displayError(
+              context,
+              EncryptionErrorHandler.instance
+                  .getUserFriendlyMessage(errorType));
+
+          // Update message status to error
+          final index = _messages.indexWhere((m) => m.id == message.id);
+          if (index != -1) {
+            setState(() {
+              _messages[index] = message.copyWith(
+                status: 'error',
+                messageStatus: MessageStatus.error,
+                updatedAt: DateTime.now(),
+              );
+            });
+            await _updateMessageInStorage(_messages[index]);
+          }
+        }
+      }
+    } catch (e) {
+      final errorType = e is Exception
+          ? EncryptionErrorHandler.instance.handleException(e)
+          : EncryptionErrorType.unknownError;
+
+      EncryptionErrorHandler.instance.logError(
+          'Error sending encrypted push notification: $e',
+          type: errorType);
+
+      if (mounted) {
+        EncryptionErrorHandler.instance.displayError(
+            context,
+            EncryptionErrorHandler.instance.getUserFriendlyMessage(errorType,
+                details: 'Failed to send encrypted message'));
+
+        // Update message status to error
+        final index = _messages.indexWhere((m) => m.id == message.id);
+        if (index != -1) {
+          setState(() {
+            _messages[index] = message.copyWith(
+              status: 'error',
+              messageStatus: MessageStatus.error,
+              updatedAt: DateTime.now(),
+            );
+          });
+          await _updateMessageInStorage(_messages[index]);
+        }
+      }
     }
   }
 
@@ -164,60 +650,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       print('📱 ChatScreen: Error updating chat: $e');
-    }
-  }
-
-  Future<void> _sendPushNotification(Message message) async {
-    try {
-      final otherUserId = widget.chat.getOtherUserId(_currentUserId!);
-      final currentUserDisplayName =
-          widget.chat.getOtherUserDisplayName(otherUserId);
-
-      // Send regular message notification
-      final success = await SimpleNotificationService.instance.sendMessage(
-        recipientId: otherUserId,
-        senderName: currentUserDisplayName,
-        message: message.content,
-        conversationId: widget.chat.id,
-      );
-
-      if (!success) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Failed to send message notification. Please check your internet connection.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 4),
-            ),
-          );
-        }
-        return;
-      }
-
-      // Also send encrypted version for enhanced security
-      try {
-        await SimpleNotificationService.instance.sendEncryptedMessage(
-          recipientId: otherUserId,
-          senderName: currentUserDisplayName,
-          message: message.content,
-          conversationId: widget.chat.id,
-        );
-      } catch (e) {
-        print('📱 ChatScreen: ⚠️ Failed to send encrypted message: $e');
-        // Don't fail the whole operation if encrypted message fails
-      }
-    } catch (e) {
-      print('📱 ChatScreen: Error sending push notification: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sending message: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 4),
-          ),
-        );
-      }
     }
   }
 
@@ -365,6 +797,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     : _buildMessagesList(),
           ),
 
+          // Typing Indicator
+          if (_isOtherUserTyping && !widget.chat.getBlockedStatus())
+            _buildTypingIndicator(),
+
           // Message Input
           if (!widget.chat.getBlockedStatus())
             _buildMessageInput()
@@ -486,13 +922,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             fontSize: 11,
                           ),
                         ),
-                        if (isMyMessage) ...[
+                        if (isMyMessage && message.isEncrypted) ...[
                           const SizedBox(width: 4),
-                          Icon(
-                            message.statusIcon,
-                            size: 14,
-                            color: message.getStatusColor(Colors.white),
-                          ),
+                          _buildMessageStatusIndicator(message),
                         ],
                       ],
                     ),
@@ -549,9 +981,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 maxLines: null,
                 textCapitalization: TextCapitalization.sentences,
                 onChanged: (value) {
+                  // Update typing state
+                  final wasTyping = _isTyping;
                   setState(() {
                     _isTyping = value.isNotEmpty;
                   });
+
+                  // Only send typing indicator when state changes
+                  if (wasTyping != _isTyping) {
+                    _sendTypingIndicator(_isTyping);
+                  }
                 },
               ),
             ),
@@ -603,6 +1042,51 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  /// Build typing indicator UI (WhatsApp style)
+  Widget _buildTypingIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      alignment: Alignment.centerLeft,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // User avatar
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: const Color(0xFFFF6B35),
+            child: Text(
+              _otherUserDisplayName?.substring(0, 1).toUpperCase() ?? 'U',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // Animated dots container
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Row(
+              children: [
+                _TypingDot(delay: 0),
+                SizedBox(width: 3),
+                _TypingDot(delay: 300),
+                SizedBox(width: 3),
+                _TypingDot(delay: 600),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatMessageTime(DateTime dateTime) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -615,5 +1099,114 @@ class _ChatScreenState extends State<ChatScreen> {
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     }
+  }
+
+  /// Build a WhatsApp style message status indicator (1 tick, 2 ticks, 2 blue ticks)
+  Widget _buildMessageStatusIndicator(Message message) {
+    // Error status
+    if (message.isError) {
+      return Icon(
+        Icons.error_outline,
+        size: 14,
+        color: Colors.red[400],
+      );
+    }
+
+    // Pending status (clock)
+    if (message.isPendingStatus || message.isSending) {
+      return const Icon(
+        Icons.access_time,
+        size: 14,
+        color: Colors.white70,
+      );
+    }
+
+    // Read status (2 blue ticks)
+    if (message.isRead) {
+      return const Icon(
+        Icons.done_all,
+        size: 14,
+        color: Colors.lightBlueAccent,
+      );
+    }
+
+    // Delivered status (2 ticks)
+    if (message.isDelivered) {
+      return const Icon(
+        Icons.done_all,
+        size: 14,
+        color: Colors.white,
+      );
+    }
+
+    // Sent status (1 tick)
+    return const Icon(
+      Icons.done,
+      size: 14,
+      color: Colors.white70,
+    );
+  }
+}
+
+/// Animated typing indicator dot with bounce effect
+class _TypingDot extends StatefulWidget {
+  final int delay;
+
+  const _TypingDot({required this.delay});
+
+  @override
+  _TypingDotState createState() => _TypingDotState();
+}
+
+class _TypingDotState extends State<_TypingDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _animation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeInOut,
+      ),
+    )..addListener(() {
+        setState(() {});
+      });
+
+    // Start animation after the delay
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) {
+        _controller.repeat(reverse: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: Offset(0, -3 * _animation.value),
+      child: Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFF6B35),
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
   }
 }

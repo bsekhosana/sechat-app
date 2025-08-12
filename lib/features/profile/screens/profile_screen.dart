@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-// import '../../../shared/providers/auth_provider.dart'; // Removed - no longer needed
 import '../../../core/services/global_user_service.dart';
 import '../../../core/services/airnotifier_service.dart';
 import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/se_session_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -16,8 +15,9 @@ class ProfileScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
-              context.read<AuthProvider>().logout();
+            onPressed: () async {
+              await SeSessionService().logout();
+              // Navigate to login screen or show logout message
             },
           ),
         ],
@@ -40,7 +40,7 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Session ID: ${context.watch<AuthProvider>().sessionId ?? 'Not set'}',
+                      'Session ID: ${SeSessionService().currentSessionId ?? 'Not set'}',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
@@ -77,8 +77,7 @@ class ProfileScreen extends StatelessWidget {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () async {
-                              final sessionId =
-                                  context.read<AuthProvider>().sessionId;
+                              final sessionId = SeSessionService().currentSessionId;
                               if (sessionId != null) {
                                 await AirNotifierService.instance
                                     .initialize(sessionId: sessionId);
@@ -100,8 +99,7 @@ class ProfileScreen extends StatelessWidget {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () async {
-                              final sessionId =
-                                  context.read<AuthProvider>().sessionId;
+                              final sessionId = SeSessionService().currentSessionId;
                               if (sessionId != null) {
                                 final success = await AirNotifierService
                                     .instance

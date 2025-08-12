@@ -862,6 +862,12 @@ class SeSessionService {
   /// Get current session ID for notification services
   String? get currentSessionId => currentSession?.sessionId;
 
+  /// Get current username
+  Future<String?> getCurrentUsername() async {
+    final session = await loadSession();
+    return session?.displayName;
+  }
+
   /// Check if notification services are properly configured
   Future<bool> areNotificationServicesConfigured() async {
     try {
