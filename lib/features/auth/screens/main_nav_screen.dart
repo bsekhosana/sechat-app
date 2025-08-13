@@ -8,15 +8,15 @@ import '../../../core/services/network_service.dart';
 import '../../../core/services/indicator_service.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/connection_status_widget.dart';
-import '../../../shared/widgets/invite_user_widget.dart';
+
 import '../../../shared/widgets/profile_icon_widget.dart';
-import '../../../shared/widgets/invite_contact_dialog.dart';
+import '../../../shared/widgets/key_exchange_request_dialog.dart';
 import '../../../core/services/se_session_service.dart';
-import '../../invitations/screens/invitations_screen.dart';
+import '../../key_exchange/screens/key_exchange_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
 import '../../settings/screens/settings_screen.dart';
 import '../../chat/screens/chat_list_screen.dart';
-import '../../invitations/providers/invitation_provider.dart';
+import '../../key_exchange/providers/key_exchange_request_provider.dart';
 
 class MainNavScreen extends StatefulWidget {
   final Map<String, dynamic>? notificationPayload;
@@ -90,16 +90,24 @@ Download now and let's chat securely!
   }
 
   void _setupNotificationProviders() {
-    // Connect InvitationProvider to SimpleNotificationService
-    final invitationProvider = context.read<InvitationProvider>();
-    invitationProvider.ensureConnection();
+    // Connect KeyExchangeRequestProvider to SimpleNotificationService
+    final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
+
+    // Initialize the provider to load saved requests
+    keyExchangeProvider.initialize();
+
+    // Connect the notification service to the provider
+    SimpleNotificationService.instance.setOnKeyExchangeRequestReceived(
+      (data) => keyExchangeProvider.processReceivedKeyExchangeRequest(data),
+    );
+
     print(
-        '🔔 MainNavScreen: ✅ InvitationProvider connected to SimpleNotificationService');
+        '🔔 MainNavScreen: ✅ KeyExchangeRequestProvider connected to SimpleNotificationService and initialized');
   }
 
   static final List<Widget> _screens = <Widget>[
     const ChatListScreen(), // Chats
-    InvitationsScreen(), // Invitations
+    KeyExchangeScreen(), // Key Exchange
     NotificationsScreen(), // Notifications
     SettingsScreen(), // Settings
   ];
@@ -108,6 +116,12 @@ Download now and let's chat securely!
     setState(() {
       _selectedIndex = index;
     });
+
+    // Clear indicators based on selected tab
+    if (index == 1) {
+      // K.Exchange tab
+      _indicatorService.clearKeyExchangeIndicator();
+    }
   }
 
   @override
@@ -152,7 +166,7 @@ Download now and let's chat securely!
                                 isScrollControlled: true,
                                 backgroundColor: Colors.transparent,
                                 builder: (context) =>
-                                    const InviteContactDialog(),
+                                    const KeyExchangeRequestDialog(),
                               );
                             },
                             child: Container(
@@ -213,11 +227,8 @@ Download now and let's chat securely!
                         children: [
                           _buildNavItem(0, FontAwesomeIcons.comments, 'Chats',
                               indicatorService.hasNewChats),
-                          _buildNavItem(
-                              1,
-                              FontAwesomeIcons.userPlus,
-                              'Invitations',
-                              indicatorService.hasNewInvitations),
+                          _buildNavItem(1, FontAwesomeIcons.key, 'K.Exchange',
+                              indicatorService.hasNewKeyExchange),
                           _buildNavItem(
                               2,
                               FontAwesomeIcons.bell,

@@ -64,3 +64,5 @@ sechat_app/
 **Status**: ✅ **INTEGRATED** - AirNotifier server is now part of your workspace
 **Mount**: ✅ **ACTIVE** - Live connection to `root@41.76.111.100:1337`
 **Access**: 📁 **airnotifier_server/** - Symbolic link in your project root
+
+

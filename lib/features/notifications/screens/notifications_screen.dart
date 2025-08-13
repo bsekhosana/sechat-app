@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
-import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
+
 import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:sechat_app/features/notifications/providers/notification_provider.dart';
 import 'package:sechat_app/features/notifications/models/local_notification.dart';
@@ -277,6 +277,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         icon = Icons.check_circle;
         color = Colors.teal;
         break;
+      case NotificationType.keyExchange:
+        icon = Icons.key;
+        color = Colors.purple;
+        break;
       case NotificationType.system:
         icon = Icons.info;
         color = Colors.orange;
@@ -337,6 +341,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         // Navigate to invitations tab to see updated status
         _navigateToInvitations();
         break;
+      case NotificationType.keyExchange:
+        // Navigate to key exchange tab
+        _navigateToKeyExchange();
+        break;
       case NotificationType.system:
         // Show system notification details
         _showNotificationDetails(notification);
@@ -363,6 +371,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
 
     // Switch to invitations tab (this would need to be handled by the main nav screen)
+    // For now, we'll just navigate to the main screen
+  }
+
+  void _navigateToKeyExchange() {
+    // Navigate to main nav screen and switch to key exchange tab
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => MainNavScreen()),
+      (route) => false,
+    );
+
+    // Switch to key exchange tab (this would need to be handled by the main nav screen)
     // For now, we'll just navigate to the main screen
   }
 

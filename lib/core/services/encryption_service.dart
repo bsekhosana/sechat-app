@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../utils/encryption_error_handler.dart';
+import '../services/se_session_service.dart';
 
 class EncryptionService {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
@@ -55,7 +56,27 @@ class EncryptionService {
 
   /// Get user's private key (for decryption)
   static Future<String?> getPrivateKey() async {
-    return await _storage.read(key: _privateKeyKey);
+    try {
+      // First try to get from SeSessionService (current implementation)
+      final sessionService = SeSessionService();
+      final decryptedPrivateKey = await sessionService.getDecryptedPrivateKey();
+
+      if (decryptedPrivateKey != null && decryptedPrivateKey.isNotEmpty) {
+        print(
+            '🔒 EncryptionService: ✅ Successfully retrieved private key from session service');
+        return decryptedPrivateKey;
+      } else {
+        print(
+            '🔒 EncryptionService: No private key available from session service');
+      }
+
+      // Fallback: try to get from FlutterSecureStorage (legacy)
+      print('🔒 EncryptionService: Falling back to FlutterSecureStorage');
+      return await _storage.read(key: _privateKeyKey);
+    } catch (e) {
+      print('🔒 EncryptionService: Error getting private key: $e');
+      return null;
+    }
   }
 
   /// Get current key pair version
@@ -99,6 +120,20 @@ class EncryptionService {
       // Parse recipient's AES key
       final aesKeyBytes = base64Decode(recipientPublicKey);
 
+      // Debug: Log key details
+      print(
+          '🔒 EncryptionService: Encrypting with key length: ${aesKeyBytes.length} bytes (${aesKeyBytes.length * 8} bits)');
+      print(
+          '🔒 EncryptionService: Key format: ${recipientPublicKey.substring(0, 20)}...');
+
+      // Validate key length for AES
+      if (aesKeyBytes.length != 16 &&
+          aesKeyBytes.length != 24 &&
+          aesKeyBytes.length != 32) {
+        throw Exception(
+            'Invalid AES key length: ${aesKeyBytes.length} bytes. Expected 16, 24, or 32 bytes (128, 192, or 256 bits)');
+      }
+
       // Generate random IV for this message
       final random = _secureRandom;
       final iv = List<int>.generate(16, (i) => random.nextInt(256));
@@ -114,14 +149,62 @@ class EncryptionService {
       // Encrypt message
       final messageBytes = utf8.encode(message);
       final paddedMessage = _padMessage(messageBytes);
-      final encryptedBytes = cipher.process(Uint8List.fromList(paddedMessage));
+
+      // Debug: Log encryption details
+      print(
+          '🔒 EncryptionService: - Original message length: ${messageBytes.length} bytes');
+      print(
+          '🔒 EncryptionService: - Padded message length: ${paddedMessage.length} bytes');
+      print(
+          '🔒 EncryptionService: - Padding added: ${paddedMessage.length - messageBytes.length} bytes');
+
+      // Process the entire padded message in chunks
+      final encryptedBytes = _encryptAESBlocks(paddedMessage, aesKeyBytes, iv);
 
       // Combine IV and encrypted data
       final combined = Uint8List.fromList([...iv, ...encryptedBytes]);
 
+      // Debug: Show the final encrypted data structure
+      print('🔒 EncryptionService: Final encrypted data:');
+      print('🔒 EncryptionService: - IV length: ${iv.length} bytes');
+      print(
+          '🔒 EncryptionService: - Encrypted content length: ${encryptedBytes.length} bytes');
+      print(
+          '🔒 EncryptionService: - Combined length: ${combined.length} bytes');
+
+      // Safe substring operation for base64 result
+      final base64Result = base64Encode(combined);
+      final previewLength = base64Result.length > 50 ? 50 : base64Result.length;
+      print(
+          '🔒 EncryptionService: - Base64 result: ${base64Result.substring(0, previewLength)}...');
+
       return base64Encode(combined);
     } catch (e) {
       throw Exception('Encryption failed: $e');
+    }
+  }
+
+  /// Encrypt data in multiple AES blocks
+  static Uint8List _encryptAESBlocks(
+      List<int> paddedMessage, List<int> key, List<int> iv) {
+    try {
+      final blockSize = 16;
+      final cipher = CBCBlockCipher(AESEngine());
+      final params = ParametersWithIV(
+        KeyParameter(Uint8List.fromList(key)),
+        Uint8List.fromList(iv),
+      );
+      cipher.init(true, params);
+
+      // Process the entire message in blocks
+      final encryptedBytes = cipher.process(Uint8List.fromList(paddedMessage));
+
+      print(
+          '🔒 EncryptionService: - Encrypted ${paddedMessage.length} bytes to ${encryptedBytes.length} bytes');
+
+      return encryptedBytes;
+    } catch (e) {
+      throw Exception('AES block encryption failed: $e');
     }
   }
 
@@ -135,9 +218,29 @@ class EncryptionService {
       final aesKeyBytes = base64Decode(privateKey);
       final encryptedBytes = base64Decode(encryptedMessage);
 
+      // Debug: Log data lengths
+      print('🔒 EncryptionService: Decrypting message:');
+      print(
+          '🔒 EncryptionService: - Private key length: ${aesKeyBytes.length} bytes');
+      print(
+          '🔒 EncryptionService: - Encrypted data length: ${encryptedBytes.length} bytes');
+      print('🔒 EncryptionService: - Expected IV length: 16 bytes');
+      print(
+          '🔒 EncryptionService: - Expected encrypted content length: ${encryptedBytes.length - 16} bytes');
+
+      // Validate data length
+      if (encryptedBytes.length < 16) {
+        throw Exception(
+            'Encrypted data too short: ${encryptedBytes.length} bytes (need at least 16 bytes for IV)');
+      }
+
       // Extract IV and encrypted data
       final iv = encryptedBytes.sublist(0, 16);
       final encryptedData = encryptedBytes.sublist(16);
+
+      print('🔒 EncryptionService: - IV extracted: ${iv.length} bytes');
+      print(
+          '🔒 EncryptionService: - Encrypted content extracted: ${encryptedData.length} bytes');
 
       // Create AES cipher
       final cipher = CBCBlockCipher(AESEngine());
@@ -147,13 +250,62 @@ class EncryptionService {
       );
       cipher.init(false, params);
 
-      // Decrypt message
-      final decryptedBytes = cipher.process(Uint8List.fromList(encryptedData));
+      // Decrypt the entire encrypted data
+      final decryptedBytes = _decryptAESBlocks(encryptedData, aesKeyBytes, iv);
+
+      // Debug: Log decryption details
+      print(
+          '🔒 EncryptionService: - Decrypted bytes length: ${decryptedBytes.length}');
+      if (decryptedBytes.length > 0) {
+        print(
+            '🔒 EncryptionService: - Last byte (padding indicator): ${decryptedBytes.last}');
+        print(
+            '🔒 EncryptionService: - Last few bytes: ${decryptedBytes.sublist(decryptedBytes.length > 4 ? decryptedBytes.length - 4 : 0)}');
+
+        // Debug: Show the full decrypted content
+        print(
+            '🔒 EncryptionService: - Full decrypted bytes: ${decryptedBytes}');
+
+        // Try to decode as UTF-8 to see what the content looks like
+        try {
+          final decodedContent = utf8.decode(decryptedBytes);
+          print('🔒 EncryptionService: - Decoded content: $decodedContent');
+        } catch (e) {
+          print('🔒 EncryptionService: - Could not decode as UTF-8: $e');
+        }
+      }
+
       final unpaddedMessage = _unpadMessage(decryptedBytes.toList());
+      print(
+          '🔒 EncryptionService: - Unpadded message length: ${unpaddedMessage.length}');
 
       return utf8.decode(unpaddedMessage);
     } catch (e) {
       throw Exception('Decryption failed: $e');
+    }
+  }
+
+  /// Decrypt data in multiple AES blocks
+  static Uint8List _decryptAESBlocks(
+      List<int> encryptedData, List<int> key, List<int> iv) {
+    try {
+      final blockSize = 16;
+      final cipher = CBCBlockCipher(AESEngine());
+      final params = ParametersWithIV(
+        KeyParameter(Uint8List.fromList(key)),
+        Uint8List.fromList(iv),
+      );
+      cipher.init(false, params);
+
+      // Process the entire encrypted data
+      final decryptedBytes = cipher.process(Uint8List.fromList(encryptedData));
+
+      print(
+          '🔒 EncryptionService: - Decrypted ${encryptedData.length} bytes to ${decryptedBytes.length} bytes');
+
+      return decryptedBytes;
+    } catch (e) {
+      throw Exception('AES block decryption failed: $e');
     }
   }
 
@@ -173,6 +325,21 @@ class EncryptionService {
 
       // Convert data to JSON string
       final jsonData = json.encode(data);
+
+      // Debug: Log the message being encrypted
+      print('🔒 EncryptionService: Encrypting message:');
+      print('🔒 EncryptionService: - JSON data: $jsonData');
+      print(
+          '🔒 EncryptionService: - JSON length: ${jsonData.length} characters');
+
+      // Debug: Show the actual bytes being encrypted
+      final messageBytes = utf8.encode(jsonData);
+      print(
+          '🔒 EncryptionService: - Message bytes: ${messageBytes.sublist(0, messageBytes.length > 20 ? 20 : messageBytes.length)}...');
+      if (messageBytes.length > 20) {
+        print(
+            '🔒 EncryptionService: - Last 10 bytes: ${messageBytes.sublist(messageBytes.length - 10)}');
+      }
 
       // Encrypt the JSON string
       return encryptMessage(jsonData, recipientPublicKey);
@@ -327,16 +494,71 @@ class EncryptionService {
 
   // PKCS7 padding
   static List<int> _padMessage(List<int> message) {
-    final blockSize = 16;
-    final paddingLength = blockSize - (message.length % blockSize);
-    final padding = List<int>.filled(paddingLength, paddingLength);
-    return [...message, ...padding];
+    try {
+      final blockSize = 16;
+
+      // Calculate padding length
+      int paddingLength;
+      if (message.length % blockSize == 0) {
+        // Message is exactly block-aligned, add a full block of padding
+        paddingLength = blockSize;
+      } else {
+        // Message needs partial padding
+        paddingLength = blockSize - (message.length % blockSize);
+      }
+
+      // Create padding bytes (all with the same value)
+      final padding = List<int>.filled(paddingLength, paddingLength);
+
+      // Debug: Log padding details
+      print('🔒 EncryptionService: PKCS7 Padding:');
+      print('🔒 EncryptionService: - Message length: ${message.length} bytes');
+      print('🔒 EncryptionService: - Block size: $blockSize bytes');
+      print(
+          '🔒 EncryptionService: - Message % blockSize: ${message.length % blockSize}');
+      print('🔒 EncryptionService: - Padding length: $paddingLength bytes');
+      print(
+          '🔒 EncryptionService: - Final length: ${message.length + paddingLength} bytes');
+
+      return [...message, ...padding];
+    } catch (e) {
+      throw Exception('PKCS7 padding failed: $e');
+    }
   }
 
   // PKCS7 unpadding
   static List<int> _unpadMessage(List<int> message) {
-    final paddingLength = message.last;
-    return message.sublist(0, message.length - paddingLength);
+    try {
+      if (message.isEmpty) {
+        throw Exception('Cannot unpad empty message');
+      }
+
+      final paddingLength = message.last;
+
+      // Validate padding length
+      if (paddingLength <= 0 || paddingLength > 16) {
+        throw Exception(
+            'Invalid padding length: $paddingLength (expected 1-16)');
+      }
+
+      // Validate that we have enough bytes for the padding
+      if (message.length < paddingLength) {
+        throw Exception(
+            'Message too short for padding length: ${message.length} < $paddingLength');
+      }
+
+      // Validate that all padding bytes have the correct value
+      for (int i = message.length - paddingLength; i < message.length; i++) {
+        if (message[i] != paddingLength) {
+          throw Exception(
+              'Invalid padding byte at position $i: ${message[i]} (expected $paddingLength)');
+        }
+      }
+
+      return message.sublist(0, message.length - paddingLength);
+    } catch (e) {
+      throw Exception('PKCS7 unpadding failed: $e');
+    }
   }
 
   // Generate device ID

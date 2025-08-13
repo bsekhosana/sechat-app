@@ -9,7 +9,6 @@ import '../../auth/screens/login_screen.dart';
 import '../../auth/screens/welcome_screen.dart';
 import '../../../core/services/se_session_service.dart';
 
-import 'package:sechat_app/shared/widgets/invite_user_widget.dart';
 import 'package:sechat_app/shared/widgets/app_icon.dart';
 import 'package:sechat_app/core/services/simple_notification_service.dart';
 import 'package:sechat_app/core/services/airnotifier_service.dart';

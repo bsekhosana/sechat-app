@@ -218,6 +218,11 @@ class AirNotifierService {
         if (sessionId != null || _currentSessionId != null) {
           final sessionToLink = sessionId ?? _currentSessionId!;
           await linkTokenToSession(sessionToLink);
+
+          // For iOS, also ensure the token is properly shared across sessions
+          if (deviceType == 'ios') {
+            await _ensureIOSTokenVisibility(sessionToLink);
+          }
         }
 
         return true;
@@ -230,6 +235,87 @@ class AirNotifierService {
     } catch (e) {
       print('📱 AirNotifierService: ❌ Error registering device token: $e');
       return false;
+    }
+  }
+
+  /// Ensure iOS token is properly visible to other sessions
+  Future<void> _ensureIOSTokenVisibility(String sessionId) async {
+    try {
+      print(
+          '📱 AirNotifierService: Ensuring iOS token visibility for session: $sessionId');
+
+      // For iOS, we need to ensure the token is properly shared
+      // This might involve additional API calls to make the token discoverable
+
+      // First, check if the token is visible to other sessions
+      final visibilityResponse = await http.get(
+        Uri.parse('$_baseUrl/api/v2/sessions/$sessionId/tokens'),
+        headers: {
+          'Content-Type': 'application/json',
+          'X-An-App-Name': _appName,
+          'X-An-App-Key': _appKey,
+        },
+      );
+
+      if (visibilityResponse.statusCode == 200) {
+        final tokensData = json.decode(visibilityResponse.body);
+        final tokens = tokensData['tokens'] as List?;
+
+        if (tokens != null && tokens.isNotEmpty) {
+          print(
+              '📱 AirNotifierService: ✅ iOS token is visible to other sessions');
+          print(
+              '📱 AirNotifierService: Found ${tokens.length} tokens for session: $sessionId');
+        } else {
+          print(
+              '📱 AirNotifierService: ⚠️ iOS token not visible to other sessions, attempting to fix...');
+          await _fixIOSTokenVisibility(sessionId);
+        }
+      } else {
+        print(
+            '📱 AirNotifierService: ⚠️ Could not check iOS token visibility: ${visibilityResponse.statusCode}');
+      }
+    } catch (e) {
+      print('📱 AirNotifierService: Error ensuring iOS token visibility: $e');
+    }
+  }
+
+  /// Fix iOS token visibility issues
+  Future<void> _fixIOSTokenVisibility(String sessionId) async {
+    try {
+      print(
+          '📱 AirNotifierService: Attempting to fix iOS token visibility for session: $sessionId');
+
+      // Try to re-register the token with explicit iOS device type
+      if (_currentDeviceToken != null) {
+        final fixPayload = {
+          'token': _currentDeviceToken,
+          'device': 'ios',
+          'channel': 'default',
+          'user_id': sessionId,
+          'platform': 'ios',
+          'visibility': 'public', // Ensure token is visible to other sessions
+        };
+
+        final fixResponse = await http.post(
+          Uri.parse('$_baseUrl/api/v2/tokens/ios'),
+          headers: {
+            'Content-Type': 'application/json',
+            'X-An-App-Name': _appName,
+            'X-An-App-Key': _appKey,
+          },
+          body: json.encode(fixPayload),
+        );
+
+        if (fixResponse.statusCode == 200 || fixResponse.statusCode == 201) {
+          print('📱 AirNotifierService: ✅ iOS token visibility fixed');
+        } else {
+          print(
+              '📱 AirNotifierService: ⚠️ Could not fix iOS token visibility: ${fixResponse.statusCode}');
+        }
+      }
+    } catch (e) {
+      print('📱 AirNotifierService: Error fixing iOS token visibility: $e');
     }
   }
 
@@ -602,6 +688,14 @@ class AirNotifierService {
       print('📱 AirNotifierService: Data payload: $data');
       print(
           '📱 AirNotifierService: Encrypted: $encrypted, Checksum: $checksum');
+
+      // For iOS devices, check token visibility before sending
+      if (_currentDeviceToken != null &&
+          _detectDeviceType(_currentDeviceToken!) == 'ios') {
+        print(
+            '📱 AirNotifierService: iOS device detected, checking token visibility...');
+        await _ensureIOSTokenVisibility(_currentSessionId ?? '');
+      }
 
       // Deduplication: Check if this exact notification was recently sent
       if (data != null && data.containsKey('invitationId')) {
@@ -1230,10 +1324,25 @@ class AirNotifierService {
   // Detect device type based on token format
   String _detectDeviceType(String token) {
     // iOS tokens are typically 64 characters long and contain alphanumeric characters
+    // They also have a specific format pattern
     if (token.length == 64 && RegExp(r'^[A-Fa-f0-9]+$').hasMatch(token)) {
-      return 'ios';
+      // Additional iOS token validation
+      // iOS tokens typically don't contain certain patterns that Android tokens have
+      if (!token.contains(':')) {
+        // Android FCM tokens often contain colons
+        return 'ios';
+      }
     }
+
     // Android FCM tokens are typically longer and contain different characters
+    // They can be 140+ characters and often contain colons, dots, and other special chars
+    if (token.length > 100 || token.contains(':') || token.contains('.')) {
+      return 'android';
+    }
+
+    // Fallback: if we can't determine, assume Android (more common)
+    print(
+        '📱 AirNotifierService: ⚠️ Could not determine device type for token, assuming Android');
     return 'android';
   }
 

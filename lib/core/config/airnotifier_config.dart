@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 /// AirNotifier configuration for different environments
 class AirNotifierConfig {
   // Environment detection
-  static bool get isDevelopment => kDebugMode;
-  static bool get isProduction => !kDebugMode;
+  static bool get isDevelopment => false; // kDebugMode;
+  static bool get isProduction => true; //!kDebugMode;
 
   // Server URLs
   static const String _devServer = 'http://41.76.111.100:1337';

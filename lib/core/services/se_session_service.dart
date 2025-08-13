@@ -196,13 +196,17 @@ class SeSessionService {
     }
   }
 
-  // Generate simple key pair (simplified for demo)
+  // Generate proper AES key pair for encryption
   Future<Map<String, String>> _generateKeyPair() async {
     final random = Random.secure();
-    final publicKey =
-        base64.encode(List<int>.generate(256, (i) => random.nextInt(256)));
-    final privateKey =
-        base64.encode(List<int>.generate(512, (i) => random.nextInt(256)));
+
+    // Generate a proper 256-bit (32-byte) AES key
+    final aesKeyBytes = List<int>.generate(32, (i) => random.nextInt(256));
+
+    // For now, we'll use the same key for both public and private
+    // In a real implementation, you'd use asymmetric encryption (RSA/ECC)
+    final publicKey = base64.encode(aesKeyBytes);
+    final privateKey = base64.encode(aesKeyBytes);
 
     return {
       'publicKey': publicKey,
@@ -245,7 +249,7 @@ class SeSessionService {
   }
 
   // Decrypt private key with device key
-  Future<String> _decryptPrivateKey(String encryptedPrivateKey) async {
+  Future<String> decryptPrivateKey(String encryptedPrivateKey) async {
     final deviceKey = await _getDeviceEncryptionKey();
     final key = encrypt.Key.fromBase64(deviceKey);
 
@@ -342,6 +346,10 @@ class SeSessionService {
         try {
           final sessionData = SessionData.fromJson(jsonDecode(sessionJson));
           _currentSession = sessionData;
+
+          // Check and fix key formats if needed
+          await _checkAndFixKeyFormats();
+
           return sessionData;
         } catch (e) {
           // Fall back to individual fields
@@ -377,6 +385,10 @@ class SeSessionService {
             passwordHash: passwordHash,
           );
           _currentSession = sessionData;
+
+          // Check and fix key formats if needed
+          await _checkAndFixKeyFormats();
+
           return sessionData;
         } catch (e) {
           print('🔍 SeSessionService: Error reconstructing session: $e');
@@ -387,6 +399,31 @@ class SeSessionService {
     } catch (e) {
       print('🔍 SeSessionService: Error loading session: $e');
       return null;
+    }
+  }
+
+  /// Check and fix key formats if they're in the old 256-byte format
+  Future<void> _checkAndFixKeyFormats() async {
+    try {
+      if (_currentSession == null) return;
+
+      final publicKeyBytes = base64.decode(_currentSession!.publicKey);
+      print(
+          '🔍 SeSessionService: Checking key format: ${publicKeyBytes.length} bytes');
+
+      // If keys are in old 256-byte format, regenerate them
+      if (publicKeyBytes.length == 256) {
+        print(
+            '🔍 SeSessionService: ⚠️ Detected old 256-byte key format, regenerating...');
+        await regenerateProperKeys();
+      } else if (publicKeyBytes.length == 32) {
+        print('🔍 SeSessionService: ✅ Keys are in correct 32-byte format');
+      } else {
+        print(
+            '🔍 SeSessionService: ⚠️ Unexpected key length: ${publicKeyBytes.length} bytes');
+      }
+    } catch (e) {
+      print('🔍 SeSessionService: Error checking key formats: $e');
     }
   }
 
@@ -714,7 +751,7 @@ class SeSessionService {
 
     try {
       // Try to decrypt the private key
-      await _decryptPrivateKey(_currentSession!.encryptedPrivateKey);
+      await decryptPrivateKey(_currentSession!.encryptedPrivateKey);
       return true;
     } catch (e) {
       print('Session integrity check failed: $e');
@@ -891,6 +928,74 @@ class SeSessionService {
     } catch (e) {
       print('🔍 SeSessionService: Error checking notification services: $e');
       return false;
+    }
+  }
+
+  /// Regenerate proper AES keys for existing session (fixes old 256-byte keys)
+  Future<void> regenerateProperKeys() async {
+    try {
+      print(
+          '🔄 SeSessionService: Regenerating proper AES keys for current session');
+
+      if (_currentSession == null) {
+        print('🔄 SeSessionService: No current session to regenerate keys for');
+        return;
+      }
+
+      // Generate new proper AES keys
+      final newKeyPair = await _generateKeyPair();
+
+      // Encrypt the new private key
+      final encryptedPrivateKey =
+          await _encryptPrivateKey(newKeyPair['privateKey']!);
+
+      // Create new session data with updated keys
+      final updatedSession = SessionData(
+        sessionId: _currentSession!.sessionId,
+        publicKey: newKeyPair['publicKey']!,
+        encryptedPrivateKey: encryptedPrivateKey,
+        createdAt: _currentSession!.createdAt,
+        displayName: _currentSession!.displayName,
+        passwordHash: _currentSession!.passwordHash,
+        isLoggedIn: _currentSession!.isLoggedIn,
+      );
+
+      // Update the current session reference
+      _currentSession = updatedSession;
+
+      // Save the updated session
+      await _storeSession(_currentSession!);
+
+      print('🔄 SeSessionService: ✅ Proper AES keys regenerated and saved');
+      print(
+          '🔄 SeSessionService: New public key length: ${base64.decode(newKeyPair['publicKey']!).length} bytes');
+    } catch (e) {
+      print('🔄 SeSessionService: ❌ Error regenerating keys: $e');
+    }
+  }
+
+  /// Get decrypted private key for encryption/decryption operations
+  Future<String?> getDecryptedPrivateKey() async {
+    try {
+      if (_currentSession == null) {
+        print('🔍 SeSessionService: No current session available');
+        return null;
+      }
+
+      if (_currentSession!.encryptedPrivateKey.isEmpty) {
+        print(
+            '🔍 SeSessionService: No encrypted private key in current session');
+        return null;
+      }
+
+      final decryptedKey =
+          await decryptPrivateKey(_currentSession!.encryptedPrivateKey);
+      print(
+          '🔍 SeSessionService: ✅ Successfully retrieved decrypted private key');
+      return decryptedKey;
+    } catch (e) {
+      print('🔍 SeSessionService: ❌ Error getting decrypted private key: $e');
+      return null;
     }
   }
 }

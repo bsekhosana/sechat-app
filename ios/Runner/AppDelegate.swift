@@ -72,6 +72,13 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
         print("📱 iOS: Flutter requested device token")
         // The device token will be sent via didRegisterForRemoteNotificationsWithDeviceToken
         result(nil)
+      case "registerForRemoteNotifications":
+        print("📱 iOS: Flutter requested registration for remote notifications")
+        DispatchQueue.main.async {
+          UIApplication.shared.registerForRemoteNotifications()
+          print("📱 iOS: ✅ Registration for remote notifications completed")
+        }
+        result(true)
       case "requestNotificationPermissions":
         print("📱 iOS: Flutter requested notification permissions")
         self?.requestNotificationPermissions { granted in

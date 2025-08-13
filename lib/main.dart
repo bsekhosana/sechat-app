@@ -8,12 +8,13 @@ import 'dart:io' show Platform;
 
 // import 'features/search/providers/search_provider.dart'; // Removed search functionality
 // import 'features/chat/providers/chat_provider.dart'; // Temporarily disabled
-import 'features/invitations/providers/invitation_provider.dart';
+import 'features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'shared/widgets/app_lifecycle_handler.dart';
+import 'shared/widgets/notification_permission_dialog.dart';
 import 'core/services/simple_notification_service.dart';
 import 'core/services/se_session_service.dart';
 import 'core/services/se_shared_preference_service.dart';
@@ -64,7 +65,8 @@ Future<void> main() async {
       providers: [
         // ChangeNotifierProvider(create: (_) => SearchProvider()), // Removed search functionality
         // ChangeNotifierProvider(create: (_) => ChatProvider()), // Temporarily disabled
-        ChangeNotifierProvider(create: (_) => InvitationProvider()),
+        ChangeNotifierProvider(
+            create: (_) => KeyExchangeRequestProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         // ChangeNotifierProvider(create: (_) => AuthProvider()), // Temporarily disabled
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
@@ -80,24 +82,6 @@ void _setupSimpleNotifications() {
   final notificationService = SimpleNotificationService.instance;
 
   // Set up notification callbacks
-  notificationService
-      .setOnInvitationReceived((senderId, senderName, invitationId) async {
-    // Force refresh of invitations list by triggering a rebuild
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        // This will trigger a rebuild of the invitations screen
-      } catch (e) {
-        print('🔔 Main: Error refreshing invitations screen: $e');
-      }
-    });
-  });
-
-  notificationService.setOnInvitationResponse(
-      (responderId, responderName, status, {conversationGuid}) async {
-    // The invitation response will be handled by the SimpleNotificationService
-    // which will show a local notification and trigger UI updates
-    // The InvitationProvider will be notified through the notification system
-  });
 
   notificationService.setOnMessageReceived((senderId, senderName, message) {
     // The notification will be handled by the SimpleNotificationService
@@ -112,10 +96,10 @@ void _setupSimpleNotifications() {
 
 // Set up provider instances for notification service
 void _setupNotificationProviders(BuildContext context) {
-  // Connect InvitationProvider to SimpleNotificationService
-  final invitationProvider = context.read<InvitationProvider>();
-  SimpleNotificationService.instance.setInvitationProvider(invitationProvider);
-  print('🔔 Main: ✅ InvitationProvider connected to SimpleNotificationService');
+  // Connect KeyExchangeRequestProvider to SimpleNotificationService
+  final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
+  print(
+      '🔔 Main: ✅ KeyExchangeRequestProvider connected to SimpleNotificationService');
 }
 
 // Set up method channels and event channels for native communication
@@ -312,6 +296,11 @@ class _AuthCheckerState extends State<AuthChecker> {
           print(
               '🔍 AuthChecker: User is logged in, initializing notification services...');
           await seSessionService.initializeNotificationServices();
+
+          // Check notification permissions after services are initialized
+          print('🔍 AuthChecker: Checking notification permissions...');
+          await _checkNotificationPermissions();
+
           print('🔍 AuthChecker: User is logged in, navigating to main screen');
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => MainNavScreen()),
@@ -340,6 +329,23 @@ class _AuthCheckerState extends State<AuthChecker> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       );
+    }
+  }
+
+  /// Check notification permissions and show dialog if needed
+  Future<void> _checkNotificationPermissions() async {
+    if (!mounted) return;
+
+    try {
+      // Small delay to ensure the app is fully loaded
+      await Future.delayed(const Duration(milliseconds: 1000));
+
+      if (!mounted) return;
+
+      // Check and show permission dialog if needed
+      await NotificationPermissionHelper.checkAndRequestPermissions(context);
+    } catch (e) {
+      print('🔍 AuthChecker: Error checking notification permissions: $e');
     }
   }
 

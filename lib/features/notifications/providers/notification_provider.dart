@@ -19,15 +19,10 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   void _setupNotificationServiceCallback() {
-    SimpleNotificationService.instance.setOnInvitationReceived(
-      (senderId, senderName, invitationId) {
-        _handleNotificationFromService('New Invitation',
-            '$senderName would like to connect', 'invitation', {
-          'senderId': senderId,
-          'senderName': senderName,
-          'invitationId': invitationId,
-        });
-      },
+    // Connect to SimpleNotificationService for key exchange notifications
+    SimpleNotificationService.instance.setOnNotificationReceived(
+      (title, body, type, data) =>
+          _handleNotificationFromService(title, body, type, data),
     );
   }
 
@@ -39,11 +34,17 @@ class NotificationProvider extends ChangeNotifier {
   ) {
     NotificationType notificationType;
     switch (type) {
-      case 'invitation':
-      case 'invitation_sent':
-      case 'invitation_deleted':
-      case 'invitation_cancelled':
-        notificationType = NotificationType.invitation;
+      case 'key_exchange_request':
+        notificationType = NotificationType.keyExchange;
+        break;
+      case 'key_exchange_accepted':
+        notificationType = NotificationType.keyExchange;
+        break;
+      case 'key_exchange_declined':
+        notificationType = NotificationType.keyExchange;
+        break;
+      case 'key_exchange_sent':
+        notificationType = NotificationType.keyExchange;
         break;
       case 'message':
         notificationType = NotificationType.message;
@@ -165,6 +166,11 @@ class NotificationProvider extends ChangeNotifier {
       case 'invitation_cancelled':
       case 'invitation_response':
         return NotificationType.invitation;
+      case 'key_exchange_request':
+      case 'key_exchange_accepted':
+      case 'key_exchange_declined':
+      case 'key_exchange_sent':
+        return NotificationType.keyExchange;
       case 'message':
         return NotificationType.message;
       default:
@@ -202,6 +208,8 @@ class NotificationProvider extends ChangeNotifier {
         return 'message';
       case NotificationType.invitationResponse:
         return 'invitation_response';
+      case NotificationType.keyExchange:
+        return 'key_exchange';
       case NotificationType.system:
         return 'system';
     }

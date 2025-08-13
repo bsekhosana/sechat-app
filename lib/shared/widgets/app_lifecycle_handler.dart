@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import '../../core/services/se_session_service.dart';
+import '../../core/services/simple_notification_service.dart';
+import 'notification_permission_dialog.dart';
 
 class AppLifecycleHandler extends StatefulWidget {
   final Widget child;
@@ -62,15 +64,20 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     }
   }
 
-  void _handleAppResumed() async {
-    try {
-      // SeSessionService doesn't have lifecycle methods
-      // Notification services handle this automatically
-      print(
-          '📱 AppLifecycleHandler: App resumed - notification services active');
-    } catch (e) {
-      print('📱 AppLifecycleHandler: Error handling app resume: $e');
-    }
+  void _handleAppResumed() {
+    print('🔄 AppLifecycleHandler: App resumed, refreshing services...');
+    
+    // Refresh notification permissions
+    SimpleNotificationService.instance.refreshPermissions();
+    
+    // Validate permission status for iOS
+    SimpleNotificationService.instance.validatePermissionStatus();
+    
+    // Show permission dialog if needed
+    NotificationPermissionHelper.showPermissionDialogIfNeeded(context);
+    
+    // Refresh other services as needed
+    // ... existing refresh logic ...
   }
 
   void _handleAppPaused() async {

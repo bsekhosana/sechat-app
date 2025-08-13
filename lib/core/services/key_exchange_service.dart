@@ -4,6 +4,7 @@ import 'package:sechat_app/core/services/encryption_service.dart';
 import 'package:sechat_app/core/services/airnotifier_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:uuid/uuid.dart';
+import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 
 /// Service to handle secure key exchange between users
 class KeyExchangeService {
@@ -40,7 +41,7 @@ class KeyExchangeService {
   }
 
   /// Request key exchange with another user
-  Future<bool> requestKeyExchange(String recipientId) async {
+  Future<bool> requestKeyExchange(String recipientId, {String? requestPhrase}) async {
     try {
       print('🔑 KeyExchangeService: Requesting key exchange with $recipientId');
 
@@ -52,13 +53,18 @@ class KeyExchangeService {
         throw Exception('User not logged in');
       }
 
-      // Format key exchange request
-      final keyExchangeRequest = {
+      // Generate request ID
+      final requestId = const Uuid().v4();
+      
+      // Create the key exchange request data
+      final keyExchangeRequestData = {
         'type': 'key_exchange_request',
         'sender_id': currentUserId,
         'public_key': ourKeys['publicKey'],
         'version': ourKeys['version'],
         'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'request_id': requestId,
+        'request_phrase': requestPhrase ?? 'New encryption key exchange request',
       };
 
       // Store pending exchange
@@ -69,15 +75,8 @@ class KeyExchangeService {
           await AirNotifierService.instance.sendNotificationToSession(
         sessionId: recipientId,
         title: 'Key Exchange Request',
-        body: 'New encryption key exchange request',
-        data: {
-          'type': 'key_exchange_request',
-          'sender_id': currentUserId,
-          'public_key': ourKeys['publicKey'],
-          'version': ourKeys['version'],
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-          'request_id': const Uuid().v4(),
-        },
+        body: requestPhrase ?? 'New encryption key exchange request',
+        data: keyExchangeRequestData,
         sound: null, // Silent notification
         badge: 0, // No badge
         encrypted:
@@ -87,17 +86,46 @@ class KeyExchangeService {
       if (success) {
         print(
             '🔑 KeyExchangeService: ✅ Key exchange request sent successfully to $recipientId');
+        
+        // Create a local record of the sent request
+        await _createLocalSentRequest(requestId, currentUserId, recipientId, requestPhrase);
+        
+        return true;
       } else {
         print(
             '🔑 KeyExchangeService: ❌ Failed to send key exchange request to $recipientId');
         // Remove from pending exchanges if failed
         await _removePendingExchange(recipientId);
+        return false;
       }
-
-      return success;
     } catch (e) {
       print('🔑 KeyExchangeService: Error requesting key exchange: $e');
       return false;
+    }
+  }
+
+  /// Create a local record of the sent key exchange request
+  Future<void> _createLocalSentRequest(String requestId, String senderId, String recipientId, String? requestPhrase) async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+      final existingRequests = await prefsService.getJsonList('key_exchange_requests') ?? [];
+      
+      final sentRequest = {
+        'id': requestId,
+        'fromSessionId': senderId,
+        'toSessionId': recipientId,
+        'requestPhrase': requestPhrase ?? 'New encryption key exchange request',
+        'status': 'sent',
+        'timestamp': DateTime.now().toIso8601String(),
+        'type': 'key_exchange_request',
+      };
+      
+      existingRequests.add(sentRequest);
+      await prefsService.setJsonList('key_exchange_requests', existingRequests);
+      
+      print('🔑 KeyExchangeService: ✅ Local sent request record created');
+    } catch (e) {
+      print('🔑 KeyExchangeService: Error creating local sent request: $e');
     }
   }
 

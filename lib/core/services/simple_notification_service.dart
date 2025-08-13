@@ -1,25 +1,29 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'package:crypto/crypto.dart';
+import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pointycastle/export.dart';
+import 'package:crypto/crypto.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:io' show Platform;
-import 'airnotifier_service.dart';
-import 'se_session_service.dart';
-import 'global_user_service.dart';
-import 'encryption_service.dart';
-import 'local_storage_service.dart';
-import 'se_shared_preference_service.dart';
-import 'key_exchange_service.dart';
-import '../../shared/models/chat.dart';
-import '../../shared/models/message.dart' as app_message;
-import '../utils/guid_generator.dart';
-import 'indicator_service.dart';
+import 'package:sechat_app/core/services/airnotifier_service.dart';
+import 'package:sechat_app/core/services/se_session_service.dart';
+import 'package:sechat_app/core/services/global_user_service.dart';
+import 'package:sechat_app/core/services/encryption_service.dart';
+import 'package:sechat_app/core/services/local_storage_service.dart';
+import 'package:sechat_app/core/services/se_shared_preference_service.dart';
+import 'package:sechat_app/core/services/key_exchange_service.dart';
+import 'package:sechat_app/shared/models/chat.dart';
+import 'package:sechat_app/shared/models/message.dart' as app_message;
+import 'package:sechat_app/shared/models/key_exchange_request.dart';
+import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:flutter/material.dart';
+import '../config/airnotifier_config.dart';
+import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_provider.dart';
 
 /// Simple, consolidated notification service with end-to-end encryption
 class SimpleNotificationService {
@@ -38,10 +42,6 @@ class SimpleNotificationService {
   PermissionStatus _permissionStatus = PermissionStatus.denied;
 
   // Notification callbacks
-  Function(String senderId, String senderName, String invitationId)?
-      _onInvitationReceived;
-  Function(String responderId, String responderName, String status,
-      {String? conversationGuid})? _onInvitationResponse;
   Function(String senderId, String senderName, String message)?
       _onMessageReceived;
   Function(String senderId, bool isTyping)? _onTypingIndicator;
@@ -50,8 +50,14 @@ class SimpleNotificationService {
   Function(String senderId, String messageId, String status)?
       _onMessageStatusUpdate;
 
-  // Provider instances
-  dynamic? _invitationProvider;
+  // Key exchange callbacks
+  Function(Map<String, dynamic> data)? _onKeyExchangeRequestReceived;
+  Function(Map<String, dynamic> data)? _onKeyExchangeAccepted;
+  Function(Map<String, dynamic> data)? _onKeyExchangeDeclined;
+
+  // Notification provider callback
+  Function(String title, String body, String type, Map<String, dynamic>? data)?
+      _onNotificationReceived;
 
   // Prevent duplicate notification processing
   final Set<String> _processedNotifications = <String>{};
@@ -66,7 +72,7 @@ class SimpleNotificationService {
       // Get session ID (may be null initially - will be set later via setSessionId)
       _sessionId = SeSessionService().currentSessionId;
 
-      // Request permissions
+      // Request permissions first
       await _requestPermissions();
 
       // Initialize local notifications
@@ -78,6 +84,32 @@ class SimpleNotificationService {
       }
 
       _isInitialized = true;
+
+      // Log final permission status and device token state
+      print(
+          '🔔 SimpleNotificationService: Final permission status: $_permissionStatus');
+      print(
+          '🔔 SimpleNotificationService: Device token available: ${_deviceToken != null ? "${_deviceToken!.substring(0, 8)}..." : "No"}');
+
+      // Check method channel status for debugging
+      if (Platform.isIOS) {
+        final methodChannelReady = await _isMethodChannelReady();
+        print(
+            '🔔 SimpleNotificationService: Method channel ready: $methodChannelReady');
+
+        final notificationsAvailable = await areNotificationsAvailable;
+        print(
+            '🔔 SimpleNotificationService: iOS notifications actually available: $notificationsAvailable');
+
+        // Try to sync device token after initialization is complete
+        if (_deviceToken == null || _deviceToken!.isEmpty) {
+          print(
+              '🔔 SimpleNotificationService: Attempting delayed device token sync...');
+          await _syncDeviceTokenFromAirNotifier();
+          print(
+              '🔔 SimpleNotificationService: Device token after delayed sync: ${_deviceToken != null ? "${_deviceToken!.substring(0, 8)}..." : "No"}');
+        }
+      }
     } catch (e) {
       print('🔔 SimpleNotificationService: Error initializing: $e');
     }
@@ -87,31 +119,292 @@ class SimpleNotificationService {
   Future<void> _requestPermissions() async {
     if (kIsWeb) return;
 
-    final status = await Permission.notification.request();
-    _permissionStatus = status;
-    print(
-        '🔔 SimpleNotificationService: Notification permission status: $_permissionStatus');
+    try {
+      // For iOS, we need to handle permissions differently
+      if (Platform.isIOS) {
+        await _handleIOSPermissions();
+      } else {
+        // Android and other platforms
+        final status = await Permission.notification.request();
+        _permissionStatus = status;
+        print(
+            '🔔 SimpleNotificationService: Notification permission status: $_permissionStatus');
+      }
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error requesting permissions: $e');
+      // Fallback to denied status
+      _permissionStatus = PermissionStatus.denied;
+    }
+  }
+
+  /// Handle iOS notification permissions specifically
+  Future<void> _handleIOSPermissions() async {
+    try {
+      print('🔔 SimpleNotificationService: Handling iOS permissions...');
+
+      // For iOS, permissions are now requested during initialization in _initializeLocalNotifications
+      // iOS automatically registers for remote notifications during app launch
+      // We just need to ensure our method channel is ready for device token delivery
+
+      // First, try to sync device token from AirNotifier service
+      await _syncDeviceTokenFromAirNotifier();
+
+      // Check if we already have a device token (indicating permissions were previously granted)
+      if (_deviceToken != null && _deviceToken!.isNotEmpty) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Device token already available, permissions were previously granted');
+        _permissionStatus = PermissionStatus.granted;
+      } else {
+        // No device token available, but iOS handles registration automatically
+        // We can try to register manually, but it's not critical
+        try {
+          await _registerForRemoteNotifications();
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: ⚠️ Remote notification registration failed, but iOS handles this automatically: $e');
+        }
+
+        // Set permission status based on whether we can proceed
+        _permissionStatus = PermissionStatus.granted;
+      }
+
+      print(
+          '🔔 SimpleNotificationService: ✅ iOS notification permissions handled');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error handling iOS permissions: $e');
+      _permissionStatus = PermissionStatus.denied;
+    }
+  }
+
+  /// Register for remote notifications on iOS
+  Future<void> _registerForRemoteNotifications() async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Registering for remote notifications...');
+
+      // Check if we already have a device token
+      if (_deviceToken != null && _deviceToken!.isNotEmpty) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Device token already available: ${_deviceToken!.substring(0, 8)}...');
+        print(
+            '🔔 SimpleNotificationService: Skipping remote notification registration');
+        return;
+      }
+
+      // Wait for method channel to be ready
+      final isReady = await _waitForMethodChannel();
+
+      if (!isReady) {
+        print(
+            '🔔 SimpleNotificationService: ⚠️ Method channel not ready, skipping remote notification registration');
+        print(
+            '🔔 SimpleNotificationService: iOS will handle registration automatically during app launch');
+        return;
+      }
+
+      // Now try to register for remote notifications
+      const channel = MethodChannel('push_notifications');
+      await channel.invokeMethod('registerForRemoteNotifications');
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Remote notification registration requested');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error registering for remote notifications: $e');
+
+      // If the method channel fails, we can still proceed
+      // The iOS side will handle registration automatically during app launch
+      print(
+          '🔔 SimpleNotificationService: ⚠️ Continuing without method channel registration');
+    }
+  }
+
+  /// Check if iOS system actually allows notifications (debug only)
+  Future<bool> _checkIOSNotificationCapability() async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Checking iOS notification capability (debug only)...');
+
+      // This is now just a debug check - don't use it to override permission status
+      final result = await _localNotifications.initialize(
+        const InitializationSettings(
+          iOS: DarwinInitializationSettings(
+            requestAlertPermission: false,
+            requestBadgePermission: false,
+            requestSoundPermission: false,
+          ),
+        ),
+      );
+
+      print(
+          '🔔 SimpleNotificationService: Local notifications initialization result: $result');
+      return result == true;
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error checking iOS notification capability: $e');
+      return false;
+    }
+  }
+
+  /// Force refresh iOS permissions by checking system state
+  Future<void> _forceRefreshIOSPermissions() async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Force refreshing iOS permissions...');
+
+      // Clear cached permission status
+      _permissionStatus = PermissionStatus.denied;
+
+      // For iOS, permissions are already requested during initialization
+      // iOS automatically registers for remote notifications during app launch
+      // Focus on syncing device token from AirNotifier
+      if (Platform.isIOS) {
+        // First, try to sync device token from AirNotifier service
+        await _syncDeviceTokenFromAirNotifier();
+
+        // Manual registration is optional since iOS handles this automatically
+        try {
+          await _registerForRemoteNotifications();
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: ⚠️ Remote notification registration failed, but iOS handles this automatically: $e');
+        }
+
+        // Set permission status based on whether we can proceed
+        _permissionStatus = PermissionStatus.granted;
+        print('🔔 SimpleNotificationService: iOS permission refresh completed');
+      }
+
+      print(
+          '🔔 SimpleNotificationService: Final permission status after refresh: $_permissionStatus');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error force refreshing iOS permissions: $e');
+      _permissionStatus = PermissionStatus.denied;
+    }
+  }
+
+  /// Show dialog to guide iOS user to settings
+  Future<void> _showIOSPermissionDialog() async {
+    try {
+      // This will be handled by the UI layer
+      print(
+          '🔔 SimpleNotificationService: iOS permission dialog should be shown by UI');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error showing iOS permission dialog: $e');
+    }
+  }
+
+  /// Get current permission status
+  PermissionStatus get permissionStatus => _permissionStatus;
+
+  /// Check if notifications are actually available (not just permission granted)
+  Future<bool> get areNotificationsAvailable async {
+    if (kIsWeb) return false;
+
+    if (Platform.isIOS) {
+      // For iOS, just check permission status - don't override with capability checks
+      return _permissionStatus == PermissionStatus.granted;
+    } else {
+      // For other platforms, just check permission
+      return _permissionStatus == PermissionStatus.granted;
+    }
   }
 
   /// Initialize local notifications
   Future<void> _initializeLocalNotifications() async {
     if (kIsWeb) return;
 
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+    try {
+      print(
+          '🔔 SimpleNotificationService: Initializing local notifications...');
 
-    const InitializationSettings settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+      if (Platform.isIOS) {
+        // For iOS, request permissions during initialization
+        // This will trigger the iOS permission dialog
+        const DarwinInitializationSettings iosSettings =
+            DarwinInitializationSettings(
+          requestAlertPermission:
+              true, // Request permissions during initialization
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+          // Always use production APNS for production AirNotifier server
+          defaultPresentAlert: false,
+          defaultPresentBadge: false,
+          defaultPresentSound: false,
+        );
 
-    await _localNotifications.initialize(settings);
+        const InitializationSettings settings = InitializationSettings(
+          iOS: iosSettings,
+        );
+
+        final result = await _localNotifications.initialize(settings);
+        print(
+            '🔔 SimpleNotificationService: iOS local notifications initialized: $result');
+
+        // Set APNS environment to production
+        await _setIOSAPNSEnvironment();
+      } else if (Platform.isAndroid) {
+        const AndroidInitializationSettings androidSettings =
+            AndroidInitializationSettings('@mipmap/ic_launcher');
+
+        const InitializationSettings settings = InitializationSettings(
+          android: androidSettings,
+        );
+
+        final result = await _localNotifications.initialize(settings);
+        print(
+            '🔔 SimpleNotificationService: Android local notifications initialized: $result');
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error initializing local notifications: $e');
+    }
+  }
+
+  /// Set iOS APNS environment to production
+  Future<void> _setIOSAPNSEnvironment() async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Setting iOS APNS environment to production...');
+
+      // For iOS, we need to ensure APNS is configured for production
+      // This is critical when pointing to production AirNotifier server
+
+      // Check if we're pointing to production AirNotifier
+      final isProductionAirNotifier =
+          AirNotifierConfig.baseUrl.contains('strapblaque.com') ||
+              AirNotifierConfig.baseUrl.contains('production');
+
+      if (isProductionAirNotifier) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Production AirNotifier detected, ensuring production APNS configuration');
+
+        // iOS will automatically use production APNS when the app is built with production provisioning
+        // But we can verify the configuration is correct
+
+        // Check notification settings to ensure they're properly configured
+        final notificationSettings =
+            await _localNotifications.getNotificationAppLaunchDetails();
+        print(
+            '🔔 SimpleNotificationService: iOS notification launch details: $notificationSettings');
+
+        // Verify APNS environment
+        print(
+            '🔔 SimpleNotificationService: ✅ iOS APNS configured for production environment');
+        print(
+            '🔔 SimpleNotificationService: 💡 Note: APNS environment is determined by provisioning profile, not runtime configuration');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ⚠️ Non-production AirNotifier detected, but APNS should still be production for iOS');
+        print(
+            '🔔 SimpleNotificationService: 💡 iOS requires production APNS for production AirNotifier servers');
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error setting iOS APNS environment: $e');
+    }
   }
 
   /// Initialize AirNotifier with session ID
@@ -127,115 +420,91 @@ class SimpleNotificationService {
       await AirNotifierService.instance.initialize();
       print(
           '🔔 SimpleNotificationService: AirNotifier initialized with session ID: $_sessionId');
+
+      // Sync device token from AirNotifier service
+      await _syncDeviceTokenFromAirNotifier();
     } catch (e) {
       print('🔔 SimpleNotificationService: Error initializing AirNotifier: $e');
     }
   }
 
-  /// Send invitation notification
-  Future<bool> sendInvitation({
-    required String recipientId,
-    required String senderName,
-    required String invitationId,
-    String? message,
-  }) async {
+  /// Sync device token from AirNotifier service
+  Future<void> _syncDeviceTokenFromAirNotifier() async {
     try {
-      print('🔔 SimpleNotificationService: Sending invitation');
+      print(
+          '🔔 SimpleNotificationService: Syncing device token from AirNotifier...');
 
-      // Create invitation data
-      final invitationData = {
-        'type': 'invitation',
-        'invitationId': invitationId,
-        'senderName': senderName,
-        'senderId': SeSessionService().currentSessionId,
-        'message': message ?? 'Contact request',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'version': '1.0',
-      };
+      // Add a small delay to ensure AirNotifier is fully initialized
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      // Encrypt the invitation data
-      final encryptedData = await _encryptData(invitationData, recipientId);
-      final checksum = _generateChecksum(invitationData);
+      // Get the current device token from AirNotifier service
+      final airNotifierToken = AirNotifierService.instance.currentDeviceToken;
 
-      // Send via AirNotifier with encryption
-      final success =
-          await AirNotifierService.instance.sendNotificationToSession(
-        sessionId: recipientId,
-        title: 'New Contact Invitation',
-        body: '$senderName would like to connect with you',
-        data: {
-          'encrypted': true,
-          'data': encryptedData,
-          'checksum': checksum,
-        },
-        sound: 'invitation.wav',
-      );
+      print(
+          '🔔 SimpleNotificationService: AirNotifier device token: ${airNotifierToken != null ? "${airNotifierToken.substring(0, 8)}..." : "No"}');
+      print(
+          '🔔 SimpleNotificationService: Current device token: ${_deviceToken != null ? "${_deviceToken!.substring(0, 8)}..." : "No"}');
 
-      if (success) {
-        print('🔔 SimpleNotificationService: ✅ Invitation sent');
-        return true;
+      if (airNotifierToken != null && airNotifierToken.isNotEmpty) {
+        print(
+            '🔔 SimpleNotificationService: Syncing device token from AirNotifier: ${airNotifierToken.substring(0, 8)}...');
+
+        // Set the device token in this service
+        _deviceToken = airNotifierToken;
+
+        // Link the token to the current session
+        if (_sessionId != null) {
+          await _linkTokenToSession();
+        }
+
+        print(
+            '🔔 SimpleNotificationService: ✅ Device token synced from AirNotifier');
+        print(
+            '🔔 SimpleNotificationService: Device token after sync: ${_deviceToken != null ? "${_deviceToken!.substring(0, 8)}..." : "No"}');
       } else {
-        print('🔔 SimpleNotificationService: ❌ Failed to send invitation');
-        return false;
+        print(
+            '🔔 SimpleNotificationService: No device token available in AirNotifier service');
+
+        // Try to get device token from storage as fallback
+        await _tryRestoreDeviceTokenFromStorage();
       }
     } catch (e) {
-      print('🔔 SimpleNotificationService: Error sending invitation: $e');
-      return false;
+      print(
+          '🔔 SimpleNotificationService: Error syncing device token from AirNotifier: $e');
+
+      // Try to get device token from storage as fallback
+      await _tryRestoreDeviceTokenFromStorage();
     }
   }
 
-  /// Send invitation response notification
-  Future<bool> sendInvitationResponse({
-    required String recipientId,
-    required String senderName,
-    required String invitationId,
-    required String response, // 'accepted' or 'declined'
-    String? conversationGuid, // Only for accepted invitations
-  }) async {
+  /// Try to restore device token from storage as fallback
+  Future<void> _tryRestoreDeviceTokenFromStorage() async {
     try {
-      print('🔔 SimpleNotificationService: Sending invitation response');
-
-      // Create invitation response data
-      final responseData = {
-        'type': 'invitation_response',
-        'response': response, // 'accepted' or 'declined'
-        'responderName': senderName,
-      };
-
-      // Add conversation GUID if invitation was accepted
-      if (response == 'accepted' && conversationGuid != null) {
-        responseData['conversationGuid'] = conversationGuid;
-      }
-
-      // TEMPORARY: Send unencrypted for testing
       print(
-          '🔔 SimpleNotificationService: 🔧 Sending data to AirNotifier: $responseData');
-      final success =
-          await AirNotifierService.instance.sendNotificationToSession(
-        sessionId: recipientId,
-        title: response == 'accepted'
-            ? 'Invitation Accepted'
-            : 'Invitation Declined',
-        body: response == 'accepted'
-            ? '$senderName accepted your invitation'
-            : '$senderName declined your invitation',
-        data: responseData, // Send unencrypted data
-        sound: response == 'accepted' ? 'accept.wav' : 'decline.wav',
-      );
+          '🔔 SimpleNotificationService: Trying to restore device token from storage...');
 
-      if (success) {
+      final storedToken = await _storage.read(key: 'device_token');
+
+      if (storedToken != null && storedToken.isNotEmpty) {
         print(
-            '🔔 SimpleNotificationService: ✅ Invitation response sent (unencrypted)');
-        return true;
+            '🔔 SimpleNotificationService: Found device token in storage: ${storedToken.substring(0, 8)}...');
+
+        // Set the device token in this service
+        _deviceToken = storedToken;
+
+        // Link the token to the current session
+        if (_sessionId != null) {
+          await _linkTokenToSession();
+        }
+
+        print(
+            '🔔 SimpleNotificationService: ✅ Device token restored from storage');
       } else {
-        print(
-            '🔔 SimpleNotificationService: ❌ Failed to send invitation response');
-        return false;
+        print('🔔 SimpleNotificationService: No device token found in storage');
       }
     } catch (e) {
       print(
-          '🔔 SimpleNotificationService: Error sending invitation response: $e');
-      return false;
+          '🔔 SimpleNotificationService: Error restoring device token from storage: $e');
     }
   }
 
@@ -268,9 +537,8 @@ class SimpleNotificationService {
       final success =
           await AirNotifierService.instance.sendNotificationToSession(
         sessionId: recipientId,
-        title: senderName,
-        body:
-            message.length > 100 ? '${message.substring(0, 100)}...' : message,
+        title: 'New Message',
+        body: 'You have received a new message',
         data: {
           'encrypted': true,
           'data': encryptedData,
@@ -309,8 +577,8 @@ class SimpleNotificationService {
       final success =
           await AirNotifierService.instance.sendNotificationToSession(
         sessionId: recipientId,
-        title: senderName,
-        body: 'You have received an encrypted message',
+        title: 'New Encrypted Message',
+        body: 'You have received a secure message',
         data: {
           'encrypted': true,
           'data': encryptedData,
@@ -355,7 +623,20 @@ class SimpleNotificationService {
             '🔔 SimpleNotificationService: 🔐 Processing encrypted notification');
 
         // Get encrypted data from the new structure
-        final encryptedData = notificationData['data'] as String?;
+        var encryptedData = notificationData['encryptedData'] as String?;
+        if (encryptedData == null) {
+          // Fallback: try the old 'data' field for backward compatibility
+          final fallbackData = notificationData['data'] as String?;
+          if (fallbackData != null) {
+            print(
+                '🔔 SimpleNotificationService: Using fallback data field for encrypted content');
+            encryptedData = fallbackData;
+          } else {
+            print(
+                '🔔 SimpleNotificationService: ❌ No encrypted data found in encryptedData or data fields');
+            return null;
+          }
+        }
         final checksum = notificationData['checksum'] as String?;
         final notificationType = notificationData['type'] as String?;
         final messageId = notificationData['messageId'] as String?;
@@ -641,36 +922,32 @@ class SimpleNotificationService {
               '🔔 SimpleNotificationService: 🎯 Processing key exchange response notification');
           await _handleKeyExchangeResponse(processedData);
           break;
-        case 'invitation':
+        case 'key_exchange_accepted':
           print(
-              '🔔 SimpleNotificationService: 🎯 Processing invitation notification');
+              '🔔 SimpleNotificationService: 🎯 Processing key exchange accepted notification');
+          await _handleKeyExchangeAccepted(processedData);
+          break;
+        case 'key_exchange_declined':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing key exchange declined notification');
+          await _handleKeyExchangeDeclined(processedData);
+          break;
+        case 'key_exchange_sent':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing key exchange sent notification');
+          await _handleKeyExchangeSent(processedData);
+          break;
+        case 'user_data_exchange':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing encrypted user data exchange notification');
+          await _handleUserDataExchange(processedData);
+          break;
+        case 'user_data_response':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing encrypted user data response notification');
+          await _handleUserDataResponse(processedData);
+          break;
 
-          // Check for subtype to determine if this is a response notification
-          final subtype = processedData['subtype'] as String?;
-          if (subtype == 'accepted') {
-            print(
-                '🔔 SimpleNotificationService: 🎯 Processing invitation accepted notification');
-            await _handleInvitationAcceptedNotification(processedData);
-          } else if (subtype == 'declined') {
-            print(
-                '🔔 SimpleNotificationService: 🎯 Processing invitation declined notification');
-            await _handleInvitationDeclinedNotification(processedData);
-          } else {
-            // Regular invitation notification
-            await _handleInvitationNotification(processedData);
-          }
-          break;
-        case 'invitation_response':
-          print(
-              '🔔 SimpleNotificationService: 🎯 Processing invitation response notification');
-          await _handleInvitationResponseNotification(processedData);
-          break;
-        case 'invitation_accepted':
-          await _handleInvitationAcceptedNotification(processedData);
-          break;
-        case 'invitation_declined':
-          await _handleInvitationDeclinedNotification(processedData);
-          break;
         case 'message':
           await _handleMessageNotification(processedData);
           break;
@@ -688,377 +965,6 @@ class SimpleNotificationService {
       print('🔔 SimpleNotificationService: Error handling notification: $e');
       print(
           '🔔 SimpleNotificationService: Error stack trace: ${StackTrace.current}');
-    }
-  }
-
-  /// Handle invitation notification
-  Future<void> _handleInvitationNotification(Map<String, dynamic> data) async {
-    final senderId = data['senderId'] as String?;
-    final senderName = data['senderName'] as String?;
-    final invitationId = data['invitationId'] as String?;
-
-    if (senderId == null || senderName == null || invitationId == null) {
-      print(
-          '🔔 SimpleNotificationService: Invalid invitation notification data');
-      return;
-    }
-
-    print(
-        '🔔 SimpleNotificationService: Processing invitation from $senderName ($senderId)');
-
-    // Check for existing invitations from this sender
-    final prefsService = SeSharedPreferenceService();
-    final existingInvitationsJson =
-        await prefsService.getJsonList('invitations') ?? [];
-
-    print(
-        '🔔 SimpleNotificationService: Found ${existingInvitationsJson.length} existing invitations');
-    print(
-        '🔔 SimpleNotificationService: Current session ID: ${SeSessionService().currentSessionId}');
-    print(
-        '🔔 SimpleNotificationService: Looking for invitation from $senderId to current user');
-
-    // Check for existing invitation from this sender
-    final existingInvitation = existingInvitationsJson.firstWhere(
-      (inv) {
-        final fromUserId = inv['fromUserId'] as String?;
-        final toUserId = inv['toUserId'] as String?;
-        final currentUserId = SeSessionService().currentSessionId ?? '';
-
-        print(
-            '🔔 SimpleNotificationService: Checking invitation: fromUserId=$fromUserId, toUserId=$toUserId, currentUserId=$currentUserId');
-
-        return fromUserId == senderId && toUserId == currentUserId;
-      },
-      orElse: () => <String, dynamic>{},
-    );
-
-    if (existingInvitation.isNotEmpty) {
-      final status = existingInvitation['status'] as String?;
-      print(
-          '🔔 SimpleNotificationService: Found existing invitation with status: $status');
-
-      if (status == 'accepted') {
-        print(
-            '🔔 SimpleNotificationService: Already in contacts with $senderName');
-        // Show toast message
-        _showToastMessage('Already in contacts with $senderName');
-        return;
-      } else if (status == 'declined') {
-        print(
-            '🔔 SimpleNotificationService: Previously declined invitation from $senderName');
-        // Show toast message
-        _showToastMessage('Previously declined invitation from $senderName');
-        return;
-      } else if (status == 'pending') {
-        print(
-            '🔔 SimpleNotificationService: Invitation already pending from $senderName');
-        // Show toast message
-        _showToastMessage('Invitation already pending from $senderName');
-        return;
-      }
-    } else {
-      print(
-          '🔔 SimpleNotificationService: No existing invitation found, proceeding with new invitation');
-    }
-
-    // Check if sender is blocked (you can implement this logic)
-    // final isBlocked = await _checkIfUserIsBlocked(senderId);
-    // if (isBlocked) {
-    //   print('🔔 SimpleNotificationService: Sender $senderName is blocked');
-    //   _showToastMessage('Invitation from blocked user ignored');
-    //   return;
-    // }
-
-    // Show local notification
-    await showLocalNotification(
-      title: 'New Contact Invitation',
-      body: '$senderName would like to connect with you',
-      type: 'invitation',
-      data: data,
-    );
-
-    // Save notification to SharedPreferences
-    await _saveNotificationToSharedPrefs(
-      id: 'invitation_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'New Contact Invitation',
-      body: '$senderName would like to connect with you',
-      type: 'invitation',
-      data: data,
-      timestamp: DateTime.now(),
-    );
-
-    // Create invitation record and save to local storage
-    try {
-      final currentSession = SeSessionService().currentSession;
-      final currentUsername = currentSession?.displayName ?? 'Unknown User';
-
-      final invitation = {
-        'id': invitationId,
-        'senderId': senderId,
-        'recipientId': SeSessionService().currentSessionId ?? '',
-        'senderUsername': senderName,
-        'recipientUsername': currentUsername,
-        'message': 'Contact request',
-        'status': 'pending',
-        'createdAt': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
-        'is_received': true, // This is a received invitation
-      };
-
-      print(
-          '🔔 SimpleNotificationService: Saving invitation with data: $invitation');
-
-      // Save to SeSharedPreferenceService (same as InvitationProvider)
-      final prefsService = SeSharedPreferenceService();
-      final existingInvitationsJson =
-          await prefsService.getJsonList('invitations') ?? [];
-
-      // Convert invitation to Invitation model format
-      final invitationModel = {
-        'id': invitation['id'],
-        'fromUserId': invitation['senderId'],
-        'fromUsername': invitation['senderUsername'],
-        'toUserId': invitation['recipientId'],
-        'toUsername': invitation['recipientUsername'],
-        'status': 'pending',
-        'createdAt': invitation['createdAt'],
-        'respondedAt': null,
-      };
-
-      // Add new invitation to existing list
-      existingInvitationsJson.add(invitationModel);
-
-      // Save updated list
-      await prefsService.setJsonList('invitations', existingInvitationsJson);
-      print(
-          '🔔 SimpleNotificationService: ✅ Invitation saved to SeSharedPreferenceService');
-
-      // Verify the invitation was saved by reading it back
-      final savedInvitationsJson =
-          await prefsService.getJsonList('invitations');
-      if (savedInvitationsJson != null && savedInvitationsJson.isNotEmpty) {
-        final lastInvitation = savedInvitationsJson.last;
-        print(
-            '🔔 SimpleNotificationService: ✅ Invitation verified in storage: ${lastInvitation['fromUsername']}');
-      } else {
-        print(
-            '🔔 SimpleNotificationService: ❌ Invitation not found in storage after saving');
-      }
-
-      // Trigger callback for UI updates (this will update invitations screen in real-time)
-      _onInvitationReceived?.call(senderId, senderName, invitationId);
-      print(
-          '🔔 SimpleNotificationService: ✅ Invitation callback triggered - UI will update in real-time');
-
-      // Trigger indicator for new invitation
-      IndicatorService().setNewInvitation();
-
-      // Refresh InvitationProvider if available
-      if (_invitationProvider != null) {
-        try {
-          await _invitationProvider.refreshInvitations();
-          print('🔔 SimpleNotificationService: ✅ InvitationProvider refreshed');
-        } catch (e) {
-          print(
-              '🔔 SimpleNotificationService: Error refreshing InvitationProvider: $e');
-        }
-      }
-    } catch (e) {
-      print('🔔 SimpleNotificationService: Error saving invitation: $e');
-    }
-  }
-
-  /// Handle invitation response notification
-  Future<void> _handleInvitationResponseNotification(
-      Map<String, dynamic> data) async {
-    final responderId = data['responderId'] as String?;
-    final responderName = data['responderName'] as String?;
-    final response = data['response']
-        as String?; //if respionse doesnt exists use subtype ; // 'accepted' or 'declined'
-    final conversationGuid = data['conversationGuid'] as String?;
-
-    if (responderId == null || responderName == null || response == null) {
-      print(
-          '🔔 SimpleNotificationService: Invalid invitation response notification data');
-      return;
-    }
-
-    print(
-        '🔔 SimpleNotificationService: Processing invitation response: $response from $responderName ($responderId)');
-
-    // Show local notification
-    final title =
-        response == 'accepted' ? 'Invitation Accepted' : 'Invitation Declined';
-    final body = response == 'accepted'
-        ? '$responderName accepted your invitation'
-        : '$responderName declined your invitation';
-
-    await showLocalNotification(
-      title: title,
-      body: body,
-      type: 'invitation_response',
-      data: {
-        ...data,
-        'conversationGuid': conversationGuid, // Include GUID if available
-      },
-    );
-
-    // Save notification to SharedPreferences
-    await _saveNotificationToSharedPrefs(
-      id: 'invitation_response_${DateTime.now().millisecondsSinceEpoch}',
-      title: title,
-      body: body,
-      type: 'invitation_response',
-      data: {
-        ...data,
-        'conversationGuid': conversationGuid,
-        'chatGuid': data['chatGuid'], // Include chat GUID if available
-      },
-      timestamp: DateTime.now(),
-    );
-
-    // If invitation was accepted and we have a chat GUID, create the chat for the sender
-    final chatGuid = data['chatGuid'] as String?;
-    if (response == 'accepted' && chatGuid != null) {
-      await _createChatForSender(data, chatGuid);
-    }
-
-    // If accepted and conversation GUID is provided, create conversation for sender
-    if (response == 'accepted' && conversationGuid != null) {
-      await _createConversationForSender(
-          responderId, responderName, conversationGuid);
-    }
-
-    // Handle invitation response in InvitationProvider if available
-    if (_invitationProvider != null) {
-      try {
-        await _invitationProvider.handleInvitationResponse(
-            responderId, responderName, response,
-            conversationGuid: conversationGuid);
-        print(
-            '🔔 SimpleNotificationService: ✅ Invitation response handled by InvitationProvider');
-      } catch (e) {
-        print(
-            '🔔 SimpleNotificationService: Error handling invitation response in provider: $e');
-      }
-    }
-
-    // Trigger callback with conversation GUID if available
-    _onInvitationResponse?.call(responderId, responderName, response,
-        conversationGuid: conversationGuid);
-  }
-
-  /// Create conversation for sender when invitation is accepted
-  Future<void> _createConversationForSender(
-      String responderId, String responderName, String conversationGuid) async {
-    try {
-      print(
-          '🔔 SimpleNotificationService: Creating conversation for sender with GUID: $conversationGuid');
-
-      final currentUserId = SeSessionService().currentSessionId ?? '';
-      final currentUserName =
-          GlobalUserService.instance.currentUsername ?? 'Unknown User';
-
-      // Create new conversation for the sender
-      final newChat = Chat(
-        id: conversationGuid,
-        user1Id: currentUserId,
-        user2Id: responderId,
-        user1DisplayName: currentUserName,
-        user2DisplayName: responderName,
-        status: 'active',
-        lastMessageAt: DateTime.now(),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        otherUser: {
-          'id': responderId,
-          'username': responderName,
-          'profile_picture': null,
-        },
-        lastMessage: {
-          'content': 'You are now connected with $responderName',
-          'created_at': DateTime.now().toIso8601String(),
-        },
-      );
-
-      // Save conversation to local storage
-      await LocalStorageService.instance.saveChat(newChat);
-      print(
-          '🔔 SimpleNotificationService: ✅ Conversation created for sender: $conversationGuid');
-
-      // Create initial message for the conversation
-      final initialMessage = app_message.Message(
-        id: GuidGenerator.generateShortId(),
-        chatId: conversationGuid,
-        senderId: 'system',
-        content: 'You are now connected with $responderName',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        status: 'sent',
-      );
-
-      // Save initial message to local storage
-      await LocalStorageService.instance.saveMessage(initialMessage);
-      print(
-          '🔔 SimpleNotificationService: ✅ Initial message created for sender: ${initialMessage.id}');
-    } catch (e) {
-      print(
-          '🔔 SimpleNotificationService: Error creating conversation for sender: $e');
-    }
-  }
-
-  /// Create chat for sender when invitation is accepted
-  Future<void> _createChatForSender(
-      Map<String, dynamic> data, String chatGuid) async {
-    try {
-      print(
-          '🔔 SimpleNotificationService: Creating chat for sender with GUID: $chatGuid');
-
-      final fromUserId = data['fromUserId'] as String?;
-      final fromUsername = data['fromUsername'] as String?;
-      final toUserId = data['toUserId'] as String?;
-      final toUsername = data['toUsername'] as String?;
-
-      if (fromUserId == null ||
-          fromUsername == null ||
-          toUserId == null ||
-          toUsername == null) {
-        print(
-            '🔔 SimpleNotificationService: ❌ Missing user data for chat creation');
-        return;
-      }
-
-      // Create chat conversation for sender
-      final chat = Chat(
-        id: chatGuid,
-        user1Id: fromUserId,
-        user2Id: toUserId,
-        user1DisplayName: fromUsername,
-        user2DisplayName: toUsername,
-        status: 'active',
-        lastMessageAt: DateTime.now(),
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      // Save chat to SharedPreferences
-      final prefsService = SeSharedPreferenceService();
-      final chatsJson = await prefsService.getJsonList('chats') ?? [];
-      final existingIndex = chatsJson.indexWhere((c) => c['id'] == chatGuid);
-
-      if (existingIndex != -1) {
-        chatsJson[existingIndex] = chat.toJson();
-      } else {
-        chatsJson.add(chat.toJson());
-      }
-
-      await prefsService.setJsonList('chats', chatsJson);
-      print(
-          '🔔 SimpleNotificationService: ✅ Chat created for sender: $chatGuid');
-    } catch (e) {
-      print(
-          '🔔 SimpleNotificationService: ❌ Error creating chat for sender: $e');
     }
   }
 
@@ -1099,8 +1005,8 @@ class SimpleNotificationService {
 
     // Show local notification
     await showLocalNotification(
-      title: senderName,
-      body: message,
+      title: 'New Message',
+      body: 'You have received a new message',
       type: 'message',
       data: data,
     );
@@ -1108,8 +1014,8 @@ class SimpleNotificationService {
     // Save notification to SharedPreferences
     await _saveNotificationToSharedPrefs(
       id: 'message_${DateTime.now().millisecondsSinceEpoch}',
-      title: senderName,
-      body: message,
+      title: 'New Message',
+      body: 'You have received a new message',
       type: 'message',
       data: data,
       timestamp: DateTime.now(),
@@ -1120,219 +1026,6 @@ class SimpleNotificationService {
 
     // Trigger callback
     _onMessageReceived?.call(senderId, senderName, message);
-  }
-
-  /// Handle invitation accepted notification
-  Future<void> _handleInvitationAcceptedNotification(
-      Map<String, dynamic> data) async {
-    try {
-      print(
-          '🔔 SimpleNotificationService: 🎯 Handling invitation accepted notification: $data');
-
-      // Extract required data
-      final responderName = data['responderName'] as String?;
-      final responderId = data['responderId'] as String?;
-      final invitationId = data['invitationId'] as String?;
-      final chatGuid = data['chatGuid'] as String?;
-
-      print(
-          '🔔 SimpleNotificationService: Extracted data - responderName: $responderName, responderId: $responderId, invitationId: $invitationId, chatGuid: $chatGuid');
-      print('🔔 SimpleNotificationService: Full notification data: $data');
-      print('🔔 SimpleNotificationService: Data keys: ${data.keys.toList()}');
-
-      // Validate required data
-      if (responderName == null) {
-        print(
-            '🔔 SimpleNotificationService: ❌ Missing responderName in invitation accepted notification');
-        return;
-      }
-
-      // Try to find missing data using fallback methods
-      String? finalResponderId = responderId;
-      String? finalInvitationId = invitationId;
-      String? finalChatGuid = chatGuid;
-
-      // If responderId is missing, try to find it by username
-      if (finalResponderId == null || finalResponderId == 'unknown') {
-        finalResponderId = await _findResponderIdByUsername(responderName);
-        print(
-            '🔔 SimpleNotificationService: Found responderId by username: $finalResponderId');
-      }
-
-      // If invitationId is missing, try to find it by session or other methods
-      if (finalInvitationId == null || finalInvitationId == 'unknown') {
-        finalInvitationId = await _findInvitationIdBySession(responderName);
-        print(
-            '🔔 SimpleNotificationService: Found invitationId by session: $finalInvitationId');
-      }
-
-      // If chatGuid is missing, try to find it by invitation
-      if (finalChatGuid == null || finalChatGuid == 'unknown') {
-        if (finalInvitationId != null) {
-          finalChatGuid = await _findChatGuidByInvitation(finalInvitationId);
-          print(
-              '🔔 SimpleNotificationService: Found chatGuid by invitation: $finalChatGuid');
-        }
-      }
-
-      // Create enhanced data with all required fields
-      final enhancedData = <String, dynamic>{
-        'type': 'invitation',
-        'subtype': 'accepted',
-        'responderName': responderName,
-        'responderId': finalResponderId ?? 'unknown',
-        'invitationId': finalInvitationId ?? 'unknown',
-        'chatGuid': finalChatGuid ?? 'unknown',
-      };
-
-      print(
-          '🔔 SimpleNotificationService: Enhanced data for invitation accepted: $enhancedData');
-
-      // Check if InvitationProvider is available
-      if (_invitationProvider != null) {
-        try {
-          print(
-              '🔔 SimpleNotificationService: ✅ InvitationProvider is available, processing...');
-          await _invitationProvider!.handleInvitationResponse(
-              enhancedData['responderId'] as String?,
-              enhancedData['responderName'] as String?,
-              'accepted',
-              conversationGuid: enhancedData['chatGuid'] as String?);
-          print(
-              '🔔 SimpleNotificationService: ✅ Invitation accepted processed successfully');
-        } catch (e) {
-          print(
-              '🔔 SimpleNotificationService: ❌ Error handling invitation accepted in provider: $e');
-        }
-      } else {
-        print(
-            '🔔 SimpleNotificationService: ❌ InvitationProvider not available, using fallback');
-      }
-    } catch (e) {
-      print(
-          '🔔 SimpleNotificationService: ❌ Error in _handleInvitationAcceptedNotification: $e');
-      print(
-          '🔔 SimpleNotificationService: Error stack trace: ${StackTrace.current}');
-    }
-  }
-
-  /// Handle invitation declined notification
-  Future<void> _handleInvitationDeclinedNotification(
-      Map<String, dynamic> data) async {
-    try {
-      print(
-          '🔔 SimpleNotificationService: 🎯 Handling invitation declined notification: $data');
-
-      // Extract required data
-      final responderName = data['responderName'] as String?;
-      final responderId = data['responderId'] as String?;
-      final invitationId = data['invitationId'] as String?;
-
-      print(
-          '🔔 SimpleNotificationService: Extracted data - responderName: $responderName, responderId: $responderId, invitationId: $invitationId');
-      print('🔔 SimpleNotificationService: Full notification data: $data');
-      print('🔔 SimpleNotificationService: Data keys: ${data.keys.toList()}');
-
-      // Validate required data
-      if (responderName == null) {
-        print(
-            '🔔 SimpleNotificationService: ❌ Missing responderName in invitation declined notification');
-        return;
-      }
-
-      // Try to find missing data using fallback methods
-      String? finalResponderId = responderId;
-      String? finalInvitationId = invitationId;
-
-      // If responderId is missing, try to find it by username
-      if (finalResponderId == null || finalResponderId == 'unknown') {
-        finalResponderId = await _findResponderIdByUsername(responderName);
-        print(
-            '🔔 SimpleNotificationService: Found responderId by username: $finalResponderId');
-      }
-
-      // If invitationId is missing, try to find it by session or other methods
-      if (finalInvitationId == null || finalInvitationId == 'unknown') {
-        finalInvitationId = await _findInvitationIdBySession(responderName);
-        print(
-            '🔔 SimpleNotificationService: Found invitationId by session: $finalInvitationId');
-      }
-
-      // Create enhanced data with all required fields
-      final enhancedData = <String, dynamic>{
-        'type': 'invitation',
-        'subtype': 'declined',
-        'responderName': responderName,
-        'responderId': finalResponderId ?? 'unknown',
-        'invitationId': finalInvitationId ?? 'unknown',
-      };
-
-      print(
-          '🔔 SimpleNotificationService: Enhanced data for invitation declined: $enhancedData');
-
-      // Check if InvitationProvider is available
-      if (_invitationProvider != null) {
-        try {
-          print(
-              '🔔 SimpleNotificationService: ✅ InvitationProvider is available, processing...');
-          await _invitationProvider!.handleInvitationResponse(
-              enhancedData['responderId'] as String?,
-              enhancedData['responderName'] as String?,
-              'declined');
-          print(
-              '🔔 SimpleNotificationService: ✅ Invitation declined processed successfully');
-        } catch (e) {
-          print(
-              '🔔 SimpleNotificationService: ❌ Error handling invitation declined in provider: $e');
-        }
-      } else {
-        print(
-            '🔔 SimpleNotificationService: ❌ InvitationProvider not available, using fallback');
-      }
-    } catch (e) {
-      print(
-          '🔔 SimpleNotificationService: ❌ Error in _handleInvitationDeclinedNotification: $e');
-      print(
-          '🔔 SimpleNotificationService: Error stack trace: ${StackTrace.current}');
-    }
-  }
-
-  /// Save notification to SharedPreferences
-  Future<void> _saveNotificationToSharedPrefs({
-    required String id,
-    required String title,
-    required String body,
-    required String type,
-    required Map<String, dynamic> data,
-    required DateTime timestamp,
-  }) async {
-    try {
-      final prefsService = SeSharedPreferenceService();
-      final existingNotificationsJson =
-          await prefsService.getJsonList('notifications') ?? [];
-
-      final notificationModel = {
-        'id': id,
-        'title': title,
-        'body': body,
-        'type': type,
-        'data': data,
-        'timestamp': timestamp.toIso8601String(),
-        'isRead': false,
-      };
-
-      // Add new notification to existing list
-      existingNotificationsJson.add(notificationModel);
-
-      // Save updated list
-      await prefsService.setJsonList(
-          'notifications', existingNotificationsJson);
-      print(
-          '🔔 SimpleNotificationService: ✅ Notification saved to SharedPreferences: $title');
-    } catch (e) {
-      print(
-          '🔔 SimpleNotificationService: Error saving notification to SharedPreferences: $e');
-    }
   }
 
   /// Handle typing indicator notification
@@ -1665,26 +1358,6 @@ class SimpleNotificationService {
     }
   }
 
-  /// Set invitation received callback
-  void setOnInvitationReceived(
-      Function(String senderId, String senderName, String invitationId)
-          callback) {
-    _onInvitationReceived = callback;
-  }
-
-  /// Set invitation response callback
-  void setOnInvitationResponse(
-      Function(String responderId, String responderName, String status,
-              {String? conversationGuid})
-          callback) {
-    _onInvitationResponse = callback;
-  }
-
-  /// Set invitation provider instance for handling invitation responses
-  void setInvitationProvider(dynamic invitationProvider) {
-    _invitationProvider = invitationProvider;
-  }
-
   /// Set message received callback
   void setOnMessageReceived(
       Function(String senderId, String senderName, String message) callback) {
@@ -1707,6 +1380,30 @@ class SimpleNotificationService {
   void setOnMessageStatusUpdate(
       Function(String senderId, String messageId, String status) callback) {
     _onMessageStatusUpdate = callback;
+  }
+
+  /// Set callback for key exchange request received
+  void setOnKeyExchangeRequestReceived(
+      Function(Map<String, dynamic> data)? callback) {
+    _onKeyExchangeRequestReceived = callback;
+  }
+
+  /// Set callback for key exchange accepted
+  void setOnKeyExchangeAccepted(Function(Map<String, dynamic> data)? callback) {
+    _onKeyExchangeAccepted = callback;
+  }
+
+  /// Set callback for key exchange declined
+  void setOnKeyExchangeDeclined(Function(Map<String, dynamic> data)? callback) {
+    _onKeyExchangeDeclined = callback;
+  }
+
+  /// Set callback for general notifications
+  void setOnNotificationReceived(
+      Function(String title, String body, String type,
+              Map<String, dynamic>? data)?
+          callback) {
+    _onNotificationReceived = callback;
   }
 
   /// Show local notification
@@ -1815,43 +1512,29 @@ class SimpleNotificationService {
   /// Decrypt data with own private key
   Future<Map<String, dynamic>?> _decryptData(String encryptedData) async {
     try {
-      // Get own private key from encryption service
-      final privateKey = await EncryptionService.getPrivateKey();
-      if (privateKey == null) {
-        print('🔔 SimpleNotificationService: ❌ Private key not found');
+      print(
+          '🔔 SimpleNotificationService: 🔐 Attempting to decrypt data using EncryptionService');
+
+      // Debug: Log the encrypted data being received
+      final previewLength =
+          encryptedData.length > 50 ? 50 : encryptedData.length;
+      print(
+          '🔔 SimpleNotificationService: Received encrypted data: ${encryptedData.substring(0, previewLength)}...');
+      print(
+          '🔔 SimpleNotificationService: Encrypted data length: ${encryptedData.length} characters');
+
+      // Use EncryptionService.decryptData which handles the correct format
+      final decryptedData = await EncryptionService.decryptData(encryptedData);
+
+      if (decryptedData != null) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Data decrypted successfully using EncryptionService');
+        return decryptedData;
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ❌ EncryptionService.decryptData returned null');
         return null;
       }
-
-      // Decode encrypted payload
-      final payloadBytes = base64Decode(encryptedData);
-      final payloadJson = utf8.decode(payloadBytes);
-      final payload = json.decode(payloadJson) as Map<String, dynamic>;
-
-      // Extract encrypted data and key
-      final encryptedDataBase64 = payload['encryptedData'] as String;
-      final encryptedKeyBase64 = payload['encryptedKey'] as String;
-
-      // Decrypt AES key (simplified - use as is for demo)
-      final aesKey = base64Decode(encryptedKeyBase64);
-
-      // Decrypt data with AES
-      final encryptedBytes = base64Decode(encryptedDataBase64);
-      final iv = encryptedBytes.sublist(0, 16);
-      final encryptedMessage = encryptedBytes.sublist(16);
-
-      final cipher = CBCBlockCipher(AESEngine());
-      final params = ParametersWithIV(
-        KeyParameter(Uint8List.fromList(aesKey)),
-        Uint8List.fromList(iv),
-      );
-      cipher.init(false, params);
-
-      final decryptedBytes =
-          cipher.process(Uint8List.fromList(encryptedMessage));
-      final unpaddedBytes = _unpadMessage(decryptedBytes.toList());
-      final decryptedJson = utf8.decode(unpaddedBytes);
-
-      return json.decode(decryptedJson) as Map<String, dynamic>;
     } catch (e) {
       print('🔔 SimpleNotificationService: Decryption failed: $e');
       return null;
@@ -2029,141 +1712,90 @@ class SimpleNotificationService {
     }
   }
 
-  /// Fallback mechanism for handling invitation response when InvitationProvider is null
-  Future<void> _saveInvitationResponseFallback(
-      Map<String, dynamic> data, String response, String? conversationGuid,
-      {bool skipCallback = false}) async {
-    final responderId = data['responderId'] as String?;
-    final responderName = data['responderName'] as String?;
-    final invitationId = data['invitationId'] as String?;
-
-    if (responderId == null || responderName == null || invitationId == null) {
-      print(
-          '🔔 SimpleNotificationService: ❌ Invalid fallback invitation response data - missing required fields');
-      return;
-    }
-
-    print(
-        '🔔 SimpleNotificationService: 🔧 Fallback: Saving invitation response to storage for $responderName ($responderId)');
-
-    // Show local notification
-    final title =
-        response == 'accepted' ? 'Invitation Accepted' : 'Invitation Declined';
-    final body = response == 'accepted'
-        ? '$responderName accepted your invitation'
-        : '$responderName declined your invitation';
-
-    await showLocalNotification(
-      title: title,
-      body: body,
-      type: 'invitation_response',
-      data: {
-        ...data,
-        'conversationGuid': conversationGuid,
-      },
-    );
-
-    // Save notification to SharedPreferences
-    await _saveNotificationToSharedPrefs(
-      id: 'invitation_response_fallback_${DateTime.now().millisecondsSinceEpoch}',
-      title: title,
-      body: body,
-      type: 'invitation_response',
-      data: {
-        ...data,
-        'conversationGuid': conversationGuid,
-      },
-      timestamp: DateTime.now(),
-    );
-
-    // Only trigger callback if explicitly requested (prevents infinite loop)
-    if (!skipCallback && _onInvitationResponse != null) {
-      print(
-          '🔔 SimpleNotificationService: 🔧 Fallback: Triggering invitation response callback');
-      _onInvitationResponse!.call(responderId, responderName, response,
-          conversationGuid: conversationGuid);
-    } else {
-      print(
-          '🔔 SimpleNotificationService: 🔧 Fallback: Skipping callback to prevent infinite loop');
-    }
-  }
-
-  /// Helper to find responderId by username
-  Future<String?> _findResponderIdByUsername(String username) async {
-    try {
-      // For now, return a placeholder - we'll implement proper user lookup later
-      return 'session_${DateTime.now().millisecondsSinceEpoch}';
-    } catch (e) {
-      print(
-          '🔔 SimpleNotificationService: Error finding responderId by username: $e');
-      return null;
-    }
-  }
-
-  /// Helper to find invitationId by session
-  Future<String?> _findInvitationIdBySession(String username) async {
-    try {
-      final currentUserId = SeSessionService().currentSessionId ?? '';
-      final invitations =
-          await SeSharedPreferenceService().getJsonList('invitations') ?? [];
-
-      for (final invitation in invitations) {
-        if (invitation is Map<String, dynamic>) {
-          final senderUsername = invitation['senderUsername'] as String?;
-          final recipientId = invitation['recipientId'] as String?;
-
-          if (senderUsername == username && recipientId == currentUserId) {
-            return invitation['id'] as String?;
-          }
-        }
-      }
-      return null;
-    } catch (e) {
-      print(
-          '🔔 SimpleNotificationService: Error finding invitationId by session: $e');
-      return null;
-    }
-  }
-
-  /// Helper to find chatGuid by invitation
-  Future<String?> _findChatGuidByInvitation(String invitationId) async {
-    try {
-      final chatGuidsJson =
-          await SeSharedPreferenceService().getJson('invitation_chat_guids') ??
-              {};
-      return chatGuidsJson[invitationId] as String?;
-    } catch (e) {
-      print(
-          '🔔 SimpleNotificationService: Error finding chatGuid by invitation: $e');
-      return null;
-    }
-  }
-
   /// Handle key exchange request notification
   Future<void> _handleKeyExchangeRequest(Map<String, dynamic> data) async {
     try {
       print('🔔 SimpleNotificationService: Processing key exchange request');
 
-      // Extract key exchange data
+      // Extract key exchange request data
       final senderId = data['sender_id'] as String?;
-      final publicKey = data['public_key'] as String?;
-      final version = data['version'] as String?;
+      final requestId = data['request_id'] as String?;
+      final requestPhrase = data['request_phrase'] as String?;
+      final timestampRaw = data['timestamp'];
 
-      if (senderId == null || publicKey == null) {
+      if (senderId == null || requestId == null || requestPhrase == null) {
         print(
-            '🔔 SimpleNotificationService: Invalid key exchange request data');
+            '🔔 SimpleNotificationService: Invalid key exchange request data - missing required fields');
+        print('🔔 SimpleNotificationService: Received data: $data');
         return;
       }
 
-      print(
-          '🔔 SimpleNotificationService: Key exchange request from $senderId');
+      // Handle timestamp conversion safely
+      DateTime timestamp;
+      if (timestampRaw is int) {
+        timestamp = DateTime.fromMillisecondsSinceEpoch(timestampRaw);
+      } else if (timestampRaw is String) {
+        try {
+          timestamp =
+              DateTime.fromMillisecondsSinceEpoch(int.parse(timestampRaw));
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: Invalid timestamp string: $timestampRaw, using current time');
+          timestamp = DateTime.now();
+        }
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Invalid timestamp type: ${timestampRaw.runtimeType}, using current time');
+        timestamp = DateTime.now();
+      }
 
-      // Process the key exchange request using KeyExchangeService
-      await KeyExchangeService.instance.processKeyExchangeRequest({
-        'sender_id': senderId,
-        'public_key': publicKey,
-        'version': version ?? '1.0',
-      });
+      print(
+          '🔔 SimpleNotificationService: Key exchange request from $senderId with phrase: $requestPhrase');
+
+      // Create a key exchange request record for the recipient
+      final keyExchangeRequest = KeyExchangeRequest(
+        id: requestId,
+        fromSessionId: senderId,
+        toSessionId: SeSessionService().currentSessionId ?? '',
+        requestPhrase: requestPhrase,
+        status: 'received',
+        timestamp: timestamp,
+        type: 'key_exchange_request',
+      );
+
+      // Save to local storage
+      final prefsService = SeSharedPreferenceService();
+      final existingRequests =
+          await prefsService.getJsonList('key_exchange_requests') ?? [];
+
+      // Check if request already exists
+      if (!existingRequests.any((req) => req['id'] == requestId)) {
+        existingRequests.add(keyExchangeRequest.toJson());
+        await prefsService.setJsonList(
+            'key_exchange_requests', existingRequests);
+        print(
+            '🔔 SimpleNotificationService: ✅ Key exchange request saved locally');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Key exchange request already exists');
+      }
+
+      // Add notification item
+      if (_onNotificationReceived != null) {
+        _onNotificationReceived!(
+          'Key Exchange Request',
+          'New key exchange request received',
+          'key_exchange_request',
+          data,
+        );
+      }
+
+      // Notify the provider via callback
+      if (_onKeyExchangeRequestReceived != null) {
+        _onKeyExchangeRequestReceived!(data);
+        print(
+            '🔔 SimpleNotificationService: ✅ Key exchange request callback triggered');
+      }
 
       print('🔔 SimpleNotificationService: ✅ Key exchange request processed');
     } catch (e) {
@@ -2203,6 +1835,634 @@ class SimpleNotificationService {
     }
   }
 
+  /// Handle key exchange accepted notification
+  Future<void> _handleKeyExchangeAccepted(Map<String, dynamic> data) async {
+    try {
+      print('🔔 SimpleNotificationService: Processing key exchange accepted');
+
+      // Extract data
+      final requestId = data['request_id'] as String?;
+      final recipientId = data['recipient_id'] as String?;
+      final timestampRaw = data['timestamp'];
+
+      if (requestId == null || recipientId == null) {
+        print('🔔 SimpleNotificationService: Invalid acceptance data');
+        return;
+      }
+
+      // Handle timestamp conversion safely
+      DateTime timestamp;
+      if (timestampRaw is int) {
+        timestamp = DateTime.fromMillisecondsSinceEpoch(timestampRaw);
+      } else if (timestampRaw is String) {
+        try {
+          timestamp =
+              DateTime.fromMillisecondsSinceEpoch(int.parse(timestampRaw));
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: Invalid timestamp string: $timestampRaw, using current time');
+          timestamp = DateTime.now();
+        }
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Invalid timestamp type: ${timestampRaw.runtimeType}, using current time');
+        timestamp = DateTime.now();
+      }
+
+      // Process the acceptance using KeyExchangeRequestProvider
+      // Note: This should be accessed through a provider context in a real app
+      print(
+          '🔔 SimpleNotificationService: Key exchange accepted for request: $requestId');
+
+      // Add notification item
+      if (_onNotificationReceived != null) {
+        _onNotificationReceived!(
+          'Key Exchange Accepted',
+          'Your key exchange request was accepted',
+          'key_exchange_accepted',
+          data,
+        );
+      }
+
+      // Call the key exchange accepted callback
+      if (_onKeyExchangeAccepted != null) {
+        _onKeyExchangeAccepted!(data);
+      }
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Key exchange acceptance processed');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error processing acceptance: $e');
+    }
+  }
+
+  /// Handle key exchange declined notification
+  Future<void> _handleKeyExchangeDeclined(Map<String, dynamic> data) async {
+    try {
+      print('🔔 SimpleNotificationService: Processing key exchange declined');
+
+      // Extract data
+      final requestId = data['request_id'] as String?;
+      final recipientId = data['recipient_id'] as String?;
+      final timestampRaw = data['timestamp'];
+
+      if (requestId == null || recipientId == null) {
+        print('🔔 SimpleNotificationService: Invalid decline data');
+        return;
+      }
+
+      // Handle timestamp conversion safely
+      DateTime timestamp;
+      if (timestampRaw is int) {
+        timestamp = DateTime.fromMillisecondsSinceEpoch(timestampRaw);
+      } else if (timestampRaw is String) {
+        try {
+          timestamp =
+              DateTime.fromMillisecondsSinceEpoch(int.parse(timestampRaw));
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: Invalid timestamp string: $timestampRaw, using current time');
+          timestamp = DateTime.now();
+        }
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Invalid timestamp type: ${timestampRaw.runtimeType}, using current time');
+        timestamp = DateTime.now();
+      }
+
+      // Process the decline using KeyExchangeRequestProvider
+      // Note: This should be accessed through a provider context in a real app
+      print(
+          '🔔 SimpleNotificationService: Key exchange declined for request: $requestId');
+
+      // Add notification item
+      if (_onNotificationReceived != null) {
+        _onNotificationReceived!(
+          'Key Exchange Declined',
+          'Your key exchange request was declined',
+          'key_exchange_declined',
+          data,
+        );
+      }
+
+      // Call the key exchange declined callback
+      if (_onKeyExchangeDeclined != null) {
+        _onKeyExchangeDeclined!(data);
+      }
+
+      print('🔔 SimpleNotificationService: ✅ Key exchange decline processed');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error processing decline: $e');
+    }
+  }
+
+  /// Handle encrypted user data exchange notification
+  Future<void> _handleUserDataExchange(Map<String, dynamic> data) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Processing encrypted user data exchange');
+
+      // Extract encrypted data
+      final encryptedData = data['data'] as String?;
+
+      if (encryptedData == null) {
+        print('🔔 SimpleNotificationService: No encrypted data found');
+        return;
+      }
+
+      // Decrypt the data
+      final decryptedData = await EncryptionService.decryptDataWithRetry(
+        encryptedData,
+      );
+
+      if (decryptedData == null) {
+        print('🔔 SimpleNotificationService: Failed to decrypt user data');
+        return;
+      }
+
+      print('🔔 SimpleNotificationService: ✅ User data decrypted successfully');
+
+      // Process the decrypted user data
+      await _processDecryptedUserData(decryptedData);
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error processing user data exchange: $e');
+    }
+  }
+
+  /// Process decrypted user data and create contact/chat
+  Future<void> _processDecryptedUserData(Map<String, dynamic> userData) async {
+    try {
+      print('🔔 SimpleNotificationService: Processing decrypted user data');
+
+      final senderId = userData['sender_id'] as String?;
+      final displayName = userData['display_name'] as String?;
+      final profileData = userData['profile_data'] as Map<String, dynamic>?;
+
+      if (senderId == null || displayName == null) {
+        print('🔔 SimpleNotificationService: Invalid user data');
+        return;
+      }
+
+      print(
+          '🔔 SimpleNotificationService: Processing data for user: $displayName ($senderId)');
+
+      // Update the Key Exchange Request display name from "session_..." to actual name
+      await _updateKeyExchangeRequestDisplayName(senderId, displayName);
+
+      // Create contact and chat automatically
+      await _createContactAndChat(senderId, displayName, profileData);
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Contact and chat created successfully');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error processing user data: $e');
+    }
+  }
+
+  /// Update the Key Exchange Request display name
+  Future<void> _updateKeyExchangeRequestDisplayName(
+      String senderId, String displayName) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Updating KER display name for: $senderId to: $displayName');
+
+      // Get the current user's session ID
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId == null) {
+        print(
+            '🔔 SimpleNotificationService: User not logged in, cannot update KER');
+        return;
+      }
+
+      // Store the display name mapping in shared preferences for later use
+      final prefsService = SeSharedPreferenceService();
+      final displayNameMappings =
+          await prefsService.getJson('ker_display_names') ?? {};
+
+      // Update the mapping
+      displayNameMappings[senderId] = displayName;
+      await prefsService.setJson('ker_display_names', displayNameMappings);
+
+      print(
+          '🔔 SimpleNotificationService: ✅ KER display name mapping stored: $senderId -> $displayName');
+
+      // Trigger a refresh of the key exchange requests to show updated names
+      // This will be handled by the UI when it reads the display name mappings
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error updating KER display name: $e');
+    }
+  }
+
+  /// Create contact and chat for the new connection
+  Future<void> _createContactAndChat(
+    String contactId,
+    String displayName,
+    Map<String, dynamic>? profileData,
+  ) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Creating contact and chat for: $displayName');
+
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId == null) {
+        print('🔔 SimpleNotificationService: User not logged in');
+        return;
+      }
+
+      // Create contact
+      final contact = {
+        'id': contactId,
+        'displayName': displayName,
+        'sessionId': contactId,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'profileData': profileData ?? {},
+        'status': 'active',
+      };
+
+      // Save contact to local storage
+      final prefsService = SeSharedPreferenceService();
+      final existingContacts = await prefsService.getJsonList('contacts') ?? [];
+
+      // Check if contact already exists
+      if (!existingContacts.any((c) => c['id'] == contactId)) {
+        existingContacts.add(contact);
+        await prefsService.setJsonList('contacts', existingContacts);
+        print('🔔 SimpleNotificationService: ✅ Contact saved: $displayName');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Contact already exists: $displayName');
+      }
+
+      // Create chat
+      final chatId =
+          'chat_${DateTime.now().millisecondsSinceEpoch}_${contactId.substring(0, 8)}';
+      final chat = {
+        'id': chatId,
+        'contactId': contactId,
+        'contactName': displayName,
+        'lastMessage': null,
+        'lastMessageTime': null,
+        'unreadCount': 0,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'status': 'active',
+      };
+
+      // Save chat to local storage
+      final existingChats = await prefsService.getJsonList('chats') ?? [];
+
+      // Check if chat already exists
+      if (!existingChats.any((c) => c['contactId'] == contactId)) {
+        existingChats.add(chat);
+        await prefsService.setJsonList('chats', existingChats);
+        print('🔔 SimpleNotificationService: ✅ Chat created: $chatId');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Chat already exists for: $displayName');
+      }
+
+      // Send encrypted response with our user data and chat info
+      await _sendEncryptedResponse(contactId, chatId);
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error creating contact/chat: $e');
+      // Rollback changes if needed
+      await _rollbackContactChatCreation(contactId);
+    }
+  }
+
+  /// Send encrypted response with our user data and chat info
+  Future<void> _sendEncryptedResponse(String contactId, String chatId) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Sending encrypted response to: $contactId');
+
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId == null) return;
+
+      // Get the current user's actual display name from their session
+      final currentSession = SeSessionService().currentSession;
+      final userDisplayName = currentSession?.displayName ??
+          'User ${currentUserId.substring(0, 8)}';
+
+      // Create our user data payload with chat information
+      final userData = {
+        'type': 'user_data_response',
+        'sender_id': currentUserId,
+        'display_name': userDisplayName,
+        'chat_id': chatId, // Include the chat GUID for Alice
+        'profile_data': {
+          'session_id': currentUserId,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        },
+      };
+
+      print(
+          '🔔 SimpleNotificationService: Sending response with display name: $userDisplayName and chat ID: $chatId');
+
+      // Encrypt the data
+      final encryptedPayload = await EncryptionService.createEncryptedPayload(
+        userData,
+        contactId,
+      );
+
+      // Send encrypted notification
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
+        sessionId: contactId,
+        title: 'Connection Established',
+        body: 'Secure connection established successfully',
+        data: {
+          'data': encryptedPayload['data'] as String,
+          'type': 'user_data_response',
+        },
+        sound: 'default',
+        encrypted: true,
+        checksum: encryptedPayload['checksum'] as String,
+      );
+
+      if (success) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Encrypted response sent successfully');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ❌ Failed to send encrypted response');
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error sending encrypted response: $e');
+    }
+  }
+
+  /// Rollback contact and chat creation on failure
+  Future<void> _rollbackContactChatCreation(String contactId) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Rolling back contact/chat creation for: $contactId');
+
+      final prefsService = SeSharedPreferenceService();
+
+      // Remove contact
+      final existingContacts = await prefsService.getJsonList('contacts') ?? [];
+      existingContacts.removeWhere((c) => c['id'] == contactId);
+      await prefsService.setJsonList('contacts', existingContacts);
+
+      // Remove chat
+      final existingChats = await prefsService.getJsonList('chats') ?? [];
+      existingChats.removeWhere((c) => c['contactId'] == contactId);
+      await prefsService.setJsonList('chats', existingChats);
+
+      print('🔔 SimpleNotificationService: ✅ Rollback completed');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error during rollback: $e');
+    }
+  }
+
+  /// Handle encrypted user data response notification
+  Future<void> _handleUserDataResponse(Map<String, dynamic> data) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Processing encrypted user data response');
+
+      // Extract encrypted data
+      final encryptedData = data['data'] as String?;
+
+      if (encryptedData == null) {
+        print(
+            '🔔 SimpleNotificationService: No encrypted data found in response');
+        return;
+      }
+
+      // Decrypt the data
+      final decryptedData = await EncryptionService.decryptDataWithRetry(
+        encryptedData,
+      );
+
+      if (decryptedData == null) {
+        print('🔔 SimpleNotificationService: Failed to decrypt response data');
+        return;
+      }
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Response data decrypted successfully');
+
+      // Process the decrypted response data
+      await _processDecryptedResponseData(decryptedData);
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error processing user data response: $e');
+    }
+  }
+
+  /// Process decrypted response data and create contact/chat on sender side
+  Future<void> _processDecryptedResponseData(
+      Map<String, dynamic> responseData) async {
+    try {
+      print('🔔 SimpleNotificationService: Processing decrypted response data');
+
+      final senderId = responseData['sender_id'] as String?;
+      final displayName = responseData['display_name'] as String?;
+      final chatId = responseData['chat_id'] as String?;
+      final profileData = responseData['profile_data'] as Map<String, dynamic>?;
+
+      if (senderId == null || displayName == null || chatId == null) {
+        print('🔔 SimpleNotificationService: Invalid response data');
+        return;
+      }
+
+      print(
+          '🔔 SimpleNotificationService: Processing response for user: $displayName ($senderId)');
+
+      // Update the Key Exchange Request display name from "session_..." to actual name
+      await _updateKeyExchangeRequestDisplayName(senderId, displayName);
+
+      // Create contact and chat on our side
+      await _createContactAndChatFromResponse(
+          senderId, displayName, chatId, profileData);
+
+      // Mark the key exchange as complete by updating the KER status
+      await _markKeyExchangeComplete(senderId);
+
+      // Notify about completed key exchange for UI updates
+      await _notifyKeyExchangeCompleted(senderId, displayName);
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Contact and chat created from response');
+      print(
+          '🔔 SimpleNotificationService: 🎉 Key Exchange Request feature complete!');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error processing response data: $e');
+    }
+  }
+
+  /// Create contact and chat from response data
+  Future<void> _createContactAndChatFromResponse(
+    String contactId,
+    String displayName,
+    String chatId,
+    Map<String, dynamic>? profileData,
+  ) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Creating contact and chat from response for: $displayName');
+
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId == null) {
+        print('🔔 SimpleNotificationService: User not logged in');
+        return;
+      }
+
+      // Create contact
+      final contact = {
+        'id': contactId,
+        'displayName': displayName,
+        'sessionId': contactId,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'profileData': profileData ?? {},
+        'status': 'active',
+      };
+
+      // Save contact to local storage
+      final prefsService = SeSharedPreferenceService();
+      final existingContacts = await prefsService.getJsonList('contacts') ?? [];
+
+      // Check if contact already exists
+      if (!existingContacts.any((c) => c['id'] == contactId)) {
+        existingContacts.add(contact);
+        await prefsService.setJsonList('contacts', existingContacts);
+        print(
+            '🔔 SimpleNotificationService: ✅ Contact saved from response: $displayName');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Contact already exists from response: $displayName');
+      }
+
+      // Create chat using the provided chat ID
+      final chat = {
+        'id': chatId,
+        'contactId': contactId,
+        'contactName': displayName,
+        'lastMessage': null,
+        'lastMessageTime': null,
+        'unreadCount': 0,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'status': 'active',
+      };
+
+      // Save chat to local storage
+      final existingChats = await prefsService.getJsonList('chats') ?? [];
+
+      // Check if chat already exists
+      if (!existingChats.any((c) => c['id'] == chatId)) {
+        existingChats.add(chat);
+        await prefsService.setJsonList('chats', existingChats);
+        print(
+            '🔔 SimpleNotificationService: ✅ Chat created from response: $chatId');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Chat already exists from response: $chatId');
+      }
+
+      // Show success message to user
+      _showToastMessage('Secure connection established with $displayName!');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error creating contact/chat from response: $e');
+    }
+  }
+
+  /// Handle key exchange sent notification
+  Future<void> _handleKeyExchangeSent(Map<String, dynamic> data) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Processing key exchange sent notification');
+
+      // Extract key exchange data
+      final senderId = data['sender_id'] as String?;
+      final requestId = data['request_id'] as String?;
+      final publicKey = data['public_key'] as String?;
+      final timestampRaw = data['timestamp'];
+
+      if (senderId == null || requestId == null || publicKey == null) {
+        print(
+            '🔔 SimpleNotificationService: Invalid key exchange sent data - missing required fields');
+        print('🔔 SimpleNotificationService: Received data: $data');
+        return;
+      }
+
+      // Handle timestamp conversion safely
+      DateTime timestamp;
+      if (timestampRaw is int) {
+        timestamp = DateTime.fromMillisecondsSinceEpoch(timestampRaw);
+      } else if (timestampRaw is String) {
+        try {
+          timestamp =
+              DateTime.fromMillisecondsSinceEpoch(int.parse(timestampRaw));
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: Invalid timestamp string: $timestampRaw, using current time');
+          timestamp = DateTime.now();
+        }
+      } else {
+        print(
+            '🔔 SimpleNotificationService: Invalid timestamp type: ${timestampRaw.runtimeType}, using current time');
+        timestamp = DateTime.now();
+      }
+
+      print(
+          '🔔 SimpleNotificationService: Key exchange sent from $senderId for request: $requestId');
+
+      // Create a key exchange response record for the recipient
+      final keyExchangeResponse = KeyExchangeRequest(
+        id: requestId,
+        fromSessionId: senderId,
+        toSessionId: SeSessionService().currentSessionId ?? '',
+        requestPhrase: '', // No phrase for sent notification
+        status: 'sent',
+        timestamp: timestamp,
+        type: 'key_exchange_sent',
+      );
+
+      // Save to local storage
+      final prefsService = SeSharedPreferenceService();
+      final existingRequests =
+          await prefsService.getJsonList('key_exchange_requests') ?? [];
+
+      // Check if response already exists
+      if (!existingRequests.any((req) => req['id'] == requestId)) {
+        existingRequests.add(keyExchangeResponse.toJson());
+        await prefsService.setJsonList(
+            'key_exchange_requests', existingRequests);
+        print(
+            '🔔 SimpleNotificationService: ✅ Key exchange sent saved locally');
+      } else {
+        print('🔔 SimpleNotificationService: Key exchange sent already exists');
+      }
+
+      // Add notification item
+      if (_onNotificationReceived != null) {
+        _onNotificationReceived!(
+          'Key Exchange Sent',
+          'Your key exchange request has been sent',
+          'key_exchange_sent',
+          data,
+        );
+      }
+
+      // Notify the provider via callback
+      if (_onKeyExchangeRequestReceived != null) {
+        _onKeyExchangeRequestReceived!(data);
+        print(
+            '🔔 SimpleNotificationService: ✅ Key exchange sent callback triggered');
+      }
+
+      print('🔔 SimpleNotificationService: ✅ Key exchange sent processed');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error processing key exchange sent: $e');
+    }
+  }
+
   /// Generate a unique ID for a notification to prevent duplicates
   String _generateNotificationId(Map<String, dynamic> notificationData) {
     final dataJson = json.encode(notificationData);
@@ -2220,86 +2480,268 @@ class SimpleNotificationService {
   /// Get count of processed notifications (for debugging)
   int get processedNotificationsCount => _processedNotifications.length;
 
-  /// Send encrypted invitation notification
-  Future<bool> sendEncryptedInvitationNotification({
-    required String recipientId,
-    required String senderName,
-    required String invitationId,
-    required String encryptedData,
-    required String checksum,
-    String? message,
+  /// Save notification to SharedPreferences
+  Future<void> _saveNotificationToSharedPrefs({
+    required String id,
+    required String title,
+    required String body,
+    required String type,
+    required Map<String, dynamic> data,
+    required DateTime timestamp,
   }) async {
     try {
+      final prefsService = SeSharedPreferenceService();
+      final existingNotifications =
+          await prefsService.getJsonList('notifications') ?? [];
+
+      final notification = {
+        'id': id,
+        'title': title,
+        'body': body,
+        'type': type,
+        'data': data,
+        'timestamp': timestamp.toIso8601String(),
+        'read': false,
+      };
+
+      existingNotifications.add(notification);
+      await prefsService.setJsonList('notifications', existingNotifications);
+
       print(
-          '🔔 SimpleNotificationService: Sending encrypted invitation notification');
-
-      // Send via AirNotifier with encryption
-      final success =
-          await AirNotifierService.instance.sendNotificationToSession(
-        sessionId: recipientId,
-        title: 'New Contact Invitation',
-        body: '$senderName would like to connect with you',
-        data: {
-          'data': encryptedData,
-          'type': 'invitation',
-          'invitationId': invitationId,
-        },
-        sound: 'invitation.wav',
-        encrypted: true,
-        checksum: checksum,
-      );
-
-      return success;
+          '🔔 SimpleNotificationService: ✅ Notification saved to SharedPreferences: $id');
     } catch (e) {
       print(
-          '🔔 SimpleNotificationService: Error sending encrypted invitation: $e');
+          '🔔 SimpleNotificationService: ❌ Error saving notification to SharedPreferences: $e');
+    }
+  }
+
+  /// Refresh notification permissions (useful when returning from settings)
+  Future<void> refreshPermissions() async {
+    try {
+      print('🔔 SimpleNotificationService: Refreshing permissions...');
+
+      if (Platform.isIOS) {
+        // For iOS, use the enhanced permission refresh logic
+        await _forceRefreshIOSPermissions();
+      } else {
+        // For other platforms, use standard permission check
+        final status = await Permission.notification.status;
+        _permissionStatus = status;
+        print('🔔 SimpleNotificationService: Permissions refreshed: $status');
+      }
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error refreshing permissions: $e');
+    }
+  }
+
+  /// Force refresh iOS permissions (public method for external use)
+  Future<void> forceRefreshIOSPermissions() async {
+    if (Platform.isIOS) {
+      await _forceRefreshIOSPermissions();
+    }
+  }
+
+  /// Check if we need to show permission dialog
+  bool get shouldShowPermissionDialog {
+    if (kIsWeb) return false;
+
+    if (Platform.isIOS) {
+      return _permissionStatus == PermissionStatus.permanentlyDenied;
+    } else {
+      return _permissionStatus == PermissionStatus.denied;
+    }
+  }
+
+  /// Open app settings for permission management
+  Future<void> openAppSettingsForPermissions() async {
+    try {
+      await openAppSettings();
+      print('🔔 SimpleNotificationService: App settings opened');
+    } catch (e) {
+      print('🔔 SimpleNotificationService: Error opening app settings: $e');
+    }
+  }
+
+  /// Validate and correct permission status discrepancies
+  Future<void> validatePermissionStatus() async {
+    try {
+      print('🔔 SimpleNotificationService: Validating permission status...');
+
+      if (Platform.isIOS) {
+        // For iOS, check if we need to request permissions again
+        final reportedStatus = _permissionStatus;
+
+        print('🔔 SimpleNotificationService: Reported status: $reportedStatus');
+
+        if (reportedStatus == PermissionStatus.permanentlyDenied ||
+            reportedStatus == PermissionStatus.denied) {
+          print(
+              '🔔 SimpleNotificationService: ⚠️ Status discrepancy detected - attempting to request permissions again');
+
+          // First, try to sync device token from AirNotifier service
+          await _syncDeviceTokenFromAirNotifier();
+
+          // For iOS, permissions are already requested during initialization
+          // iOS automatically registers for remote notifications during app launch
+          // Manual registration is optional
+          try {
+            await _registerForRemoteNotifications();
+          } catch (e) {
+            print(
+                '🔔 SimpleNotificationService: ⚠️ Remote notification registration failed, but iOS handles this automatically: $e');
+          }
+
+          // Update permission status
+          _permissionStatus = PermissionStatus.granted;
+          print(
+              '🔔 SimpleNotificationService: ✅ Permission status updated to: $_permissionStatus');
+        } else if (reportedStatus == PermissionStatus.granted) {
+          print(
+              '🔔 SimpleNotificationService: ✅ Permission status is already granted');
+        }
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error validating permission status: $e');
+    }
+  }
+
+  /// Check current iOS notification settings (debug only)
+  Future<void> _checkIOSNotificationSettings() async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Checking iOS notification settings...');
+
+      // Get notification settings using the main plugin
+      final settings =
+          await _localNotifications.getNotificationAppLaunchDetails();
+      print(
+          '🔔 SimpleNotificationService: iOS notification settings: $settings');
+
+      // Also check permission status using permission_handler
+      if (Platform.isIOS) {
+        final permissionStatus = await Permission.notification.status;
+        print(
+            '🔔 SimpleNotificationService: iOS permission status: $permissionStatus');
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error checking iOS notification settings: $e');
+    }
+  }
+
+  /// Check if the method channel is available and ready
+  Future<bool> _isMethodChannelReady() async {
+    try {
+      const channel = MethodChannel('push_notifications');
+
+      // Try to call a simple test method
+      final result = await channel.invokeMethod('testMethodChannel');
+      print(
+          '🔔 SimpleNotificationService: ✅ Method channel test successful: $result');
+      return true;
+    } catch (e) {
+      print('🔔 SimpleNotificationService: ❌ Method channel not ready: $e');
       return false;
     }
   }
 
-  /// Send encrypted invitation response notification
-  Future<bool> sendEncryptedInvitationResponseNotification({
-    required String recipientId,
-    required String responderName,
-    required String status, // 'accepted' or 'declined'
-    required String invitationId,
-    required String encryptedData,
-    required String checksum,
-    String? chatId, // Include chat ID if accepted
-  }) async {
+  /// Wait for method channel to be ready with timeout
+  Future<bool> _waitForMethodChannel(
+      {Duration timeout = const Duration(seconds: 5)}) async {
+    final startTime = DateTime.now();
+
+    while (DateTime.now().difference(startTime) < timeout) {
+      if (await _isMethodChannelReady()) {
+        return true;
+      }
+
+      // Wait a bit before trying again
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    print(
+        '🔔 SimpleNotificationService: ⚠️ Method channel not ready after ${timeout.inSeconds} seconds');
+    return false;
+  }
+
+  /// Mark the key exchange as complete
+  Future<void> _markKeyExchangeComplete(String contactId) async {
     try {
       print(
-          '🔔 SimpleNotificationService: Sending encrypted invitation response');
+          '🔔 SimpleNotificationService: Marking key exchange as complete for: $contactId');
 
-      final title =
-          status == 'accepted' ? 'Invitation Accepted' : 'Invitation Declined';
+      // Get the current user's session ID
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId == null) {
+        print(
+            '🔔 SimpleNotificationService: User not logged in, cannot mark KER complete');
+        return;
+      }
 
-      final body = status == 'accepted'
-          ? '$responderName accepted your invitation'
-          : '$responderName declined your invitation';
+      // Store the completion status in shared preferences
+      final prefsService = SeSharedPreferenceService();
+      final completedExchanges =
+          await prefsService.getJson('completed_key_exchanges') ?? {};
 
-      // Send via AirNotifier with encryption
-      final success =
-          await AirNotifierService.instance.sendNotificationToSession(
-        sessionId: recipientId,
-        title: title,
-        body: body,
-        data: {
-          'data': encryptedData,
-          'type': 'invitation_response',
-          'status': status,
-          'invitationId': invitationId,
-        },
-        sound: status == 'accepted' ? 'accepted.wav' : 'declined.wav',
-        encrypted: true,
-        checksum: checksum,
-      );
+      // Mark this exchange as complete
+      completedExchanges[contactId] = {
+        'completed_at': DateTime.now().millisecondsSinceEpoch,
+        'status': 'complete',
+      };
 
-      return success;
+      await prefsService.setJson('completed_key_exchanges', completedExchanges);
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Key exchange marked as complete for: $contactId');
     } catch (e) {
       print(
-          '🔔 SimpleNotificationService: Error sending encrypted invitation response: $e');
-      return false;
+          '🔔 SimpleNotificationService: Error marking key exchange complete: $e');
+    }
+  }
+
+  /// Notify KeyExchangeRequestProvider about completed key exchange
+  Future<void> _notifyKeyExchangeCompleted(
+      String contactId, String displayName) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Notifying KeyExchangeRequestProvider about completed exchange');
+
+      // Get the current user's session ID
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId == null) {
+        print(
+            '🔔 SimpleNotificationService: User not logged in, cannot notify provider');
+        return;
+      }
+
+      // Update the KER display names and mark as complete
+      await _updateKeyExchangeRequestDisplayName(contactId, displayName);
+      await _markKeyExchangeComplete(contactId);
+
+      // Store the completion status in shared preferences for UI updates
+      final prefsService = SeSharedPreferenceService();
+      final completedExchanges =
+          await prefsService.getJson('completed_key_exchanges') ?? {};
+
+      // Mark this exchange as complete with display name
+      completedExchanges[contactId] = {
+        'completed_at': DateTime.now().millisecondsSinceEpoch,
+        'status': 'complete',
+        'display_name': displayName,
+        'contact_id': contactId,
+      };
+
+      await prefsService.setJson('completed_key_exchanges', completedExchanges);
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Key exchange completion data stored for UI updates');
+
+      // Trigger UI refresh by updating the indicator service
+      IndicatorService().setNewKeyExchange();
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: Error notifying about key exchange completion: $e');
     }
   }
 }

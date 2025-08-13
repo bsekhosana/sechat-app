@@ -9,15 +9,17 @@ class IndicatorService extends ChangeNotifier {
   bool _hasNewChats = false;
   bool _hasNewInvitations = false;
   bool _hasNewNotifications = false;
+  bool _hasNewKeyExchange = false;
 
   bool get hasNewChats => _hasNewChats;
   bool get hasNewInvitations => _hasNewInvitations;
   bool get hasNewNotifications => _hasNewNotifications;
+  bool get hasNewKeyExchange => _hasNewKeyExchange;
 
   Future<void> checkForNewItems() async {
     try {
       final prefsService = SeSharedPreferenceService();
-      
+
       // Check for new chats (chats with recent activity)
       final chatsJson = await prefsService.getJsonList('chats') ?? [];
       final now = DateTime.now();
@@ -25,21 +27,39 @@ class IndicatorService extends ChangeNotifier {
         final lastMessageAt = chat['last_message_at'];
         if (lastMessageAt != null) {
           final lastMessageTime = DateTime.parse(lastMessageAt);
-          return now.difference(lastMessageTime).inMinutes < 5; // New if within 5 minutes
+          return now.difference(lastMessageTime).inMinutes <
+              5; // New if within 5 minutes
         }
         return false;
       });
 
       // Check for new invitations (pending invitations)
-      final invitationsJson = await prefsService.getJsonList('invitations') ?? [];
+      final invitationsJson =
+          await prefsService.getJsonList('invitations') ?? [];
       _hasNewInvitations = invitationsJson.any((invitation) {
         return invitation['status'] == 'pending';
       });
 
       // Check for new notifications (unread notifications)
-      final notificationsJson = await prefsService.getJsonList('notifications') ?? [];
+      final notificationsJson =
+          await prefsService.getJsonList('notifications') ?? [];
       _hasNewNotifications = notificationsJson.any((notification) {
         return notification['isRead'] == false;
+      });
+
+      // Check for new key exchange requests (within last 5 minutes)
+      final keyExchangeRequestsJson =
+          await prefsService.getJsonList('key_exchange_requests') ?? [];
+      final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
+      _hasNewKeyExchange = keyExchangeRequestsJson.any((request) {
+        try {
+          final timestamp = DateTime.parse(request['timestamp']);
+          final status = request['status'] as String?;
+          return timestamp.isAfter(fiveMinutesAgo) &&
+              (status == 'pending' || status == 'sent' || status == 'received');
+        } catch (e) {
+          return false;
+        }
       });
 
       notifyListeners();
@@ -63,6 +83,11 @@ class IndicatorService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearKeyExchangeIndicator() {
+    _hasNewKeyExchange = false;
+    notifyListeners();
+  }
+
   void setNewChat() {
     _hasNewChats = true;
     notifyListeners();
@@ -77,4 +102,9 @@ class IndicatorService extends ChangeNotifier {
     _hasNewNotifications = true;
     notifyListeners();
   }
-} 
+
+  void setNewKeyExchange() {
+    _hasNewKeyExchange = true;
+    notifyListeners();
+  }
+}

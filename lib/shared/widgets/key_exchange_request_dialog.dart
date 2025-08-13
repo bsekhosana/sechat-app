@@ -22,22 +22,32 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
   final ImagePicker _picker = ImagePicker();
 
   String _selectedMethod = 'session_id';
-  String _selectedPhrase = 'Let\'s connect securely';
+  String _selectedPhrase = 'Footsteps in familiar rain';
   bool _isLoading = false;
   String? _sessionIdError;
 
   // Key request body phrases
   final List<String> _keyRequestPhrases = [
-    'Let\'s connect securely',
-    'Secure connection request',
-    'Privacy-focused connection',
-    'End-to-end secure chat',
-    'Private messaging setup',
-    'Secure communication request',
-    'Privacy-first connection',
-    'Encrypted chat setup',
-    'Secure messaging request',
-    'Private connection setup',
+    'Footsteps in familiar rain',
+    'The echo of shared laughter',
+    'Shadows know my secret path',
+    'Between the lines we spoke',
+    'A song only you recall',
+    'Lantern in the midnight fog',
+    'Traces of yesterday\'s promise',
+    'Whispers from our hidden shore',
+    'The compass points to us',
+    'Pages from our quiet story',
+    'Star that marked our night',
+    'Where the river met the sky',
+    'Leaves falling where we stood',
+    'The bridge we never crossed',
+    'Coffee at the corner table',
+    'A tune we both forgot',
+    'The smile behind the mask',
+    'Our footprints fade, but remain',
+    'The key under the doormat',
+    'Light in the locked room',
   ];
 
   @override
@@ -521,7 +531,7 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Request Message',
+                            'Request Phrase',
                             style: TextStyle(
                               fontSize: width * 0.035,
                               fontWeight: FontWeight.w600,
@@ -530,7 +540,13 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
                           ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
+                            icon: Icon(
+                              Icons.arrow_drop_down,
+                              color: Colors.grey[600],
+                              size: 20,
+                            ),
                             value: _selectedPhrase,
+                            dropdownColor: Colors.white,
                             decoration: InputDecoration(
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
@@ -540,12 +556,18 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
                                 vertical: 8,
                               ),
                             ),
+
+                            // dropdown meanu bg whit
+
                             items: _keyRequestPhrases.map((String phrase) {
                               return DropdownMenuItem<String>(
                                 value: phrase,
                                 child: Text(
                                   phrase,
-                                  style: TextStyle(fontSize: width * 0.035),
+                                  style: TextStyle(
+                                    fontSize: width * 0.035,
+                                    color: Colors.black.withValues(alpha: 0.8),
+                                  ),
                                 ),
                               );
                             }).toList(),
