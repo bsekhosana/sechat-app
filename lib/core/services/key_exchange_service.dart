@@ -21,27 +21,55 @@ class KeyExchangeService {
 
   /// Initialize user's encryption keys if they don't exist
   Future<Map<String, String>> ensureKeysExist() async {
-    final publicKey = await EncryptionService.getPublicKey();
+    try {
+      // Get keys from session service (current implementation)
+      final sessionService = SeSessionService();
+      final currentSession = sessionService.currentSession;
 
-    // If keys already exist, return them
-    if (publicKey != null) {
-      final privateKey = await EncryptionService.getPrivateKey();
-      final version = await EncryptionService.getKeyPairVersion();
-      return {
-        'publicKey': publicKey,
-        'privateKey': privateKey ?? '',
-        'version': version,
-      };
+      if (currentSession != null && currentSession.publicKey != null) {
+        // Keys already exist in session
+        final publicKey = currentSession.publicKey!;
+        final privateKey = await EncryptionService.getPrivateKey();
+        final version = await EncryptionService.getKeyPairVersion();
+
+        print('🔑 KeyExchangeService: Using existing keys from session');
+        return {
+          'publicKey': publicKey,
+          'privateKey': privateKey ?? '',
+          'version': version,
+        };
+      }
+
+      // No keys exist, generate them via session service
+      print(
+          '🔑 KeyExchangeService: No keys found, generating new keys via session service');
+      await sessionService.regenerateProperKeys();
+
+      // Get the newly generated keys
+      final newSession = sessionService.currentSession;
+      if (newSession?.publicKey != null) {
+        final publicKey = newSession!.publicKey!;
+        final privateKey = await EncryptionService.getPrivateKey();
+        final version = await EncryptionService.getKeyPairVersion();
+
+        print('🔑 KeyExchangeService: New keys generated successfully');
+        return {
+          'publicKey': publicKey,
+          'privateKey': privateKey ?? '',
+          'version': version,
+        };
+      } else {
+        throw Exception('Failed to generate new keys');
+      }
+    } catch (e) {
+      print('🔑 KeyExchangeService: Error ensuring keys exist: $e');
+      throw Exception('Failed to ensure keys exist: $e');
     }
-
-    // Generate new keys
-    print('🔑 KeyExchangeService: Generating new encryption keys');
-    final keyPair = await EncryptionService.generateKeyPair();
-    return keyPair;
   }
 
   /// Request key exchange with another user
-  Future<bool> requestKeyExchange(String recipientId, {String? requestPhrase}) async {
+  Future<bool> requestKeyExchange(String recipientId,
+      {String? requestPhrase}) async {
     try {
       print('🔑 KeyExchangeService: Requesting key exchange with $recipientId');
 
@@ -55,7 +83,7 @@ class KeyExchangeService {
 
       // Generate request ID
       final requestId = const Uuid().v4();
-      
+
       // Create the key exchange request data
       final keyExchangeRequestData = {
         'type': 'key_exchange_request',
@@ -64,7 +92,8 @@ class KeyExchangeService {
         'version': ourKeys['version'],
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'request_id': requestId,
-        'request_phrase': requestPhrase ?? 'New encryption key exchange request',
+        'request_phrase':
+            requestPhrase ?? 'New encryption key exchange request',
       };
 
       // Store pending exchange
@@ -86,10 +115,11 @@ class KeyExchangeService {
       if (success) {
         print(
             '🔑 KeyExchangeService: ✅ Key exchange request sent successfully to $recipientId');
-        
+
         // Create a local record of the sent request
-        await _createLocalSentRequest(requestId, currentUserId, recipientId, requestPhrase);
-        
+        await _createLocalSentRequest(
+            requestId, currentUserId, recipientId, requestPhrase);
+
         return true;
       } else {
         print(
@@ -105,11 +135,13 @@ class KeyExchangeService {
   }
 
   /// Create a local record of the sent key exchange request
-  Future<void> _createLocalSentRequest(String requestId, String senderId, String recipientId, String? requestPhrase) async {
+  Future<void> _createLocalSentRequest(String requestId, String senderId,
+      String recipientId, String? requestPhrase) async {
     try {
       final prefsService = SeSharedPreferenceService();
-      final existingRequests = await prefsService.getJsonList('key_exchange_requests') ?? [];
-      
+      final existingRequests =
+          await prefsService.getJsonList('key_exchange_requests') ?? [];
+
       final sentRequest = {
         'id': requestId,
         'fromSessionId': senderId,
@@ -119,10 +151,10 @@ class KeyExchangeService {
         'timestamp': DateTime.now().toIso8601String(),
         'type': 'key_exchange_request',
       };
-      
+
       existingRequests.add(sentRequest);
       await prefsService.setJsonList('key_exchange_requests', existingRequests);
-      
+
       print('🔑 KeyExchangeService: ✅ Local sent request record created');
     } catch (e) {
       print('🔑 KeyExchangeService: Error creating local sent request: $e');
@@ -347,16 +379,18 @@ class KeyExchangeService {
   /// Rotate keys and notify contacts
   Future<bool> rotateKeys() async {
     try {
-      // Generate new keys
-      final newKeys = await EncryptionService.generateKeyPair();
-      final currentUserId = SeSessionService().currentSessionId;
+      // Generate new keys via session service
+      final sessionService = SeSessionService();
+      await sessionService.regenerateProperKeys();
 
+      final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) {
         throw Exception('User not logged in');
       }
 
-      print(
-          '🔑 KeyExchangeService: Rotated keys to version ${newKeys['version']}');
+      // Get the new key version
+      final version = await EncryptionService.getKeyPairVersion();
+      print('🔑 KeyExchangeService: Rotated keys to version $version');
 
       // TODO: In a real implementation, you would get the list of contacts
       // and notify each one about the key change. For now, we'll just log it.

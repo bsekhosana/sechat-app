@@ -1460,51 +1460,17 @@ class SimpleNotificationService {
   Future<String> _encryptData(
       Map<String, dynamic> data, String recipientId) async {
     try {
-      // Convert data to JSON string
-      final dataJson = json.encode(data);
+      print(
+          '🔔 SimpleNotificationService: 🔐 Encrypting data using new EncryptionService');
 
-      // Get recipient's public key (in real implementation, fetch from key server)
-      final recipientPublicKey = await _getRecipientPublicKey(recipientId);
-      if (recipientPublicKey == null) {
-        throw Exception('Recipient public key not found');
-      }
+      // Use the new EncryptionService.encryptAesCbcPkcs7 method
+      final result =
+          await EncryptionService.encryptAesCbcPkcs7(data, recipientId);
 
-      // Parse recipient's public key
-      final publicKeyBytes = base64Decode(recipientPublicKey);
-
-      // Generate random AES key for this message
-      final aesKey = List<int>.generate(32, (_) => _random.nextInt(256));
-
-      // Generate random IV
-      final iv = List<int>.generate(16, (_) => _random.nextInt(256));
-
-      // Encrypt data with AES
-      final cipher = CBCBlockCipher(AESEngine());
-      final params = ParametersWithIV(
-        KeyParameter(Uint8List.fromList(aesKey)),
-        Uint8List.fromList(iv),
-      );
-      cipher.init(true, params);
-
-      final dataBytes = utf8.encode(dataJson);
-      final paddedData = _padMessage(dataBytes);
-      final encryptedBytes = cipher.process(Uint8List.fromList(paddedData));
-
-      // Combine IV and encrypted data
-      final combined = Uint8List.fromList([...iv, ...encryptedBytes]);
-
-      // Encrypt AES key with recipient's public key (simplified - use AES key as is for demo)
-      final encryptedAesKey = base64Encode(aesKey);
-
-      // Create final encrypted payload
-      final encryptedPayload = {
-        'encryptedData': base64Encode(combined),
-        'encryptedKey': encryptedAesKey,
-        'algorithm': 'AES-256-CBC',
-      };
-
-      return base64Encode(utf8.encode(json.encode(encryptedPayload)));
+      // Return the encrypted data (envelope) for backward compatibility
+      return result['data']!;
     } catch (e) {
+      print('🔔 SimpleNotificationService: ❌ Encryption failed: $e');
       throw Exception('Encryption failed: $e');
     }
   }
@@ -1513,7 +1479,7 @@ class SimpleNotificationService {
   Future<Map<String, dynamic>?> _decryptData(String encryptedData) async {
     try {
       print(
-          '🔔 SimpleNotificationService: 🔐 Attempting to decrypt data using EncryptionService');
+          '🔔 SimpleNotificationService: 🔐 Attempting to decrypt data using new EncryptionService');
 
       // Debug: Log the encrypted data being received
       final previewLength =
@@ -1523,16 +1489,17 @@ class SimpleNotificationService {
       print(
           '🔔 SimpleNotificationService: Encrypted data length: ${encryptedData.length} characters');
 
-      // Use EncryptionService.decryptData which handles the correct format
-      final decryptedData = await EncryptionService.decryptData(encryptedData);
+      // Use the new EncryptionService.decryptAesCbcPkcs7 method
+      final decryptedData =
+          await EncryptionService.decryptAesCbcPkcs7(encryptedData);
 
       if (decryptedData != null) {
         print(
-            '🔔 SimpleNotificationService: ✅ Data decrypted successfully using EncryptionService');
+            '🔔 SimpleNotificationService: ✅ Data decrypted successfully using new EncryptionService');
         return decryptedData;
       } else {
         print(
-            '🔔 SimpleNotificationService: ❌ EncryptionService.decryptData returned null');
+            '🔔 SimpleNotificationService: ❌ EncryptionService.decryptAesCbcPkcs7 returned null');
         return null;
       }
     } catch (e) {
@@ -1578,20 +1545,6 @@ class SimpleNotificationService {
     final bytes = utf8.encode(dataJson);
     final digest = sha256.convert(bytes);
     return digest.toString();
-  }
-
-  /// PKCS7 padding
-  List<int> _padMessage(List<int> message) {
-    final blockSize = 16;
-    final paddingLength = blockSize - (message.length % blockSize);
-    final padding = List<int>.filled(paddingLength, paddingLength);
-    return [...message, ...padding];
-  }
-
-  /// PKCS7 unpadding
-  List<int> _unpadMessage(List<int> message) {
-    final paddingLength = message.last;
-    return message.sublist(0, message.length - paddingLength);
   }
 
   /// Store recipient's public key
@@ -1962,28 +1915,12 @@ class SimpleNotificationService {
       print(
           '🔔 SimpleNotificationService: Processing encrypted user data exchange');
 
-      // Extract encrypted data
-      final encryptedData = data['data'] as String?;
-
-      if (encryptedData == null) {
-        print('🔔 SimpleNotificationService: No encrypted data found');
-        return;
-      }
-
-      // Decrypt the data
-      final decryptedData = await EncryptionService.decryptDataWithRetry(
-        encryptedData,
-      );
-
-      if (decryptedData == null) {
-        print('🔔 SimpleNotificationService: Failed to decrypt user data');
-        return;
-      }
-
-      print('🔔 SimpleNotificationService: ✅ User data decrypted successfully');
+      // The data is already decrypted at this point, so process it directly
+      print(
+          '🔔 SimpleNotificationService: ✅ User data already decrypted, processing directly');
 
       // Process the decrypted user data
-      await _processDecryptedUserData(decryptedData);
+      await _processDecryptedUserData(data);
     } catch (e) {
       print(
           '🔔 SimpleNotificationService: Error processing user data exchange: $e');
@@ -2098,25 +2035,54 @@ class SimpleNotificationService {
       // Create chat
       final chatId =
           'chat_${DateTime.now().millisecondsSinceEpoch}_${contactId.substring(0, 8)}';
+
+      // Get current user info for chat
+      final currentSession = SeSessionService().currentSession;
+      final currentUserDisplayName = currentSession?.displayName ??
+          'User ${currentUserId.substring(0, 8)}';
+
+      // Ensure all required fields are non-null
       final chat = {
         'id': chatId,
-        'contactId': contactId,
-        'contactName': displayName,
-        'lastMessage': null,
-        'lastMessageTime': null,
-        'unreadCount': 0,
-        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'user1_id': currentUserId,
+        'user2_id': contactId,
+        'user1_display_name': currentUserDisplayName,
+        'user2_display_name': displayName,
         'status': 'active',
+        'is_blocked': false,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
       };
+
+      // Debug: Log the chat object to verify all fields
+      print('🔔 SimpleNotificationService: Created chat object:');
+      print('🔔 SimpleNotificationService: - ID: ${chat['id']}');
+      print('🔔 SimpleNotificationService: - User1 ID: ${chat['user1_id']}');
+      print('🔔 SimpleNotificationService: - User2 ID: ${chat['user2_id']}');
+      print(
+          '🔔 SimpleNotificationService: - User1 Display Name: ${chat['user1_display_name']}');
+      print(
+          '🔔 SimpleNotificationService: - User2 Display Name: ${chat['user2_display_name']}');
+      print('🔔 SimpleNotificationService: - Status: ${chat['status']}');
+      print(
+          '🔔 SimpleNotificationService: - Created At: ${chat['created_at']}');
+      print(
+          '🔔 SimpleNotificationService: - Updated At: ${chat['updated_at']}');
 
       // Save chat to local storage
       final existingChats = await prefsService.getJsonList('chats') ?? [];
 
       // Check if chat already exists
-      if (!existingChats.any((c) => c['contactId'] == contactId)) {
+      if (!existingChats.any((c) => c['user2_id'] == contactId)) {
         existingChats.add(chat);
         await prefsService.setJsonList('chats', existingChats);
         print('🔔 SimpleNotificationService: ✅ Chat created: $chatId');
+
+        // Debug: Verify the chat was saved correctly
+        print(
+            '🔔 SimpleNotificationService: Total chats in storage: ${existingChats.length}');
+        final savedChat = existingChats.last;
+        print('🔔 SimpleNotificationService: Last saved chat: $savedChat');
       } else {
         print(
             '🔔 SimpleNotificationService: Chat already exists for: $displayName');
@@ -2233,8 +2199,8 @@ class SimpleNotificationService {
         return;
       }
 
-      // Decrypt the data
-      final decryptedData = await EncryptionService.decryptDataWithRetry(
+      // Decrypt the data using the new encryption service
+      final decryptedData = await EncryptionService.decryptAesCbcPkcs7(
         encryptedData,
       );
 

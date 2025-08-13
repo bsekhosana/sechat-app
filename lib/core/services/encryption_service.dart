@@ -1,53 +1,247 @@
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+
 import 'package:crypto/crypto.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pointycastle/export.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+
 import '../utils/encryption_error_handler.dart';
 import '../services/se_session_service.dart';
 
 class EncryptionService {
-  static const FlutterSecureStorage _storage = FlutterSecureStorage();
-  static const String _privateKeyKey = 'private_key';
-  static const String _publicKeyKey = 'public_key';
-  static const String _keyPairVersion = 'key_pair_version';
+  // ===== Public API =====
 
-  // Keep a cache of recipient public keys to avoid frequent storage access
-  static final Map<String, String> _recipientPublicKeysCache = {};
-  static final Random _secureRandom = Random.secure();
+  /// Encrypts a JSON-serializable map using AES-256-CBC/PKCS7.
+  /// Returns { "data": base64(envelopeJson), "checksum": sha256(json) }.
+  static Future<Map<String, String>> encryptAesCbcPkcs7(
+    Map<String, dynamic> jsonMap,
+    String recipientId,
+  ) async {
+    try {
+      // 1) Serialize cleartext
+      final plain = utf8.encode(json.encode(jsonMap));
+      final keyBytes =
+          await _getSymmetricKeyForRecipient(recipientId); // 32 bytes
+      final ivBytes = _secureRandomBytes(16);
 
-  /// Generate AES key pair for end-to-end encryption
-  static Future<Map<String, String>> generateKeyPair() async {
-    final random = Random.secure();
+      // 2) Encrypt
+      final cipherText =
+          _aesCbcPkcs7Encrypt(Uint8List.fromList(plain), keyBytes, ivBytes);
 
-    // Generate AES key (256-bit)
-    final aesKey = List<int>.generate(32, (i) => random.nextInt(256));
-    final aesKeyBase64 = base64Encode(aesKey);
+      // 3) Build envelope
+      final envelope = {
+        "v": 1,
+        "alg": "AES-256-CBC/PKCS7",
+        "iv": base64Encode(ivBytes),
+        "ct": base64Encode(cipherText),
+      };
+      final envelopeB64 = base64Encode(utf8.encode(json.encode(envelope)));
 
-    // Generate IV (Initialization Vector)
-    final iv = List<int>.generate(16, (i) => random.nextInt(256));
-    final ivBase64 = base64Encode(iv);
+      // 4) Checksum on plaintext for integrity (what your receiver will recompute)
+      final checksum = sha256.convert(plain).toString();
 
-    // Store keys securely
-    await _storage.write(key: _publicKeyKey, value: aesKeyBase64);
-    await _storage.write(key: _privateKeyKey, value: ivBase64);
+      _log('encryptAesCbcPkcs7',
+          'plain=${plain.length}B, ct=${cipherText.length}B, iv=16B, envB64=${envelopeB64.length} chars');
 
-    // Store version information for key rotation
-    final currentVersion = await _storage.read(key: _keyPairVersion) ?? '0';
-    final newVersion = (int.tryParse(currentVersion) ?? 0) + 1;
-    await _storage.write(key: _keyPairVersion, value: newVersion.toString());
+      return {"data": envelopeB64, "checksum": checksum};
+    } catch (e) {
+      final errorType = EncryptionErrorType.encryptionFailed;
+      EncryptionErrorHandler.instance
+          .logError('Failed to encrypt data: $e', type: errorType);
+      throw Exception('Failed to encrypt data: $e');
+    }
+  }
 
+  /// Decrypts base64(envelopeJson) and returns a JSON map.
+  static Future<Map<String, dynamic>?> decryptAesCbcPkcs7(
+    String encryptedBase64,
+  ) async {
+    try {
+      final envJson = utf8.decode(base64Decode(encryptedBase64));
+      final env = json.decode(envJson) as Map<String, dynamic>;
+
+      final v = env["v"];
+      final alg = env["alg"];
+      final ivB64 = env["iv"] as String?;
+      final ctB64 = env["ct"] as String?;
+
+      if (v != 1 ||
+          alg != "AES-256-CBC/PKCS7" ||
+          ivB64 == null ||
+          ctB64 == null) {
+        throw StateError("Invalid envelope format");
+      }
+
+      final iv = base64Decode(ivB64);
+      final ct = base64Decode(ctB64);
+
+      // You must obtain the correct key for the current session/recipient here.
+      final keyBytes =
+          await _getOwnSymmetricKey(); // 32 bytes (recipient's key)
+
+      final plainBytes = _aesCbcPkcs7Decrypt(ct, keyBytes, iv);
+      final plainStr = utf8.decode(plainBytes);
+
+      _log('decryptAesCbcPkcs7',
+          'ct=${ct.length}B, iv=${iv.length}B, plain=${plainBytes.length}B, preview=${_preview(plainStr)}');
+
+      return json.decode(plainStr) as Map<String, dynamic>;
+    } catch (e) {
+      final errorType = EncryptionErrorType.decryptionFailed;
+      EncryptionErrorHandler.instance
+          .logError('Failed to decrypt data: $e', type: errorType);
+      _log('decryptAesCbcPkcs7', 'ERROR: $e');
+      return null;
+    }
+  }
+
+  // ===== Legacy API Compatibility =====
+
+  /// Legacy method for backward compatibility
+  static Future<String> encryptData(
+      Map<String, dynamic> data, String recipientId) async {
+    final result = await encryptAesCbcPkcs7(data, recipientId);
+    return result['data']!;
+  }
+
+  /// Legacy method for backward compatibility
+  static Future<Map<String, dynamic>?> decryptData(String encryptedData) async {
+    return await decryptAesCbcPkcs7(encryptedData);
+  }
+
+  /// Legacy method for backward compatibility
+  static Future<Map<String, dynamic>> createEncryptedPayload(
+      Map<String, dynamic> data, String recipientId) async {
+    final result = await encryptAesCbcPkcs7(data, recipientId);
     return {
-      'publicKey': aesKeyBase64,
-      'privateKey': ivBase64,
-      'version': newVersion.toString()
+      'encrypted': true,
+      'data': result['data']!,
+      'checksum': result['checksum']!,
+      'version': '1',
+      'algorithm': 'AES-256-CBC/PKCS7',
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
   }
+
+  // ===== Internals =====
+
+  static Uint8List _aesCbcPkcs7Encrypt(
+      Uint8List plain, Uint8List key, Uint8List iv) {
+    _assertKeyIv(key, iv);
+    final c = _paddedCipher(true, key, iv);
+    final out = c.process(plain); // processes ALL bytes, PKCS7 handled
+    return Uint8List.fromList(out);
+  }
+
+  static Uint8List _aesCbcPkcs7Decrypt(
+      Uint8List ct, Uint8List key, Uint8List iv) {
+    _assertKeyIv(key, iv);
+    final c = _paddedCipher(false, key, iv);
+    final out = c.process(ct); // processes ALL bytes, PKCS7 handled
+    return Uint8List.fromList(out);
+  }
+
+  static PaddedBlockCipher _paddedCipher(
+      bool forEncryption, Uint8List key, Uint8List iv) {
+    final params =
+        PaddedBlockCipherParameters<CipherParameters, CipherParameters>(
+      ParametersWithIV<KeyParameter>(KeyParameter(key), iv),
+      null,
+    );
+    final cipher =
+        PaddedBlockCipherImpl(PKCS7Padding(), CBCBlockCipher(AESEngine()));
+    cipher.init(forEncryption, params);
+    return cipher;
+  }
+
+  static void _assertKeyIv(Uint8List key, Uint8List iv) {
+    if (key.length != 32) {
+      throw ArgumentError('AES-256 key must be 32 bytes, got ${key.length}');
+    }
+    if (iv.length != 16) {
+      throw ArgumentError('AES-CBC IV must be 16 bytes, got ${iv.length}');
+    }
+  }
+
+  static Uint8List _secureRandomBytes(int n) {
+    final r = Random.secure();
+    return Uint8List.fromList(List<int>.generate(n, (_) => r.nextInt(256)));
+    // (For production, prefer FortunaRandom seeded from OS.)
+  }
+
+  // === Key Management Implementation ===
+
+  /// Get symmetric key for recipient (32 bytes)
+  static Future<Uint8List> _getSymmetricKeyForRecipient(
+      String recipientId) async {
+    try {
+      // Get recipient's public key from storage
+      final recipientPublicKey = await getRecipientPublicKey(recipientId);
+      if (recipientPublicKey == null) {
+        throw Exception('Recipient public key not found for $recipientId');
+      }
+
+      // For now, use the recipient's public key as the symmetric key
+      // In production, this should be derived via ECDH or KDF
+      final keyBytes = base64Decode(recipientPublicKey);
+
+      // Ensure it's 32 bytes for AES-256
+      if (keyBytes.length != 32) {
+        // If not 32 bytes, pad or truncate to 32 bytes
+        final adjustedKey = Uint8List(32);
+        final copyLength = keyBytes.length > 32 ? 32 : keyBytes.length;
+        adjustedKey.setRange(0, copyLength, keyBytes);
+        // Fill remaining bytes with zeros if needed
+        if (copyLength < 32) {
+          adjustedKey.fillRange(copyLength, 32, 0);
+        }
+        return adjustedKey;
+      }
+
+      return keyBytes;
+    } catch (e) {
+      throw Exception('Failed to get symmetric key for recipient: $e');
+    }
+  }
+
+  /// Get own symmetric key (32 bytes)
+  static Future<Uint8List> _getOwnSymmetricKey() async {
+    try {
+      // Get current user's private key from session service
+      final privateKey = await getPrivateKey();
+      if (privateKey == null) {
+        throw Exception('Private key not found');
+      }
+
+      // For now, use the private key as the symmetric key
+      // In production, this should be derived via ECDH or KDF
+      final keyBytes = base64Decode(privateKey);
+
+      // Ensure it's 32 bytes for AES-256
+      if (keyBytes.length != 32) {
+        // If not 32 bytes, pad or truncate to 32 bytes
+        final adjustedKey = Uint8List(32);
+        final copyLength = keyBytes.length > 32 ? 32 : keyBytes.length;
+        adjustedKey.setRange(0, copyLength, keyBytes);
+        // Fill remaining bytes with zeros if needed
+        if (copyLength < 32) {
+          adjustedKey.fillRange(copyLength, 32, 0);
+        }
+        return adjustedKey;
+      }
+
+      return keyBytes;
+    } catch (e) {
+      throw Exception('Failed to get own symmetric key: $e');
+    }
+  }
+
+  // ===== Legacy Key Management Methods =====
 
   /// Get user's public key (to share with others)
   static Future<String?> getPublicKey() async {
@@ -77,11 +271,6 @@ class EncryptionService {
       print('🔒 EncryptionService: Error getting private key: $e');
       return null;
     }
-  }
-
-  /// Get current key pair version
-  static Future<String> getKeyPairVersion() async {
-    return await _storage.read(key: _keyPairVersion) ?? '1';
   }
 
   /// Store recipient's public key
@@ -114,300 +303,42 @@ class EncryptionService {
     _recipientPublicKeysCache.remove(userId);
   }
 
-  /// Encrypt message with recipient's public key (AES key)
+  // ===== Utility Methods =====
+
+  static String _preview(String s) =>
+      s.length <= 64 ? s : '${s.substring(0, 64)}…';
+  static void _log(String tag, String msg) =>
+      print('🔐 EncryptionService[$tag] $msg');
+
+  // ===== Storage and Cache =====
+
+  static const _storage = FlutterSecureStorage();
+  static const _publicKeyKey = 'public_key';
+  static const _privateKeyKey = 'private_key';
+  static const _keyPairVersion = 'key_pair_version';
+  static final Map<String, String> _recipientPublicKeysCache =
+      <String, String>{};
+
+  // ===== Legacy Methods for Backward Compatibility =====
+
+  /// Legacy method - use encryptAesCbcPkcs7 instead
+  @deprecated
   static String encryptMessage(String message, String recipientPublicKey) {
-    try {
-      // Parse recipient's AES key
-      final aesKeyBytes = base64Decode(recipientPublicKey);
-
-      // Debug: Log key details
-      print(
-          '🔒 EncryptionService: Encrypting with key length: ${aesKeyBytes.length} bytes (${aesKeyBytes.length * 8} bits)');
-      print(
-          '🔒 EncryptionService: Key format: ${recipientPublicKey.substring(0, 20)}...');
-
-      // Validate key length for AES
-      if (aesKeyBytes.length != 16 &&
-          aesKeyBytes.length != 24 &&
-          aesKeyBytes.length != 32) {
-        throw Exception(
-            'Invalid AES key length: ${aesKeyBytes.length} bytes. Expected 16, 24, or 32 bytes (128, 192, or 256 bits)');
-      }
-
-      // Generate random IV for this message
-      final random = _secureRandom;
-      final iv = List<int>.generate(16, (i) => random.nextInt(256));
-
-      // Create AES cipher
-      final cipher = CBCBlockCipher(AESEngine());
-      final params = ParametersWithIV(
-        KeyParameter(aesKeyBytes),
-        Uint8List.fromList(iv),
-      );
-      cipher.init(true, params);
-
-      // Encrypt message
-      final messageBytes = utf8.encode(message);
-      final paddedMessage = _padMessage(messageBytes);
-
-      // Debug: Log encryption details
-      print(
-          '🔒 EncryptionService: - Original message length: ${messageBytes.length} bytes');
-      print(
-          '🔒 EncryptionService: - Padded message length: ${paddedMessage.length} bytes');
-      print(
-          '🔒 EncryptionService: - Padding added: ${paddedMessage.length - messageBytes.length} bytes');
-
-      // Process the entire padded message in chunks
-      final encryptedBytes = _encryptAESBlocks(paddedMessage, aesKeyBytes, iv);
-
-      // Combine IV and encrypted data
-      final combined = Uint8List.fromList([...iv, ...encryptedBytes]);
-
-      // Debug: Show the final encrypted data structure
-      print('🔒 EncryptionService: Final encrypted data:');
-      print('🔒 EncryptionService: - IV length: ${iv.length} bytes');
-      print(
-          '🔒 EncryptionService: - Encrypted content length: ${encryptedBytes.length} bytes');
-      print(
-          '🔒 EncryptionService: - Combined length: ${combined.length} bytes');
-
-      // Safe substring operation for base64 result
-      final base64Result = base64Encode(combined);
-      final previewLength = base64Result.length > 50 ? 50 : base64Result.length;
-      print(
-          '🔒 EncryptionService: - Base64 result: ${base64Result.substring(0, previewLength)}...');
-
-      return base64Encode(combined);
-    } catch (e) {
-      throw Exception('Encryption failed: $e');
-    }
+    throw UnimplementedError('Use encryptAesCbcPkcs7 instead');
   }
 
-  /// Encrypt data in multiple AES blocks
-  static Uint8List _encryptAESBlocks(
-      List<int> paddedMessage, List<int> key, List<int> iv) {
-    try {
-      final blockSize = 16;
-      final cipher = CBCBlockCipher(AESEngine());
-      final params = ParametersWithIV(
-        KeyParameter(Uint8List.fromList(key)),
-        Uint8List.fromList(iv),
-      );
-      cipher.init(true, params);
-
-      // Process the entire message in blocks
-      final encryptedBytes = cipher.process(Uint8List.fromList(paddedMessage));
-
-      print(
-          '🔒 EncryptionService: - Encrypted ${paddedMessage.length} bytes to ${encryptedBytes.length} bytes');
-
-      return encryptedBytes;
-    } catch (e) {
-      throw Exception('AES block encryption failed: $e');
-    }
-  }
-
-  /// Decrypt message with own private key (IV)
+  /// Legacy method - use decryptAesCbcPkcs7 instead
+  @deprecated
   static Future<String> decryptMessage(String encryptedMessage) async {
-    try {
-      final privateKey = await getPrivateKey();
-      if (privateKey == null) throw Exception('Private key not found');
-
-      // Parse AES key and IV
-      final aesKeyBytes = base64Decode(privateKey);
-      final encryptedBytes = base64Decode(encryptedMessage);
-
-      // Debug: Log data lengths
-      print('🔒 EncryptionService: Decrypting message:');
-      print(
-          '🔒 EncryptionService: - Private key length: ${aesKeyBytes.length} bytes');
-      print(
-          '🔒 EncryptionService: - Encrypted data length: ${encryptedBytes.length} bytes');
-      print('🔒 EncryptionService: - Expected IV length: 16 bytes');
-      print(
-          '🔒 EncryptionService: - Expected encrypted content length: ${encryptedBytes.length - 16} bytes');
-
-      // Validate data length
-      if (encryptedBytes.length < 16) {
-        throw Exception(
-            'Encrypted data too short: ${encryptedBytes.length} bytes (need at least 16 bytes for IV)');
-      }
-
-      // Extract IV and encrypted data
-      final iv = encryptedBytes.sublist(0, 16);
-      final encryptedData = encryptedBytes.sublist(16);
-
-      print('🔒 EncryptionService: - IV extracted: ${iv.length} bytes');
-      print(
-          '🔒 EncryptionService: - Encrypted content extracted: ${encryptedData.length} bytes');
-
-      // Create AES cipher
-      final cipher = CBCBlockCipher(AESEngine());
-      final params = ParametersWithIV(
-        KeyParameter(aesKeyBytes),
-        Uint8List.fromList(iv),
-      );
-      cipher.init(false, params);
-
-      // Decrypt the entire encrypted data
-      final decryptedBytes = _decryptAESBlocks(encryptedData, aesKeyBytes, iv);
-
-      // Debug: Log decryption details
-      print(
-          '🔒 EncryptionService: - Decrypted bytes length: ${decryptedBytes.length}');
-      if (decryptedBytes.length > 0) {
-        print(
-            '🔒 EncryptionService: - Last byte (padding indicator): ${decryptedBytes.last}');
-        print(
-            '🔒 EncryptionService: - Last few bytes: ${decryptedBytes.sublist(decryptedBytes.length > 4 ? decryptedBytes.length - 4 : 0)}');
-
-        // Debug: Show the full decrypted content
-        print(
-            '🔒 EncryptionService: - Full decrypted bytes: ${decryptedBytes}');
-
-        // Try to decode as UTF-8 to see what the content looks like
-        try {
-          final decodedContent = utf8.decode(decryptedBytes);
-          print('🔒 EncryptionService: - Decoded content: $decodedContent');
-        } catch (e) {
-          print('🔒 EncryptionService: - Could not decode as UTF-8: $e');
-        }
-      }
-
-      final unpaddedMessage = _unpadMessage(decryptedBytes.toList());
-      print(
-          '🔒 EncryptionService: - Unpadded message length: ${unpaddedMessage.length}');
-
-      return utf8.decode(unpaddedMessage);
-    } catch (e) {
-      throw Exception('Decryption failed: $e');
-    }
+    throw UnimplementedError('Use decryptAesCbcPkcs7 instead');
   }
 
-  /// Decrypt data in multiple AES blocks
-  static Uint8List _decryptAESBlocks(
-      List<int> encryptedData, List<int> key, List<int> iv) {
-    try {
-      final blockSize = 16;
-      final cipher = CBCBlockCipher(AESEngine());
-      final params = ParametersWithIV(
-        KeyParameter(Uint8List.fromList(key)),
-        Uint8List.fromList(iv),
-      );
-      cipher.init(false, params);
-
-      // Process the entire encrypted data
-      final decryptedBytes = cipher.process(Uint8List.fromList(encryptedData));
-
-      print(
-          '🔒 EncryptionService: - Decrypted ${encryptedData.length} bytes to ${decryptedBytes.length} bytes');
-
-      return decryptedBytes;
-    } catch (e) {
-      throw Exception('AES block decryption failed: $e');
-    }
-  }
-
-  /// Encrypt any data object with recipient's public key
-  static Future<String> encryptData(
-      Map<String, dynamic> data, String recipientId) async {
-    try {
-      // Get recipient's public key
-      final recipientPublicKey = await getRecipientPublicKey(recipientId);
-      if (recipientPublicKey == null) {
-        final errorType = EncryptionErrorType.keyMissing;
-        EncryptionErrorHandler.instance.logError(
-            'Recipient public key not found for $recipientId',
-            type: errorType);
-        throw Exception('Recipient public key not found');
-      }
-
-      // Convert data to JSON string
-      final jsonData = json.encode(data);
-
-      // Debug: Log the message being encrypted
-      print('🔒 EncryptionService: Encrypting message:');
-      print('🔒 EncryptionService: - JSON data: $jsonData');
-      print(
-          '🔒 EncryptionService: - JSON length: ${jsonData.length} characters');
-
-      // Debug: Show the actual bytes being encrypted
-      final messageBytes = utf8.encode(jsonData);
-      print(
-          '🔒 EncryptionService: - Message bytes: ${messageBytes.sublist(0, messageBytes.length > 20 ? 20 : messageBytes.length)}...');
-      if (messageBytes.length > 20) {
-        print(
-            '🔒 EncryptionService: - Last 10 bytes: ${messageBytes.sublist(messageBytes.length - 10)}');
-      }
-
-      // Encrypt the JSON string
-      return encryptMessage(jsonData, recipientPublicKey);
-    } catch (e) {
-      final errorType = e is Exception
-          ? EncryptionErrorHandler.instance.handleException(e)
-          : EncryptionErrorType.encryptionFailed;
-
-      EncryptionErrorHandler.instance
-          .logError('Data encryption failed: $e', type: errorType);
-      throw Exception('Data encryption failed: $e');
-    }
-  }
-
-  /// Decrypt data object with own private key
-  static Future<Map<String, dynamic>?> decryptData(String encryptedData) async {
-    try {
-      // Decrypt the data
-      final decryptedJson = await decryptMessage(encryptedData);
-
-      // Parse JSON string back to Map
-      return json.decode(decryptedJson) as Map<String, dynamic>;
-    } catch (e) {
-      final errorType = e is Exception
-          ? EncryptionErrorHandler.instance.handleException(e)
-          : EncryptionErrorType.decryptionFailed;
-
-      EncryptionErrorHandler.instance
-          .logError('Decryption failed: $e', type: errorType);
-      return null;
-    }
-  }
-
-  /// Decrypt data with retry mechanism and error handling
+  /// Legacy method - use encryptAesCbcPkcs7 instead
+  @deprecated
   static Future<Map<String, dynamic>?> decryptDataWithRetry(
       String encryptedData,
       {int maxRetries = 2}) async {
-    int attempts = 0;
-
-    while (attempts <= maxRetries) {
-      try {
-        attempts++;
-
-        // Try to decrypt the data
-        final result = await decryptData(encryptedData);
-
-        if (result != null) {
-          return result;
-        } else if (attempts <= maxRetries) {
-          // Wait before retrying
-          await Future.delayed(Duration(milliseconds: 500 * attempts));
-          continue;
-        }
-      } catch (e) {
-        if (attempts <= maxRetries) {
-          // Wait before retrying
-          await Future.delayed(Duration(milliseconds: 500 * attempts));
-          continue;
-        } else {
-          EncryptionErrorHandler.instance.logError(
-              'Decryption failed after $maxRetries retries: $e',
-              type: EncryptionErrorType.decryptionFailed);
-          return null;
-        }
-      }
-    }
-
-    return null;
+    throw UnimplementedError('Use decryptAesCbcPkcs7 instead');
   }
 
   /// Generate checksum for data integrity verification
@@ -424,144 +355,12 @@ class EncryptionService {
     return calculatedChecksum == checksum;
   }
 
-  /// Create encrypted payload with all necessary metadata
-  static Future<Map<String, dynamic>> createEncryptedPayload(
-      Map<String, dynamic> data, String recipientId) async {
-    try {
-      // Encrypt the data
-      final encryptedData = await encryptData(data, recipientId);
-
-      // Generate checksum for integrity verification
-      final checksum = generateChecksum(data);
-
-      // Get current key version
-      final keyVersion = await getKeyPairVersion();
-
-      // Create payload with metadata
-      return {
-        'encrypted': true,
-        'data': encryptedData,
-        'checksum': checksum,
-        'version': keyVersion,
-        'algorithm': 'AES-256-CBC',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      };
-    } catch (e) {
-      final errorType = e is Exception
-          ? EncryptionErrorHandler.instance.handleException(e)
-          : EncryptionErrorType.encryptionFailed;
-
-      EncryptionErrorHandler.instance
-          .logError('Failed to create encrypted payload: $e', type: errorType);
-
-      // Rethrow with more context
-      throw Exception('Failed to create encrypted payload: $e');
-    }
+  /// Get current key pair version
+  static Future<String> getKeyPairVersion() async {
+    return await _storage.read(key: _keyPairVersion) ?? '1';
   }
 
-  /// Create encrypted payload with retry mechanism
-  static Future<Map<String, dynamic>> createEncryptedPayloadWithRetry(
-      Map<String, dynamic> data, String recipientId,
-      {int maxRetries = 2}) async {
-    int attempts = 0;
-    Exception? lastException;
-
-    while (attempts <= maxRetries) {
-      try {
-        attempts++;
-        return await createEncryptedPayload(data, recipientId);
-      } catch (e) {
-        lastException = e is Exception ? e : Exception(e.toString());
-
-        if (attempts <= maxRetries) {
-          // Wait before retrying
-          await Future.delayed(Duration(milliseconds: 500 * attempts));
-          continue;
-        }
-      }
-    }
-
-    // If we get here, all attempts failed
-    final errorType = EncryptionErrorType.encryptionFailed;
-    EncryptionErrorHandler.instance.logError(
-        'Failed to create encrypted payload after $maxRetries retries',
-        type: errorType);
-
-    throw lastException ??
-        Exception(
-            'Failed to create encrypted payload after $maxRetries retries');
-  }
-
-  // PKCS7 padding
-  static List<int> _padMessage(List<int> message) {
-    try {
-      final blockSize = 16;
-
-      // Calculate padding length
-      int paddingLength;
-      if (message.length % blockSize == 0) {
-        // Message is exactly block-aligned, add a full block of padding
-        paddingLength = blockSize;
-      } else {
-        // Message needs partial padding
-        paddingLength = blockSize - (message.length % blockSize);
-      }
-
-      // Create padding bytes (all with the same value)
-      final padding = List<int>.filled(paddingLength, paddingLength);
-
-      // Debug: Log padding details
-      print('🔒 EncryptionService: PKCS7 Padding:');
-      print('🔒 EncryptionService: - Message length: ${message.length} bytes');
-      print('🔒 EncryptionService: - Block size: $blockSize bytes');
-      print(
-          '🔒 EncryptionService: - Message % blockSize: ${message.length % blockSize}');
-      print('🔒 EncryptionService: - Padding length: $paddingLength bytes');
-      print(
-          '🔒 EncryptionService: - Final length: ${message.length + paddingLength} bytes');
-
-      return [...message, ...padding];
-    } catch (e) {
-      throw Exception('PKCS7 padding failed: $e');
-    }
-  }
-
-  // PKCS7 unpadding
-  static List<int> _unpadMessage(List<int> message) {
-    try {
-      if (message.isEmpty) {
-        throw Exception('Cannot unpad empty message');
-      }
-
-      final paddingLength = message.last;
-
-      // Validate padding length
-      if (paddingLength <= 0 || paddingLength > 16) {
-        throw Exception(
-            'Invalid padding length: $paddingLength (expected 1-16)');
-      }
-
-      // Validate that we have enough bytes for the padding
-      if (message.length < paddingLength) {
-        throw Exception(
-            'Message too short for padding length: ${message.length} < $paddingLength');
-      }
-
-      // Validate that all padding bytes have the correct value
-      for (int i = message.length - paddingLength; i < message.length; i++) {
-        if (message[i] != paddingLength) {
-          throw Exception(
-              'Invalid padding byte at position $i: ${message[i]} (expected $paddingLength)');
-        }
-      }
-
-      return message.sublist(0, message.length - paddingLength);
-    } catch (e) {
-      throw Exception('PKCS7 unpadding failed: $e');
-    }
-  }
-
-  // Generate device ID
+  /// Generate device ID
   static Future<String> getDeviceId() async {
     // Always check storage first
     final storedId = await _storage.read(key: 'device_id');
@@ -609,209 +408,40 @@ class EncryptionService {
 
   /// Generate a random test key for development/testing
   static Future<String> generateTestKey(String userId) async {
-    final random = _secureRandom;
+    final random = Random.secure();
     final keyBytes = List<int>.generate(32, (i) => random.nextInt(256));
     final key = base64Encode(keyBytes);
 
     // Store for future use
-    await storeRecipientPublicKey(userId, key);
-
+    await _storage.write(key: 'test_key_$userId', value: key);
     return key;
   }
 
-  /// Clear all stored keys (for logout/security)
-  static Future<void> clearAllKeys() async {
-    try {
-      // Get all keys
-      final allKeys = await _storage.readAll();
-
-      // Delete only encryption-related keys
-      for (final key in allKeys.keys) {
-        if (key.startsWith('recipient_key_') ||
-            key == _privateKeyKey ||
-            key == _publicKeyKey ||
-            key == _keyPairVersion) {
-          await _storage.delete(key: key);
-        }
-      }
-
-      // Clear cache
-      _recipientPublicKeysCache.clear();
-    } catch (e) {
-      final errorType = EncryptionErrorType.storageError;
-      EncryptionErrorHandler.instance
-          .logError('Error clearing encryption keys: $e', type: errorType);
-    }
+  /// Get a test key for development/testing
+  static Future<String?> getTestKey(String userId) async {
+    return await _storage.read(key: 'test_key_$userId');
   }
 
-  /// Rotate encryption keys and notify contacts
-  static Future<bool> rotateKeys({bool notifyContacts = true}) async {
-    try {
-      // Backup existing keys
-      final oldPublicKey = await getPublicKey();
-      final oldPrivateKey = await getPrivateKey();
-      final oldVersion = await getKeyPairVersion();
-
-      if (oldPublicKey != null && oldPrivateKey != null) {
-        await _storage.write(
-            key: 'backup_public_key_$oldVersion', value: oldPublicKey);
-        await _storage.write(
-            key: 'backup_private_key_$oldVersion', value: oldPrivateKey);
-      }
-
-      // Generate new keys
-      await generateKeyPair();
-
-      // If notifyContacts is true, we would send key updates to all contacts
-      // This would be implemented in KeyExchangeService
-
-      return true;
-    } catch (e) {
-      final errorType = EncryptionErrorType.storageError;
-      EncryptionErrorHandler.instance
-          .logError('Failed to rotate encryption keys: $e', type: errorType);
-      return false;
-    }
+  /// Delete a test key
+  static Future<void> deleteTestKey(String userId) async {
+    await _storage.delete(key: 'test_key_$userId');
   }
 
-  /// Try to recover from key failure using backup keys
-  static Future<bool> tryKeyRecovery(String recipientId) async {
+  /// Test encryption/decryption round-trip
+  static Future<bool> testEncryptionRoundTrip(String testData) async {
     try {
-      // Check if we have any backup keys
-      final allKeys = await _storage.readAll();
-      final backupKeys = allKeys.keys
-          .where((key) =>
-              key.startsWith('backup_public_key_') ||
-              key.startsWith('backup_private_key_'))
-          .toList();
-
-      if (backupKeys.isEmpty) {
-        return false;
-      }
-
-      // Find the latest backup version
-      int latestVersion = 0;
-      for (final key in backupKeys) {
-        if (key.startsWith('backup_public_key_')) {
-          final version = int.tryParse(key.split('_').last) ?? 0;
-          if (version > latestVersion) {
-            latestVersion = version;
-          }
-        }
-      }
-
-      if (latestVersion == 0) {
-        return false;
-      }
-
-      // Try to use the backup keys
-      final backupPublicKey =
-          await _storage.read(key: 'backup_public_key_$latestVersion');
-      final backupPrivateKey =
-          await _storage.read(key: 'backup_private_key_$latestVersion');
-
-      if (backupPublicKey == null || backupPrivateKey == null) {
-        return false;
-      }
-
-      // Temporarily restore the backup keys
-      await _storage.write(key: _publicKeyKey, value: backupPublicKey);
-      await _storage.write(key: _privateKeyKey, value: backupPrivateKey);
-      await _storage.write(
-          key: _keyPairVersion, value: latestVersion.toString());
-
-      return true;
-    } catch (e) {
-      final errorType = EncryptionErrorType.storageError;
-      EncryptionErrorHandler.instance
-          .logError('Failed to recover encryption keys: $e', type: errorType);
-      return false;
-    }
-  }
-
-  /// Test encryption/decryption with a recipient
-  static Future<bool> testEncryptionWithRecipient(String recipientId) async {
-    try {
-      // Test data
-      final testData = {
-        'message': 'test_message',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      final testMap = {
+        'test': testData,
+        'timestamp': DateTime.now().millisecondsSinceEpoch
       };
+      final encrypted = await encryptAesCbcPkcs7(testMap, 'test_user');
+      final decrypted = await decryptAesCbcPkcs7(encrypted['data']!);
 
-      // Create encrypted payload
-      final payload = await createEncryptedPayload(testData, recipientId);
+      if (decrypted == null) return false;
 
-      // Extract encrypted data
-      final encryptedData = payload['data'] as String;
-
-      // Try to decrypt it back
-      final decryptedData = await decryptData(encryptedData);
-
-      if (decryptedData == null) {
-        EncryptionErrorHandler.instance.logError(
-            'Encryption test failed: decryption returned null',
-            type: EncryptionErrorType.decryptionFailed);
-        return false;
-      }
-
-      // Verify contents
-      final isValid = decryptedData['message'] == 'test_message';
-      if (!isValid) {
-        EncryptionErrorHandler.instance.logError(
-            'Encryption test failed: content verification failed',
-            type: EncryptionErrorType.checksumVerificationFailed);
-      }
-      return isValid;
+      return decrypted['test'] == testData;
     } catch (e) {
-      final errorType = e is Exception
-          ? EncryptionErrorHandler.instance.handleException(e)
-          : EncryptionErrorType.unknownError;
-
-      EncryptionErrorHandler.instance
-          .logError('Encryption test failed: $e', type: errorType);
-      return false;
-    }
-  }
-
-  /// Verify encryption setup with a recipient and attempt recovery if needed
-  static Future<bool> verifyEncryptionSetup(String recipientId) async {
-    try {
-      // First try a normal encryption test
-      final testResult = await testEncryptionWithRecipient(recipientId);
-
-      if (testResult) {
-        return true;
-      }
-
-      // If test failed, try key recovery
-      final recoverySuccess = await tryKeyRecovery(recipientId);
-      if (!recoverySuccess) {
-        EncryptionErrorHandler.instance.logError(
-            'Encryption verification failed and recovery was not possible',
-            type: EncryptionErrorType.keyMissing);
-        return false;
-      }
-
-      // Try the test again with recovered keys
-      final retestResult = await testEncryptionWithRecipient(recipientId);
-      if (!retestResult) {
-        EncryptionErrorHandler.instance.logError(
-            'Encryption verification failed even after key recovery',
-            type: EncryptionErrorType.encryptionFailed);
-
-        // Generate new keys as a last resort
-        await rotateKeys();
-        return false;
-      }
-
-      return true;
-    } catch (e) {
-      final errorType = e is Exception
-          ? EncryptionErrorHandler.instance.handleException(e)
-          : EncryptionErrorType.unknownError;
-
-      EncryptionErrorHandler.instance
-          .logError('Encryption verification failed: $e', type: errorType);
+      print('🔒 EncryptionService: Test round-trip failed: $e');
       return false;
     }
   }

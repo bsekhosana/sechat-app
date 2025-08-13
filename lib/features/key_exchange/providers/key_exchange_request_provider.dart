@@ -225,6 +225,9 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           'sender_id': currentUserId,
           'request_phrase': requestPhrase,
           'timestamp': request.timestamp.millisecondsSinceEpoch,
+          'sender_public_key': SeSessionService()
+              .currentSession
+              ?.publicKey, // Include public key
         },
         sound: 'default',
         encrypted: false, // Key exchange requests are not encrypted initially
@@ -293,6 +296,18 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       if (_receivedRequests.any((req) => req.id == requestId)) {
         print('🔑 KeyExchangeRequestProvider: Request already processed');
         return;
+      }
+
+      // Store the sender's public key for future encryption
+      final senderPublicKey = data['sender_public_key'] as String?;
+      if (senderPublicKey != null) {
+        print(
+            '🔑 KeyExchangeRequestProvider: Storing sender public key for: $senderId');
+        await EncryptionService.storeRecipientPublicKey(
+            senderId, senderPublicKey);
+      } else {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ No public key included in request from: $senderId');
       }
 
       // Create the received request

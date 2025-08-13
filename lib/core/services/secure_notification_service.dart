@@ -43,8 +43,8 @@ class SecureNotificationService {
         try {
           final testData = {'test': 'key_exchange_verification'};
           final encrypted =
-              await EncryptionService.encryptData(testData, recipientId);
-          if (encrypted != null) {
+              await EncryptionService.encryptAesCbcPkcs7(testData, recipientId);
+          if (encrypted['data'] != null) {
             print(
                 '🔒 SecureNotificationService: Key exchange verified successfully');
             return true;
@@ -446,8 +446,9 @@ class SecureNotificationService {
         return null;
       }
 
-      // Decrypt the data
-      final decryptedData = await EncryptionService.decryptData(encryptedData);
+      // Decrypt the data using the new encryption service
+      final decryptedData =
+          await EncryptionService.decryptAesCbcPkcs7(encryptedData);
       if (decryptedData == null) {
         print('🔒 SecureNotificationService: Failed to decrypt data');
         return null;

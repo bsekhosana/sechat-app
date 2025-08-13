@@ -34,24 +34,30 @@ class Chat {
     // Convert LinkedMap to Map<String, dynamic> if needed
     final Map<String, dynamic> data = Map<String, dynamic>.from(json);
 
+    // Debug: Log the incoming data
+    print('🔍 Chat.fromJson: Parsing chat data: ${data.keys.toList()}');
+    print('🔍 Chat.fromJson: Data values: $data');
+
     // Handle API response structure with other_user
     if (data.containsKey('other_user')) {
       return Chat(
-        id: data['id'].toString(),
+        id: data['id']?.toString() ?? '',
         user1Id: '', // Will be determined later
         user2Id: '', // Will be determined later
-        user1DisplayName: data['user1_display_name'] ?? 'Unknown User',
-        user2DisplayName: data['user2_display_name'] ?? 'Unknown User',
-        status: data['status'] ?? 'active',
+        user1DisplayName:
+            data['user1_display_name']?.toString() ?? 'Unknown User',
+        user2DisplayName:
+            data['user2_display_name']?.toString() ?? 'Unknown User',
+        status: data['status']?.toString() ?? 'active',
         isBlocked: data['is_blocked'] ?? false,
         blockedAt: data['blocked_at'] != null
-            ? DateTime.parse(data['blocked_at'])
+            ? DateTime.parse(data['blocked_at'].toString())
             : null,
         lastMessageAt: data['last_message_at'] != null
-            ? DateTime.parse(data['last_message_at'])
+            ? DateTime.parse(data['last_message_at'].toString())
             : null,
-        createdAt: DateTime.parse(data['created_at']),
-        updatedAt: DateTime.parse(data['updated_at']),
+        createdAt: DateTime.parse(data['created_at'].toString()),
+        updatedAt: DateTime.parse(data['updated_at'].toString()),
         otherUser: data['other_user'] != null
             ? Map<String, dynamic>.from(data['other_user'])
             : null,
@@ -63,21 +69,23 @@ class Chat {
 
     // Handle legacy structure with user1_id and user2_id
     return Chat(
-      id: data['id'].toString(),
-      user1Id: data['user1_id'].toString(),
-      user2Id: data['user2_id'].toString(),
-      user1DisplayName: data['user1_display_name'] ?? 'Unknown User',
-      user2DisplayName: data['user2_display_name'] ?? 'Unknown User',
-      status: data['status'] ?? 'active',
+      id: data['id']?.toString() ?? '',
+      user1Id: data['user1_id']?.toString() ?? '',
+      user2Id: data['user2_id']?.toString() ?? '',
+      user1DisplayName:
+          data['user1_display_name']?.toString() ?? 'Unknown User',
+      user2DisplayName:
+          data['user2_display_name']?.toString() ?? 'Unknown User',
+      status: data['status']?.toString() ?? 'active',
       isBlocked: data['is_blocked'] ?? false,
       blockedAt: data['blocked_at'] != null
-          ? DateTime.parse(data['blocked_at'])
+          ? DateTime.parse(data['blocked_at'].toString())
           : null,
       lastMessageAt: data['last_message_at'] != null
-          ? DateTime.parse(data['last_message_at'])
+          ? DateTime.parse(data['last_message_at'].toString())
           : null,
-      createdAt: DateTime.parse(data['created_at']),
-      updatedAt: DateTime.parse(data['updated_at']),
+      createdAt: DateTime.parse(data['created_at'].toString()),
+      updatedAt: DateTime.parse(data['updated_at'].toString()),
     );
   }
 

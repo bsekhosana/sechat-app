@@ -191,9 +191,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Future<void> _handleEncryptedMessage(
       String encryptedData, String checksum) async {
     try {
-      // Try to decrypt the message data with retry mechanism
+      // Try to decrypt the message data using the new encryption service
       final messageData =
-          await EncryptionService.decryptDataWithRetry(encryptedData);
+          await EncryptionService.decryptAesCbcPkcs7(encryptedData);
       if (messageData == null) {
         final errorType = EncryptionErrorType.decryptionFailed;
         EncryptionErrorHandler.instance.logError(
@@ -530,28 +530,34 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       final otherUserId = widget.chat.getOtherUserId(_currentUserId!);
 
       // Verify encryption setup before sending
-      final setupValid =
-          await EncryptionService.verifyEncryptionSetup(otherUserId);
-      if (!setupValid) {
-        if (mounted) {
-          EncryptionErrorHandler.instance.displayError(context,
-              'Unable to establish secure connection with recipient. Message will be saved locally but not delivered.',
-              isWarning: true);
+      try {
+        // Check if we have the recipient's public key
+        final recipientPublicKey =
+            await EncryptionService.getRecipientPublicKey(otherUserId);
+        if (recipientPublicKey == null) {
+          if (mounted) {
+            EncryptionErrorHandler.instance.displayError(context,
+                'Unable to establish secure connection with recipient. Message will be saved locally but not delivered.',
+                isWarning: true);
 
-          // Update message status to error
-          final index = _messages.indexWhere((m) => m.id == message.id);
-          if (index != -1) {
-            setState(() {
-              _messages[index] = message.copyWith(
-                status: 'error',
-                messageStatus: MessageStatus.error,
-                updatedAt: DateTime.now(),
-              );
-            });
-            await _updateMessageInStorage(_messages[index]);
+            // Update message status to error
+            final index = _messages.indexWhere((m) => m.id == message.id);
+            if (index != -1) {
+              setState(() {
+                _messages[index] = message.copyWith(
+                  status: 'error',
+                  messageStatus: MessageStatus.error,
+                  updatedAt: DateTime.now(),
+                );
+              });
+              await _updateMessageInStorage(_messages[index]);
+            }
+            return;
           }
-          return;
         }
+      } catch (e) {
+        print('🔒 ChatScreen: Error verifying encryption setup: $e');
+        // Continue with message sending attempt
       }
 
       // Get current user's display name for the notification
