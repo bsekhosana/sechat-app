@@ -245,7 +245,7 @@ Download now and let's chat securely!
 
   Widget _buildChatsList() {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       itemCount: _chats.length,
       itemBuilder: (context, index) {
         // Reverse the index to show newest chats at the bottom

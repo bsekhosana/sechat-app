@@ -115,9 +115,12 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   void _addNotificationItem(
       String title, String body, String type, Map<String, dynamic>? data) {
     try {
+      // Create notification through SimpleNotificationService by triggering the callback
       // This will be handled by the NotificationProvider through the SimpleNotificationService
-      // The notification service will call the callback to add the notification
       print('🔑 KeyExchangeRequestProvider: Notification item added: $title');
+
+      // The actual notification creation will happen through the SimpleNotificationService
+      // when it processes the key exchange notifications
     } catch (e) {
       print(
           '🔑 KeyExchangeRequestProvider: Error adding notification item: $e');
@@ -237,6 +240,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         print(
             '🔑 KeyExchangeRequestProvider: ✅ Key exchange request sent successfully');
 
+        // Update status from 'pending' to 'sent' after successful sending
+        request.status = 'sent';
+        notifyListeners();
+
         // Save to local storage for persistence
         await _saveSentRequest(request);
 
@@ -244,9 +251,11 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       } else {
         print(
             '🔑 KeyExchangeRequestProvider: ❌ Failed to send key exchange request');
-        // Remove from local storage if sending failed
+
+        // Remove the request from local list if sending failed
         _sentRequests.remove(request);
         notifyListeners();
+
         return false;
       }
     } catch (e) {
@@ -327,6 +336,19 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Notify about new items for badge indicators
       _notifyNewItems();
 
+      // Add notification item for received request
+      _addNotificationItem(
+        'Key Exchange Request Received',
+        'New key exchange request received',
+        'key_exchange_request',
+        {
+          'request_id': request.id,
+          'sender_id': senderId,
+          'request_phrase': requestPhrase,
+          'timestamp': request.timestamp.millisecondsSinceEpoch,
+        },
+      );
+
       // Save to local storage for persistence
       await _saveReceivedRequest(request);
 
@@ -400,6 +422,18 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
         // Save the final status
         await _saveReceivedRequest(request);
+
+        // Add notification item for accepted request
+        _addNotificationItem(
+          'Key Exchange Accepted',
+          'Your key exchange request was accepted',
+          'key_exchange_accepted',
+          {
+            'request_id': requestId,
+            'recipient_id': currentUserId,
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          },
+        );
 
         return true;
       } else {
@@ -487,6 +521,18 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
         // Save the final status
         await _saveReceivedRequest(request);
+
+        // Add notification item for declined request
+        _addNotificationItem(
+          'Key Exchange Declined',
+          'Your key exchange request was declined',
+          'key_exchange_declined',
+          {
+            'request_id': requestId,
+            'recipient_id': currentUserId,
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          },
+        );
 
         return true;
       } else {
@@ -915,6 +961,17 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       if (success) {
         print(
             '🔑 KeyExchangeRequestProvider: ✅ Encrypted user data sent successfully');
+
+        // Add notification item for user data sent
+        _addNotificationItem(
+          'Secure Connection Established',
+          'Encrypted user data sent successfully',
+          'user_data_exchange',
+          {
+            'recipient_id': recipientId,
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          },
+        );
       } else {
         print(
             '🔑 KeyExchangeRequestProvider: ❌ Failed to send encrypted user data');
@@ -1451,6 +1508,52 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       displayNameMappings[userId] = displayName;
       await prefsService.setJson('ker_display_names', displayNameMappings);
 
+      print('🔑 KeyExchangeRequestProvider: ✅ Display name mapping stored');
+
+      // Update display names in all key exchange requests for this user
+      bool hasUpdates = false;
+
+      // Update sent requests
+      for (final request in _sentRequests) {
+        if (request.toSessionId == userId &&
+            request.displayName != displayName) {
+          print(
+              '🔑 KeyExchangeRequestProvider: Updating sent request display name from "${request.displayName}" to "$displayName"');
+          request.displayName = displayName;
+          hasUpdates = true;
+        }
+      }
+
+      // Update received requests
+      for (final request in _receivedRequests) {
+        if (request.fromSessionId == userId &&
+            request.displayName != displayName) {
+          print(
+              '🔑 KeyExchangeRequestProvider: Updating received request display name from "${request.displayName}" to "$displayName"');
+          request.displayName = displayName;
+          hasUpdates = true;
+        }
+      }
+
+      // Update pending requests
+      for (final request in _pendingRequests) {
+        if (request.fromSessionId == userId &&
+            request.displayName != displayName) {
+          print(
+              '🔑 KeyExchangeRequestProvider: Updating pending request display name from "${request.displayName}" to "$displayName"');
+          request.displayName = displayName;
+          hasUpdates = true;
+        }
+      }
+
+      print('🔑 KeyExchangeRequestProvider: Has updates: $hasUpdates');
+
+      // Save updated requests to storage
+      if (hasUpdates) {
+        await _saveAllRequests();
+        print('🔑 KeyExchangeRequestProvider: ✅ All requests saved to storage');
+      }
+
       // Refresh the UI
       await refreshKeyExchangeData();
 
@@ -1458,6 +1561,35 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           '🔑 KeyExchangeRequestProvider: ✅ Display name updated and UI refreshed');
     } catch (e) {
       print('🔑 KeyExchangeRequestProvider: Error updating display name: $e');
+    }
+  }
+
+  /// Save all requests to storage
+  Future<void> _saveAllRequests() async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+
+      // Save sent requests
+      final sentRequestsJson =
+          _sentRequests.map((req) => req.toJson()).toList();
+      await prefsService.setJsonList(
+          'key_exchange_sent_requests', sentRequestsJson);
+
+      // Save received requests
+      final receivedRequestsJson =
+          _receivedRequests.map((req) => req.toJson()).toList();
+      await prefsService.setJsonList(
+          'key_exchange_received_requests', receivedRequestsJson);
+
+      // Save pending requests
+      final pendingRequestsJson =
+          _pendingRequests.map((req) => req.toJson()).toList();
+      await prefsService.setJsonList(
+          'key_exchange_pending_requests', pendingRequestsJson);
+
+      print('🔑 KeyExchangeRequestProvider: ✅ All requests saved to storage');
+    } catch (e) {
+      print('🔑 KeyExchangeRequestProvider: Error saving all requests: $e');
     }
   }
 }

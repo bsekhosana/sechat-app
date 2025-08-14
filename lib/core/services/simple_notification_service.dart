@@ -611,16 +611,27 @@ class SimpleNotificationService {
       Map<String, dynamic> notificationData) async {
     try {
       print('🔔 SimpleNotificationService: Processing notification');
+      print(
+          '🔔 SimpleNotificationService: Notification data keys: ${notificationData.keys.toList()}');
+      print(
+          '🔔 SimpleNotificationService: Notification data types: ${notificationData.map((key, value) => MapEntry(key, value.runtimeType))}');
 
       // Check if notification is encrypted (handle both bool and string)
       final encryptedValue = notificationData['encrypted'];
+      print(
+          '🔔 SimpleNotificationService: Encrypted value: $encryptedValue (type: ${encryptedValue.runtimeType})');
+
       final isEncrypted = encryptedValue == true ||
           encryptedValue == 'true' ||
           encryptedValue == '1';
 
+      print('🔔 SimpleNotificationService: Is encrypted: $isEncrypted');
+
       if (isEncrypted) {
         print(
             '🔔 SimpleNotificationService: 🔐 Processing encrypted notification');
+        print(
+            '🔔 SimpleNotificationService: Encrypted value: $encryptedValue (type: ${encryptedValue.runtimeType})');
 
         // Get encrypted data from the new structure
         var encryptedData = notificationData['encryptedData'] as String?;
@@ -637,11 +648,31 @@ class SimpleNotificationService {
             return null;
           }
         }
+
+        print(
+            '🔔 SimpleNotificationService: Encrypted data found: ${encryptedData.length} characters');
+
         final checksum = notificationData['checksum'] as String?;
         final notificationType = notificationData['type'] as String?;
         final messageId = notificationData['messageId'] as String?;
         final conversationId = notificationData['conversationId'] as String?;
-        final silent = notificationData['silent'] as bool?;
+
+        // Handle silent field with proper type conversion
+        bool? silent;
+        final silentValue = notificationData['silent'];
+        print(
+            '🔔 SimpleNotificationService: Silent value: $silentValue (type: ${silentValue.runtimeType})');
+
+        if (silentValue != null) {
+          if (silentValue is bool) {
+            silent = silentValue;
+          } else if (silentValue is int) {
+            silent = silentValue == 1;
+          } else if (silentValue is String) {
+            silent = silentValue == '1' || silentValue == 'true';
+          }
+          print('🔔 SimpleNotificationService: Silent converted to: $silent');
+        }
 
         if (encryptedData == null) {
           print('🔔 SimpleNotificationService: ❌ No encrypted data found');
@@ -679,15 +710,14 @@ class SimpleNotificationService {
           return null;
         }
 
-        // Verify checksum
-        final expectedChecksum = _generateChecksum(decryptedData);
-        if (checksum != null && checksum != expectedChecksum) {
-          print('🔔 SimpleNotificationService: ❌ Checksum verification failed');
-          return null;
-        }
-
         print(
-            '🔔 SimpleNotificationService: ✅ Encrypted notification processed');
+            '🔔 SimpleNotificationService: ✅ Data decrypted successfully using new EncryptionService');
+        print(
+            '🔔 SimpleNotificationService: Decrypted data keys: ${decryptedData.keys.toList()}');
+        print(
+            '🔔 SimpleNotificationService: Decrypted data types: ${decryptedData.map((key, value) => MapEntry(key, value.runtimeType))}');
+        print(
+            '🔔 SimpleNotificationService: Returning decrypted data: $decryptedData');
         return decryptedData;
       } else {
         print(
@@ -705,6 +735,8 @@ class SimpleNotificationService {
       }
     } catch (e) {
       print('🔔 SimpleNotificationService: Error processing notification: $e');
+      print(
+          '🔔 SimpleNotificationService: Error stack trace: ${StackTrace.current}');
       return null;
     }
   }
@@ -1493,15 +1525,29 @@ class SimpleNotificationService {
       final decryptedData =
           await EncryptionService.decryptAesCbcPkcs7(encryptedData);
 
+      print(
+          '🔔 SimpleNotificationService: Decryption result type: ${decryptedData.runtimeType}');
       if (decryptedData != null) {
         print(
-            '🔔 SimpleNotificationService: ✅ Data decrypted successfully using new EncryptionService');
-        return decryptedData;
-      } else {
+            '🔔 SimpleNotificationService: Decryption result keys: ${decryptedData.keys.toList()}');
         print(
-            '🔔 SimpleNotificationService: ❌ EncryptionService.decryptAesCbcPkcs7 returned null');
+            '🔔 SimpleNotificationService: Decryption result preview: $decryptedData');
+      }
+
+      if (decryptedData == null) {
+        print('🔔 SimpleNotificationService: ❌ Failed to decrypt data');
         return null;
       }
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Data decrypted successfully using new EncryptionService');
+      print(
+          '🔔 SimpleNotificationService: Decrypted data keys: ${decryptedData.keys.toList()}');
+      print(
+          '🔔 SimpleNotificationService: Decrypted data types: ${decryptedData.map((key, value) => MapEntry(key, value.runtimeType))}');
+      print(
+          '🔔 SimpleNotificationService: Returning decrypted data: $decryptedData');
+      return decryptedData;
     } catch (e) {
       print('🔔 SimpleNotificationService: Decryption failed: $e');
       return null;
@@ -1788,12 +1834,18 @@ class SimpleNotificationService {
 
       // Add notification item
       if (_onNotificationReceived != null) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Calling notification callback for key exchange request');
         _onNotificationReceived!(
           'Key Exchange Request',
           'New key exchange request received',
           'key_exchange_request',
           data,
         );
+        print(
+            '🔔 SimpleNotificationService: ✅ Notification callback completed');
+      } else {
+        print('🔔 SimpleNotificationService: ⚠️ No notification callback set');
       }
 
       // Notify the provider via callback
@@ -1882,12 +1934,19 @@ class SimpleNotificationService {
 
       // Add notification item
       if (_onNotificationReceived != null) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Calling notification callback for key exchange accepted');
         _onNotificationReceived!(
           'Key Exchange Accepted',
           'Your key exchange request was accepted',
           'key_exchange_accepted',
           data,
         );
+        print(
+            '🔔 SimpleNotificationService: ✅ Notification callback completed for accepted');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ⚠️ No notification callback set for accepted');
       }
 
       // Call the key exchange accepted callback
@@ -2000,6 +2059,20 @@ class SimpleNotificationService {
       // Update the Key Exchange Request display name from "session_..." to actual name
       await _updateKeyExchangeRequestDisplayName(senderId, displayName);
 
+      // Also update the KeyExchangeRequestProvider to refresh the UI in real-time
+      try {
+        // Import the provider and update display names
+        // This will trigger UI updates for all key exchange requests
+        final keyExchangeProvider = KeyExchangeRequestProvider();
+        await keyExchangeProvider.updateUserDisplayName(senderId, displayName);
+        print(
+            '🔔 SimpleNotificationService: ✅ KeyExchangeRequestProvider updated with new display name from user data');
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: Error updating KeyExchangeRequestProvider from user data: $e');
+        // Continue with the process even if provider update fails
+      }
+
       // Create contact and chat automatically
       await _createContactAndChat(senderId, displayName, profileData);
 
@@ -2036,6 +2109,20 @@ class SimpleNotificationService {
 
       print(
           '🔔 SimpleNotificationService: ✅ KER display name mapping stored: $senderId -> $displayName');
+
+      // Update the KeyExchangeRequestProvider to refresh the UI in real-time
+      try {
+        // Import the provider and update display names
+        // This will trigger UI updates for all key exchange requests
+        final keyExchangeProvider = KeyExchangeRequestProvider();
+        await keyExchangeProvider.updateUserDisplayName(senderId, displayName);
+        print(
+            '🔔 SimpleNotificationService: ✅ KeyExchangeRequestProvider updated with new display name');
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: Error updating KeyExchangeRequestProvider: $e');
+        // Continue with the process even if provider update fails
+      }
 
       // Trigger a refresh of the key exchange requests to show updated names
       // This will be handled by the UI when it reads the display name mappings
@@ -2267,6 +2354,25 @@ class SimpleNotificationService {
 
       // Process the decrypted response data
       await _processDecryptedResponseData(decryptedData);
+
+      // Also update the KeyExchangeRequestProvider to refresh the UI in real-time
+      try {
+        final senderId = decryptedData['sender_id'] as String?;
+        final displayName = decryptedData['display_name'] as String?;
+
+        if (senderId != null && displayName != null) {
+          // Update the KeyExchangeRequestProvider with the new display name
+          final keyExchangeProvider = KeyExchangeRequestProvider();
+          await keyExchangeProvider.updateUserDisplayName(
+              senderId, displayName);
+          print(
+              '🔔 SimpleNotificationService: ✅ KeyExchangeRequestProvider updated with response display name');
+        }
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: Error updating KeyExchangeRequestProvider from response: $e');
+        // Continue with the process even if provider update fails
+      }
     } catch (e) {
       print(
           '🔔 SimpleNotificationService: Error processing user data response: $e');

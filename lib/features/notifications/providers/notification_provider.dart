@@ -33,18 +33,64 @@ class NotificationProvider extends ChangeNotifier {
     Map<String, dynamic>? data,
   ) {
     NotificationType notificationType;
+    String notificationTitle = title;
+    String notificationBody = body;
+
     switch (type) {
       case 'key_exchange_request':
         notificationType = NotificationType.keyExchange;
+        // Add user name to notification if available
+        if (data != null && data['sender_id'] != null) {
+          final senderId = data['sender_id'] as String;
+          notificationTitle = 'Key Exchange Request Received';
+          notificationBody =
+              'Request from ${data['display_name'] ?? 'User ${senderId.substring(0, 8)}...'}';
+        }
         break;
       case 'key_exchange_accepted':
         notificationType = NotificationType.keyExchange;
+        if (data != null && data['recipient_id'] != null) {
+          final recipientId = data['recipient_id'] as String;
+          notificationTitle = 'Key Exchange Accepted';
+          notificationBody =
+              'Request accepted by ${data['display_name'] ?? 'User ${recipientId.substring(0, 8)}...'}';
+        }
         break;
       case 'key_exchange_declined':
         notificationType = NotificationType.keyExchange;
+        if (data != null && data['recipient_id'] != null) {
+          final recipientId = data['recipient_id'] as String;
+          notificationTitle = 'Key Exchange Declined';
+          notificationBody =
+              'Request declined by ${data['display_name'] ?? 'User ${recipientId.substring(0, 8)}...'}';
+        }
         break;
       case 'key_exchange_sent':
         notificationType = NotificationType.keyExchange;
+        if (data != null && data['recipient_id'] != null) {
+          final recipientId = data['recipient_id'] as String;
+          notificationTitle = 'Key Exchange Request Sent';
+          notificationBody =
+              'Request sent to ${data['display_name'] ?? 'User ${recipientId.substring(0, 8)}...'}';
+        }
+        break;
+      case 'user_data_exchange':
+        notificationType = NotificationType.keyExchange;
+        if (data != null && data['sender_id'] != null) {
+          final senderId = data['sender_id'] as String;
+          notificationTitle = 'Secure Connection Established';
+          notificationBody =
+              'Encrypted user data received from ${data['display_name'] ?? 'User ${senderId.substring(0, 8)}...'}';
+        }
+        break;
+      case 'user_data_response':
+        notificationType = NotificationType.keyExchange;
+        if (data != null && data['sender_id'] != null) {
+          final senderId = data['sender_id'] as String;
+          notificationTitle = 'Connection Established';
+          notificationBody =
+              'Secure connection established with ${data['display_name'] ?? 'User ${senderId.substring(0, 8)}...'}';
+        }
         break;
       case 'message':
         notificationType = NotificationType.message;
@@ -55,8 +101,8 @@ class NotificationProvider extends ChangeNotifier {
 
     final notification = LocalNotification(
       id: '${type}_${DateTime.now().millisecondsSinceEpoch}',
-      title: title,
-      body: body,
+      title: notificationTitle,
+      body: notificationBody,
       type: notificationType,
       timestamp: DateTime.now(),
       isRead: false,

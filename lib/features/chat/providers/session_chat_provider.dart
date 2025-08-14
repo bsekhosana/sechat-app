@@ -169,7 +169,21 @@ class SessionChatProvider extends ChangeNotifier {
   void handleTypingIndicator(Map<String, dynamic> data) {
     try {
       final senderId = data['senderId'] as String;
-      final isTyping = data['isTyping'] as bool;
+
+      // Handle both boolean and string values for isTyping
+      bool isTyping;
+      final isTypingValue = data['isTyping'];
+      if (isTypingValue is bool) {
+        isTyping = isTypingValue;
+      } else if (isTypingValue is int) {
+        isTyping = isTypingValue == 1;
+      } else if (isTypingValue is String) {
+        isTyping = isTypingValue == '1' || isTypingValue == 'true';
+      } else {
+        print(
+            '📱 SessionChatProvider: Invalid isTyping value type: ${isTypingValue.runtimeType}');
+        return;
+      }
 
       if (isTyping) {
         _typingUsers[senderId] = true;
@@ -189,7 +203,22 @@ class SessionChatProvider extends ChangeNotifier {
   void handleOnlineStatusUpdate(Map<String, dynamic> data) {
     try {
       final senderId = data['senderId'] as String;
-      final isOnline = data['isOnline'] as bool;
+
+      // Handle both boolean and string values for isOnline
+      bool isOnline;
+      final isOnlineValue = data['isOnline'];
+      if (isOnlineValue is bool) {
+        isOnline = isOnlineValue;
+      } else if (isOnlineValue is int) {
+        isOnline = isOnlineValue == 1;
+      } else if (isOnlineValue is String) {
+        isOnline = isOnlineValue == '1' || isOnlineValue == 'true';
+      } else {
+        print(
+            '📱 SessionChatProvider: Invalid isOnline value type: ${isOnlineValue.runtimeType}');
+        return;
+      }
+
       final lastSeen = data['lastSeen'] as String;
 
       final user = _chatUsers[senderId];

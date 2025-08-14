@@ -96,10 +96,9 @@ void _setupSimpleNotifications() {
 
 // Set up provider instances for notification service
 void _setupNotificationProviders(BuildContext context) {
-  // Connect KeyExchangeRequestProvider to SimpleNotificationService
-  final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
-  print(
-      '🔔 Main: ✅ KeyExchangeRequestProvider connected to SimpleNotificationService');
+  // The NotificationProvider is already set up in its constructor
+  // No additional setup needed here
+  print('🔔 Main: ✅ NotificationProvider already initialized in constructor');
 }
 
 // Set up method channels and event channels for native communication

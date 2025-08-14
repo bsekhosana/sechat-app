@@ -1,464 +1,212 @@
-# iOS Notification Permission Fixes
+# iOS Notification Permission Handling Fixes
 
 ## 🎯 Overview
 
-This document summarizes the fixes implemented to resolve iOS notification permission issues that were causing:
-- `PermissionStatus.permanentlyDenied` on app initial load
-- Notification failures due to permission state mismatches
-- Poor user experience when notifications were actually enabled in system settings
+This document summarizes the fixes implemented to resolve iOS notification permission handling issues and improve the key exchange request (KER) system with real-time updates and proper display name handling.
 
-## ✅ **Problem Identified**
+## ✅ **Issues Fixed**
 
-### **Symptoms:**
-- App logs showed `Notification permission status: PermissionStatus.permanentlyDenied`
-- User had notifications enabled in iOS Settings > seChat > Notifications
-- System was out of sync between app permission state and actual iOS settings
-- Key exchange acceptance/decline notifications were failing due to permission issues
+### **1. KER Status Updates - Real-time UI Updates**
+- **Problem**: KER items were stuck at "Pending" status throughout the entire process
+- **Solution**: Updated status flow from 'pending' → 'sent' → 'accepted' → 'completed'
+- **Implementation**: Modified `KeyExchangeRequestProvider.sendKeyExchangeRequest()` to update status to 'sent' after successful sending
 
-### **Root Cause:**
-- iOS notification permissions can become out of sync between the app and system
-- `permission_handler` package sometimes reports incorrect status
-- App was not checking actual iOS system capability vs. permission state
-- No mechanism to refresh permissions when returning from settings
+### **2. Display Name Updates - From "session_..." to Actual Names**
+- **Problem**: "From: session_..." didn't update to "From: {display name}" after handshake completion
+- **Solution**: Added `displayName` field to `KeyExchangeRequest` model and real-time updates
+- **Implementation**: 
+  - Added `displayName` field to `KeyExchangeRequest` model
+  - Updated `SimpleNotificationService` to call `KeyExchangeRequestProvider.updateUserDisplayName()`
+  - Modified UI to show display name when available, fallback to session ID format
 
-## 🔧 **Solution Implemented**
+### **3. Sender Side Display Name Updates**
+- **Problem**: Sender side also showed "session_..." format after receiving encrypted user data
+- **Solution**: Update display names on both sides when user data is exchanged
+- **Implementation**: Added display name updates in both `_processDecryptedUserData` and `_processDecryptedResponseData` methods
 
-### **1. Enhanced iOS Permission Handling**
+### **4. Notification Items for All KER Updates**
+- **Problem**: Missing notification items for tracking all KER activities
+- **Solution**: Added comprehensive notification items for all KER states
+- **Implementation**: Added notification items for:
+  - KER sent: "Key Exchange Request Sent"
+  - KER received: "Key Exchange Request Received" 
+  - KER accepted: "Key Exchange Accepted"
+  - KER declined: "Key Exchange Declined"
+  - User data exchange: "Secure Connection Established"
+  - Connection completed: "Connection Established"
 
+### **5. Notification Icons Matching Context**
+- **Problem**: Notification icons didn't match the notification context
+- **Solution**: Used appropriate icons for different notification types
+- **Implementation**: 
+  - `NotificationType.keyExchange` uses key icon (🔑) with purple color
+  - All KER notifications use consistent icon and color scheme
+
+## 🔧 **Technical Implementation**
+
+### **Model Updates**
+**File**: `lib/shared/models/key_exchange_request.dart`
+```dart
+class KeyExchangeRequest {
+  // ... existing fields ...
+  String? displayName; // Added: display name from user_data_exchange
+  
+  // Updated constructors, JSON methods, and copyWith method
+}
+```
+
+### **Provider Updates**
+**File**: `lib/features/key_exchange/providers/key_exchange_request_provider.dart`
+```dart
+// Real-time status updates
+if (success) {
+  request.status = 'sent'; // Update from 'pending' to 'sent'
+  notifyListeners();
+}
+
+// Display name updates
+Future<void> updateUserDisplayName(String userId, String displayName) async {
+  // Update all KER requests for this user
+  // Save to storage and refresh UI
+  notifyListeners();
+}
+
+// Notification items for all KER activities
+_addNotificationItem(
+  'Key Exchange Request Sent',
+  'Request sent to establish secure connection',
+  'key_exchange_sent',
+  data,
+);
+```
+
+### **Service Updates**
 **File**: `lib/core/services/simple_notification_service.dart`
-
-#### **1.1 Platform-Specific Permission Logic**
 ```dart
-/// Request notification permissions
-Future<void> _requestPermissions() async {
-  if (kIsWeb) return;
+// Update KER display names in real-time
+await _updateKeyExchangeRequestDisplayName(senderId, displayName);
 
-  try {
-    // For iOS, we need to handle permissions differently
-    if (Platform.isIOS) {
-      await _handleIOSPermissions();
-    } else {
-      // Android and other platforms
-      final status = await Permission.notification.request();
-      _permissionStatus = status;
-      print('🔔 SimpleNotificationService: Notification permission status: $_permissionStatus');
-    }
-  } catch (e) {
-    print('🔔 SimpleNotificationService: Error requesting permissions: $e');
-    _permissionStatus = PermissionStatus.denied;
-  }
-}
+// Also update the KeyExchangeRequestProvider
+final keyExchangeProvider = KeyExchangeRequestProvider();
+await keyExchangeProvider.updateUserDisplayName(senderId, displayName);
 ```
 
-#### **1.2 iOS-Specific Permission Handler**
+### **UI Updates**
+**File**: `lib/features/key_exchange/screens/key_exchange_screen.dart`
 ```dart
-/// Handle iOS notification permissions specifically
-Future<void> _handleIOSPermissions() async {
-  try {
-    // First, check the current permission status
-    final currentStatus = await Permission.notification.status;
-    print('🔔 SimpleNotificationService: Current iOS permission status: $currentStatus');
-
-    // If permanently denied, we need to guide user to settings
-    if (currentStatus == PermissionStatus.permanentlyDenied) {
-      print('🔔 SimpleNotificationService: iOS permissions permanently denied, checking system settings...');
-      
-      // Check if we can actually send notifications (system might be out of sync)
-      final canSendNotifications = await _checkIOSNotificationCapability();
-      
-      if (canSendNotifications) {
-        print('🔔 SimpleNotificationService: iOS system allows notifications, updating permission status');
-        _permissionStatus = PermissionStatus.granted;
-      } else {
-        print('🔔 SimpleNotificationService: iOS system does not allow notifications, user must enable in settings');
-        _permissionStatus = PermissionStatus.permanentlyDenied;
-        
-        // Show a dialog to guide user to settings
-        await _showIOSPermissionDialog();
-      }
-    } else if (currentStatus == PermissionStatus.denied) {
-      // Request permission normally
-      final status = await Permission.notification.request();
-      _permissionStatus = status;
-      print('🔔 SimpleNotificationService: iOS permission request result: $status');
-    } else {
-      // Already granted or other status
-      _permissionStatus = currentStatus;
-      print('🔔 SimpleNotificationService: iOS permission already granted: $currentStatus');
-    }
-  } catch (e) {
-    print('🔔 SimpleNotificationService: Error handling iOS permissions: $e');
-    _permissionStatus = PermissionStatus.denied;
-  }
-}
+Text(
+  isReceived
+      ? 'From: ${request.displayName ?? '${request.fromSessionId.substring(0, 8)}...'}'
+      : 'To: ${request.displayName ?? '${request.toSessionId.substring(0, 8)}...'}',
+  // ... styling
+),
 ```
 
-#### **1.3 iOS Notification Capability Check**
+### **Notification Provider Updates**
+**File**: `lib/features/notifications/providers/notification_provider.dart`
 ```dart
-/// Check if iOS system actually allows notifications (regardless of permission status)
-Future<bool> _checkIOSNotificationCapability() async {
-  try {
-    // Try to initialize local notifications - this will fail if system doesn't allow
-    const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: false, // Don't request, just check capability
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
-
-    const InitializationSettings settings = InitializationSettings(
-      iOS: iosSettings,
-    );
-
-    await _localNotifications.initialize(settings);
-    
-    // If we get here, the system allows notifications
-    return true;
-  } catch (e) {
-    print('🔔 SimpleNotificationService: iOS notification capability check failed: $e');
-    return false;
-  }
-}
+// Enhanced notification handling with user names
+case 'key_exchange_request':
+  notificationTitle = 'Key Exchange Request Received';
+  notificationBody = 'Request from ${data['display_name'] ?? 'User ${senderId.substring(0, 8)}...'}';
+  break;
 ```
 
-### **2. Enhanced Local Notifications Initialization**
+## 🔄 **Complete Real-Time Flow**
 
-#### **2.1 Smart iOS Settings**
-```dart
-/// Initialize local notifications
-Future<void> _initializeLocalNotifications() async {
-  if (kIsWeb) return;
+### **Sending Key Exchange Request:**
+1. User sends request → Status: 'pending'
+2. Request sent successfully → Status: 'sent' + UI updates immediately
+3. Request accepted → Status: 'accepted' + UI updates immediately
+4. User data exchanged → Display name updated + UI updates immediately
+5. Connection completed → Status: 'completed' + UI updates immediately
 
-  try {
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-    
-    // For iOS, we need to be more careful about permission requests
-    DarwinInitializationSettings iosSettings;
-    if (Platform.isIOS) {
-      // Check if we already have permission before requesting
-      if (_permissionStatus == PermissionStatus.granted) {
-        iosSettings = const DarwinInitializationSettings(
-          requestAlertPermission: false, // Already granted
-          requestBadgePermission: false,
-          requestSoundPermission: false,
-        );
-      } else {
-        iosSettings = const DarwinInitializationSettings(
-          requestAlertPermission: true,
-          requestBadgePermission: true,
-          requestSoundPermission: true,
-        );
-      }
-    } else {
-      iosSettings = const DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
-      );
-    }
+### **Receiving Key Exchange Request:**
+1. Request received → Status: 'received' + UI updates immediately
+2. User accepts/declines → Status: 'accepted'/'declined' + UI updates immediately
+3. User data exchanged → Display name updated + UI updates immediately
+4. Connection completed → Status: 'completed' + UI updates immediately
 
-    final InitializationSettings settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+### **Display Name Updates:**
+1. Initial state: "From: session_1234..."
+2. After user_data_exchange: "From: John Doe"
+3. Real-time UI updates via `notifyListeners()`
+4. Persistent storage for display name mappings
 
-    await _localNotifications.initialize(settings);
-    print('🔔 SimpleNotificationService: Local notifications initialized successfully');
-  } catch (e) {
-    print('🔔 SimpleNotificationService: Error initializing local notifications: $e');
-  }
-}
-```
+## 🎨 **Notification Icons & Context**
 
-### **3. Permission Refresh and Management**
+### **Key Exchange Notifications:**
+- **Icon**: 🔑 (key icon)
+- **Color**: Purple
+- **Types**: All KER activities use consistent icon
 
-#### **3.1 Permission Refresh Method**
-```dart
-/// Refresh notification permissions (useful when returning from settings)
-Future<void> refreshPermissions() async {
-  if (kIsWeb) return;
-
-  try {
-    if (Platform.isIOS) {
-      await _handleIOSPermissions();
-    } else {
-      final status = await Permission.notification.status;
-      _permissionStatus = status;
-    }
-    
-    print('🔔 SimpleNotificationService: Permissions refreshed: $_permissionStatus');
-  } catch (e) {
-    print('🔔 SimpleNotificationService: Error refreshing permissions: $e');
-  }
-}
-```
-
-#### **3.2 Permission Status Getters**
-```dart
-/// Get current permission status
-PermissionStatus get permissionStatus => _permissionStatus;
-
-/// Check if notifications are actually available (not just permission granted)
-Future<bool> get areNotificationsAvailable async {
-  if (kIsWeb) return false;
-  
-  if (Platform.isIOS) {
-    // For iOS, check both permission and system capability
-    return _permissionStatus == PermissionStatus.granted && 
-           await _checkIOSNotificationCapability();
-  } else {
-    // For other platforms, just check permission
-    return _permissionStatus == PermissionStatus.granted;
-  }
-}
-
-/// Check if we need to show permission dialog
-bool get shouldShowPermissionDialog {
-  if (kIsWeb) return false;
-  
-  if (Platform.isIOS) {
-    return _permissionStatus == PermissionStatus.permanentlyDenied;
-  } else {
-    return _permissionStatus == PermissionStatus.denied;
-  }
-}
-```
-
-### **4. User Interface for Permission Management**
-
-**File**: `lib/shared/widgets/notification_permission_dialog.dart`
-
-#### **4.1 Permission Dialog Widget**
-```dart
-/// Dialog to guide users to enable notification permissions
-class NotificationPermissionDialog extends StatelessWidget {
-  final String title;
-  final String message;
-  final String? actionText;
-  final VoidCallback? onActionPressed;
-
-  const NotificationPermissionDialog({
-    super.key,
-    this.title = 'Enable Notifications',
-    this.message = 'To receive important updates and messages, please enable notifications for this app.',
-    this.actionText,
-    this.onActionPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(message),
-          const SizedBox(height: 16),
-          if (Platform.isIOS) ...[
-            const Text(
-              'To enable notifications:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text('1. Go to Settings > seChat'),
-            const Text('2. Tap "Notifications"'),
-            const Text('3. Enable "Allow Notifications"'),
-            const Text('4. Enable "Sounds", "Badges", and "Alerts"'),
-          ] else ...[
-            const Text(
-              'To enable notifications:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text('1. Go to Settings > Apps > seChat'),
-            const Text('2. Tap "Notifications"'),
-            const Text('3. Enable "Show notifications"'),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            Navigator.of(context).pop();
-            if (onActionPressed != null) {
-              onActionPressed!();
-            } else {
-              // Default action: open app settings
-              SimpleNotificationService.instance.openAppSettingsForPermissions();
-            }
-          },
-          child: Text(actionText ?? 'Open Settings'),
-        ),
-      ],
-    );
-  }
-}
-```
-
-#### **4.2 Permission Helper**
-```dart
-/// Helper to show notification permission dialog when needed
-class NotificationPermissionHelper {
-  /// Show permission dialog if needed
-  static Future<void> showPermissionDialogIfNeeded(BuildContext context) async {
-    final notificationService = SimpleNotificationService.instance;
-    
-    if (notificationService.shouldShowPermissionDialog) {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const NotificationPermissionDialog(
-          title: 'Enable Notifications',
-          message: 'To receive key exchange requests, messages, and other important updates, please enable notifications for seChat.',
-          actionText: 'Open Settings',
-        ),
-      );
-    }
-  }
-
-  /// Check and request permissions
-  static Future<void> checkAndRequestPermissions(BuildContext context) async {
-    final notificationService = SimpleNotificationService.instance;
-    
-    // Refresh permissions first
-    await notificationService.refreshPermissions();
-    
-    // Show dialog if needed
-    await showPermissionDialogIfNeeded(context);
-  }
-}
-```
-
-### **5. Integration with App Lifecycle**
-
-#### **5.1 Initial Permission Check**
-**File**: `lib/main.dart`
-
-```dart
-if (isLoggedIn) {
-  // User is logged in, initialize notification services and go to main screen
-  print('🔍 AuthChecker: User is logged in, initializing notification services...');
-  await seSessionService.initializeNotificationServices();
-  
-  // Check notification permissions after services are initialized
-  print('🔍 AuthChecker: Checking notification permissions...');
-  await _checkNotificationPermissions();
-  
-  print('🔍 AuthChecker: User is logged in, navigating to main screen');
-  Navigator.of(context).pushReplacement(
-    MaterialPageRoute(builder: (_) => MainNavScreen()),
-  );
-}
-```
-
-#### **5.2 App Resume Permission Refresh**
-**File**: `lib/shared/widgets/app_lifecycle_handler.dart`
-
-```dart
-void _handleAppResumed() async {
-  try {
-    // Refresh notification permissions when app becomes active
-    print('📱 AppLifecycleHandler: App resumed - refreshing notification permissions...');
-    
-    // Refresh permissions in the background
-    await SimpleNotificationService.instance.refreshPermissions();
-    
-    // Check if we need to show permission dialog
-    if (mounted) {
-      // Small delay to ensure the app is fully active
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      if (mounted) {
-        await NotificationPermissionHelper.showPermissionDialogIfNeeded(context);
-      }
-    }
-    
-    print('📱 AppLifecycleHandler: App resumed - notification services active');
-  } catch (e) {
-    print('📱 AppLifecycleHandler: Error handling app resume: $e');
-  }
-}
-```
-
-## 🔄 **Complete iOS Permission Flow**
-
-### **App Startup:**
-1. **Initialize Services** → `SimpleNotificationService.initialize()`
-2. **Check Platform** → iOS-specific permission handling
-3. **Check Current Status** → `Permission.notification.status`
-4. **Handle Permanently Denied** → Check system capability
-5. **Update Permission State** → Sync with actual iOS settings
-
-### **Permission Request:**
-1. **User Action** → App requests notification permission
-2. **iOS System Dialog** → User allows/denies
-3. **Status Update** → App updates internal state
-4. **Capability Check** → Verify system actually allows notifications
-
-### **App Resume:**
-1. **App Becomes Active** → `AppLifecycleHandler.didChangeAppLifecycleState`
-2. **Refresh Permissions** → `SimpleNotificationService.refreshPermissions()`
-3. **Check Status** → Determine if dialog needed
-4. **Show Dialog** → Guide user to settings if needed
-
-### **Settings Return:**
-1. **User Returns from Settings** → App becomes active
-2. **Permission Refresh** → Check new permission state
-3. **Capability Verification** → Ensure system allows notifications
-4. **State Update** → Update app permission status
+### **Notification Items Created:**
+- **KER Sent**: "Key Exchange Request Sent" with recipient info
+- **KER Received**: "Key Exchange Request Received" with sender info  
+- **KER Accepted**: "Key Exchange Accepted" with acceptor info
+- **KER Declined**: "Key Exchange Declined" with decliner info
+- **User Data Exchange**: "Secure Connection Established" with user info
+- **Connection Completed**: "Connection Established" with user info
 
 ## 🧪 **Testing Scenarios**
 
-### **iOS Permission Testing:**
-1. **Fresh Install** → Should request permissions normally
-2. **Permissions Denied** → Should show guidance dialog
-3. **Permissions Granted** → Should work normally
-4. **Permanently Denied** → Should check system capability
-5. **Settings Change** → Should refresh on app resume
-6. **System Out of Sync** → Should detect and correct
+### **Real-Time Updates Testing:**
+1. **Send Request** → Verify status changes from 'pending' to 'sent' immediately
+2. **Receive Request** → Verify appears in received requests immediately
+3. **Accept Request** → Verify status changes to 'accepted' immediately
+4. **User Data Exchange** → Verify display name updates immediately
+5. **Connection Complete** → Verify final status updates immediately
 
-### **Notification Delivery Testing:**
-1. **Permissions Enabled** → Notifications should work
-2. **Permissions Disabled** → Should show guidance
-3. **System Restrictions** → Should detect and inform user
-4. **Permission Changes** → Should update automatically
+### **Display Name Updates Testing:**
+1. **Initial State** → Should show "From: session_1234..."
+2. **After Handshake** → Should show "From: John Doe"
+3. **Both Sides** → Sender and recipient should both see updated names
+4. **Persistence** → Names should persist across app restarts
+
+### **Notification Items Testing:**
+1. **All KER Activities** → Should create notification items
+2. **User Names** → Should include user names when available
+3. **Icons** → Should show key icon for all KER notifications
+4. **Context** → Should match notification content appropriately
 
 ## 📋 **Files Modified**
 
 ### **Core Files:**
-- ✅ `lib/core/services/simple_notification_service.dart` - Enhanced iOS permission handling
-- ✅ `lib/shared/widgets/notification_permission_dialog.dart` - New permission UI
-- ✅ `lib/main.dart` - Initial permission check integration
-- ✅ `lib/shared/widgets/app_lifecycle_handler.dart` - App lifecycle permission refresh
+- ✅ `lib/shared/models/key_exchange_request.dart` - Added displayName field
+- ✅ `lib/features/key_exchange/providers/key_exchange_request_provider.dart` - Real-time updates and notification items
+- ✅ `lib/core/services/simple_notification_service.dart` - Display name updates and provider integration
+- ✅ `lib/features/notifications/providers/notification_provider.dart` - Enhanced KER notification handling
+- ✅ `lib/features/key_exchange/screens/key_exchange_screen.dart` - Display name UI updates
 
 ## 🎉 **Result**
 
-The iOS notification permission system now provides:
-- **Accurate Permission Detection**: Real-time sync with iOS system settings
-- **Smart Capability Checking**: Verifies actual notification delivery capability
-- **User Guidance**: Clear instructions for enabling notifications
-- **Automatic Refresh**: Updates permissions when app becomes active
-- **Graceful Degradation**: Handles permission mismatches gracefully
-- **Better User Experience**: No more stuck permission states
+The key exchange system now provides:
+- **Real-time Status Updates**: All KER statuses update immediately in the UI
+- **Display Name Integration**: Shows actual user names instead of session IDs after handshake
+- **Comprehensive Notifications**: All KER activities create notification items with user context
+- **Consistent Icons**: All KER notifications use appropriate key icons
+- **Bidirectional Updates**: Both sender and recipient see updated display names
+- **Persistent Storage**: Display names are saved and persist across app restarts
 
-### **Benefits:**
-- ✅ **No More False Negatives**: App correctly detects when notifications are enabled
-- ✅ **Automatic Recovery**: Permissions refresh automatically on app resume
-- ✅ **Clear User Guidance**: Step-by-step instructions for enabling notifications
-- ✅ **System Sync**: App stays in sync with iOS notification settings
-- ✅ **Reliable Notifications**: Key exchange and other notifications work properly
-- ✅ **Better UX**: Users aren't confused by permission state mismatches
+Users can now:
+1. **Track KER Progress**: See real-time status updates from pending to completed
+2. **Identify Users**: See actual display names instead of cryptic session IDs
+3. **Monitor Activities**: View comprehensive notification history for all KER actions
+4. **Experience Consistency**: Enjoy unified icon and color scheme for KER notifications
+5. **Maintain Context**: Keep track of all key exchange activities with proper user identification
 
-### **User Experience:**
-1. **App Startup** → Permissions checked and status verified
-2. **Permission Issues** → Clear guidance provided
-3. **Settings Changes** → App automatically detects and updates
-4. **Notification Delivery** → Works reliably when permissions are correct
-5. **Permission Recovery** → Easy to re-enable if accidentally disabled
+## 🔄 **Enhanced Status Flow**
 
-The iOS notification permission system is now robust, accurate, and provides a smooth user experience that stays in sync with system settings! 🚀
+### **New Status Progression:**
+1. **Pending** → Initial state when request is created
+2. **Sent** → After successful sending via AirNotifier
+3. **Received** → When recipient gets the request
+4. **Processing** → When recipient is accepting/declining (temporary)
+5. **Accepted/Declined** → Final response state
+6. **Completed** → After user data exchange and connection establishment
+
+### **Real-Time Update Triggers:**
+- **Status Changes**: `notifyListeners()` called immediately
+- **Display Name Updates**: `updateUserDisplayName()` triggers UI refresh
+- **Notification Items**: Created for all state transitions
+- **Storage Persistence**: All changes saved to local storage immediately

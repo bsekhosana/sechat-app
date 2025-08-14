@@ -98,6 +98,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
                 Tab(text: 'Sent'),
               ],
             ),
+            SizedBox(height: 20),
 
             // Tab Content
             Expanded(
@@ -203,8 +204,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
                     children: [
                       Text(
                         isReceived
-                            ? 'From: ${request.fromSessionId.substring(0, 8)}...'
-                            : 'To: ${request.toSessionId.substring(0, 8)}...',
+                            ? 'From: ${request.displayName ?? '${request.fromSessionId.substring(0, 8)}...'}'
+                            : 'To: ${request.displayName ?? '${request.toSessionId.substring(0, 8)}...'}',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,

@@ -9,6 +9,7 @@ class KeyExchangeRequest {
   final String type;
   DateTime? respondedAt;
   String? errorMessage;
+  String? displayName; // Added: display name from user_data_exchange
 
   KeyExchangeRequest({
     required this.id,
@@ -20,6 +21,7 @@ class KeyExchangeRequest {
     required this.type,
     this.respondedAt,
     this.errorMessage,
+    this.displayName, // Added: display name parameter
   });
 
   /// Create from JSON
@@ -36,6 +38,7 @@ class KeyExchangeRequest {
           ? DateTime.fromMillisecondsSinceEpoch(json['respondedAt'] as int)
           : null,
       errorMessage: json['errorMessage'] as String?,
+      displayName: json['displayName'] as String?, // Added: parse display name
     );
   }
 
@@ -51,6 +54,7 @@ class KeyExchangeRequest {
       'type': type,
       'respondedAt': respondedAt?.millisecondsSinceEpoch,
       'errorMessage': errorMessage,
+      'displayName': displayName, // Added: include display name
     };
   }
 
@@ -65,6 +69,7 @@ class KeyExchangeRequest {
     String? type,
     DateTime? respondedAt,
     String? errorMessage,
+    String? displayName, // Added: display name parameter
   }) {
     return KeyExchangeRequest(
       id: id ?? this.id,
@@ -76,6 +81,8 @@ class KeyExchangeRequest {
       type: type ?? this.type,
       respondedAt: respondedAt ?? this.respondedAt,
       errorMessage: errorMessage ?? this.errorMessage,
+      displayName:
+          displayName ?? this.displayName, // Added: update display name
     );
   }
 
@@ -102,8 +109,12 @@ class KeyExchangeRequest {
     switch (status) {
       case 'pending':
         return 'Pending';
+      case 'sent':
+        return 'Sent';
       case 'received':
         return 'Received';
+      case 'processing':
+        return 'Processing';
       case 'accepted':
         return 'Accepted';
       case 'declined':
@@ -120,8 +131,12 @@ class KeyExchangeRequest {
     switch (status) {
       case 'pending':
         return '#FFA500'; // Orange
+      case 'sent':
+        return '#2196F3'; // Blue
       case 'received':
         return '#2196F3'; // Blue
+      case 'processing':
+        return '#FF9800'; // Orange
       case 'accepted':
         return '#4CAF50'; // Green
       case 'declined':
