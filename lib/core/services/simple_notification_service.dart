@@ -1584,6 +1584,59 @@ class SimpleNotificationService {
     }
   }
 
+  /// Clear ALL data when deleting account (comprehensive cleanup)
+  Future<void> clearAllDataOnAccountDeletion() async {
+    try {
+      print(
+          '🗑️ SimpleNotificationService: Starting comprehensive account data cleanup...');
+
+      // 1. Clear all secure storage (encryption keys, etc.)
+      final secureKeys = await _storage.readAll();
+      for (final key in secureKeys.keys) {
+        await _storage.delete(key: key);
+        print('🗑️ SimpleNotificationService: Deleted secure key: $key');
+      }
+
+      // 2. Clear all shared preferences
+      final prefsService = SeSharedPreferenceService();
+      await prefsService.clear();
+      print('🗑️ SimpleNotificationService: Cleared all shared preferences');
+
+      // 3. Clear local notifications
+      await _localNotifications.cancelAll();
+      print('🗑️ SimpleNotificationService: Cancelled all local notifications');
+
+      // 4. Clear notification cache
+      _processedNotifications.clear();
+      print('🗑️ SimpleNotificationService: Cleared notification cache');
+
+      // 6. Reset service state
+      _deviceToken = null;
+      _sessionId = null;
+      _permissionStatus = PermissionStatus.denied;
+      _isInitialized = false;
+      print('🗑️ SimpleNotificationService: Reset service state');
+
+      // 7. Clear data from other services
+      try {
+        // Clear key exchange service data
+        await KeyExchangeService.instance.clearAllPendingExchanges();
+        print(
+            '🗑️ SimpleNotificationService: Cleared key exchange service data');
+      } catch (e) {
+        print(
+            '🗑️ SimpleNotificationService: Warning - some service cleanup failed: $e');
+      }
+
+      print(
+          '🗑️ SimpleNotificationService: ✅ Comprehensive account cleanup completed');
+    } catch (e) {
+      print(
+          '🗑️ SimpleNotificationService: ❌ Error during account cleanup: $e');
+      // Don't throw - we want to continue with cleanup even if some parts fail
+    }
+  }
+
   /// Cancel all notifications
   Future<void> cancelAllNotifications() async {
     await _localNotifications.cancelAll();
@@ -2175,7 +2228,7 @@ class SimpleNotificationService {
 
       // Remove chat
       final existingChats = await prefsService.getJsonList('chats') ?? [];
-      existingChats.removeWhere((c) => c['contactId'] == contactId);
+      existingChats.removeWhere((c) => c['user2_id'] == contactId);
       await prefsService.setJsonList('chats', existingChats);
 
       print('🔔 SimpleNotificationService: ✅ Rollback completed');
@@ -2304,15 +2357,21 @@ class SimpleNotificationService {
       }
 
       // Create chat using the provided chat ID
+      // Get current user info for chat
+      final currentSession = SeSessionService().currentSession;
+      final currentUserDisplayName = currentSession?.displayName ??
+          'User ${currentUserId.substring(0, 8)}';
+
       final chat = {
         'id': chatId,
-        'contactId': contactId,
-        'contactName': displayName,
-        'lastMessage': null,
-        'lastMessageTime': null,
-        'unreadCount': 0,
-        'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'user1_id': currentUserId,
+        'user2_id': contactId,
+        'user1_display_name': currentUserDisplayName,
+        'user2_display_name': displayName,
         'status': 'active',
+        'is_blocked': false,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
       // Save chat to local storage
