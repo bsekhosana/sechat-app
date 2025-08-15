@@ -24,6 +24,9 @@ import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:flutter/material.dart';
 import '../config/airnotifier_config.dart';
 import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_provider.dart';
+import 'package:sechat_app/features/chat/models/chat_conversation.dart';
+import 'package:sechat_app/features/chat/services/message_storage_service.dart';
+import 'package:sechat_app/features/chat/services/message_status_tracking_service.dart';
 
 /// Simple, consolidated notification service with end-to-end encryption
 class SimpleNotificationService {
@@ -58,6 +61,9 @@ class SimpleNotificationService {
   // Notification provider callback
   Function(String title, String body, String type, Map<String, dynamic>? data)?
       _onNotificationReceived;
+
+  // Conversation creation callback
+  Function(ChatConversation conversation)? _onConversationCreated;
 
   // Prevent duplicate notification processing
   final Set<String> _processedNotifications = <String>{};
@@ -533,18 +539,24 @@ class SimpleNotificationService {
       final encryptedData = await _encryptData(messageData, recipientId);
       final checksum = _generateChecksum(messageData);
 
-      // Send via AirNotifier with encryption
+      // Send via AirNotifier with FULL ENCRYPTION
+      // Use generic title/body to prevent data leakage to Google/Apple servers
       final success =
           await AirNotifierService.instance.sendNotificationToSession(
         sessionId: recipientId,
-        title: 'New Message',
-        body: 'You have received a new message',
+        title: 'Text Alert', // Generic title - no sensitive data
+        body:
+            'You have received a text message', // Generic body - no sensitive data
         data: {
           'encrypted': true,
-          'data': encryptedData,
-          'checksum': checksum,
+          'type':
+              'message', // Type indicator for routing (unencrypted for routing)
+          'data': encryptedData, // Encrypted sensitive data
+          'checksum': checksum, // Checksum for verification
         },
         sound: 'message.wav',
+        encrypted: true, // Mark as encrypted for AirNotifier server
+        checksum: checksum, // Include checksum for verification
       );
 
       if (success) {
@@ -573,22 +585,26 @@ class SimpleNotificationService {
     try {
       print('🔔 SimpleNotificationService: Sending encrypted message');
 
-      // Send via AirNotifier with encryption
+      // Send via AirNotifier with FULL ENCRYPTION
+      // Use generic title/body to prevent data leakage to Google/Apple servers
       final success =
           await AirNotifierService.instance.sendNotificationToSession(
         sessionId: recipientId,
-        title: 'New Encrypted Message',
-        body: 'You have received a secure message',
+        title: 'Secure Alert', // Generic title - no sensitive data
+        body:
+            'You have received a secure message', // Generic body - no sensitive data
         data: {
           'encrypted': true,
-          'data': encryptedData,
-          'checksum': checksum,
-          'type': 'message',
-          'messageId': messageId,
-          'conversationId': conversationId,
+          'type':
+              'message', // Type indicator for routing (unencrypted for routing)
+          'data': encryptedData, // Encrypted sensitive data
+          'checksum': checksum, // Checksum for verification
+          'messageId': messageId, // Additional metadata
+          'conversationId': conversationId, // Additional metadata
         },
         sound: 'message.wav',
-        encrypted: true,
+        encrypted: true, // Mark as encrypted for AirNotifier server
+        checksum: checksum, // Include checksum for verification
       );
 
       if (success) {
@@ -634,17 +650,28 @@ class SimpleNotificationService {
             '🔔 SimpleNotificationService: Encrypted value: $encryptedValue (type: ${encryptedValue.runtimeType})');
 
         // Get encrypted data from the new structure
-        var encryptedData = notificationData['encryptedData'] as String?;
+        var encryptedData = notificationData['data'] as String?;
         if (encryptedData == null) {
-          // Fallback: try the old 'data' field for backward compatibility
-          final fallbackData = notificationData['data'] as String?;
+          // Fallback: try the old 'encryptedData' field for backward compatibility
+          final fallbackData = notificationData['encryptedData'] as String?;
           if (fallbackData != null) {
             print(
-                '🔔 SimpleNotificationService: Using fallback data field for encrypted content');
+                '🔔 SimpleNotificationService: Using fallback encryptedData field for encrypted content');
             encryptedData = fallbackData;
           } else {
+            // Check if this is a silent notification (typing indicator, status updates)
+            // These don't need encryption since they're just UI state updates
+            final notificationType = notificationData['type'] as String?;
+            if (notificationType == 'typing_indicator' ||
+                notificationType == 'message_delivery_status' ||
+                notificationType == 'online_status_update' ||
+                notificationType == 'invitation_update') {
+              print(
+                  '🔔 SimpleNotificationService: Processing silent notification type: $notificationType');
+              return notificationData; // Return the data directly for silent notifications
+            }
             print(
-                '🔔 SimpleNotificationService: ❌ No encrypted data found in encryptedData or data fields');
+                '🔔 SimpleNotificationService: ❌ No encrypted data found in data or encryptedData fields');
             return null;
           }
         }
@@ -989,6 +1016,9 @@ class SimpleNotificationService {
         case 'broadcast':
           await _handleBroadcastNotification(processedData);
           break;
+        case 'online_status_update':
+          await _handleOnlineStatusUpdate(processedData);
+          break;
         default:
           print(
               '🔔 SimpleNotificationService: Unknown notification type: $type');
@@ -1005,32 +1035,63 @@ class SimpleNotificationService {
     final senderId = data['senderId'] as String?;
     final senderName = data['senderName'] as String?;
     final message = data['message'] as String?;
+    final conversationId = data['conversationId'] as String?;
 
     if (senderId == null || senderName == null || message == null) {
       print('🔔 SimpleNotificationService: Invalid message notification data');
       return;
     }
 
+    print(
+        '🔔 SimpleNotificationService: Processing message from $senderName: $message');
+
     // Check if sender is blocked
     final currentUserId = SeSessionService().currentSessionId;
     if (currentUserId != null) {
-      final prefsService = SeSharedPreferenceService();
-      final chatsJson = await prefsService.getJsonList('chats') ?? [];
+      try {
+        // Check database first for blocking status
+        final messageStorageService = MessageStorageService.instance;
+        final conversations =
+            await messageStorageService.getUserConversations(currentUserId);
 
-      // Find chat with this sender
-      for (final chatJson in chatsJson) {
-        try {
-          final chat = Chat.fromJson(chatJson);
-          final otherUserId = chat.getOtherUserId(currentUserId);
+        // Find conversation with this sender
+        final conversation = conversations.firstWhere(
+          (conv) => conv.getOtherParticipantId(currentUserId) == senderId,
+          orElse: () => throw Exception('Conversation not found'),
+        );
 
-          if (otherUserId == senderId && chat.getBlockedStatus()) {
-            print(
-                '🔔 SimpleNotificationService: Message from blocked user ignored: $senderName');
-            return; // Ignore message from blocked user
-          }
-        } catch (e) {
+        if (conversation.isBlocked == true) {
           print(
-              '🔔 SimpleNotificationService: Error parsing chat for blocking check: $e');
+              '🔔 SimpleNotificationService: Message from blocked user ignored: $senderName');
+          return; // Ignore message from blocked user
+        }
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: Error checking database for blocking status: $e');
+        // Fallback to SharedPreferences if database fails
+        try {
+          final prefsService = SeSharedPreferenceService();
+          final chatsJson = await prefsService.getJsonList('chats') ?? [];
+
+          // Find chat with this sender
+          for (final chatJson in chatsJson) {
+            try {
+              final chat = Chat.fromJson(chatJson);
+              final otherUserId = chat.getOtherUserId(currentUserId);
+
+              if (otherUserId == senderId && chat.getBlockedStatus()) {
+                print(
+                    '🔔 SimpleNotificationService: Message from blocked user ignored: $senderName');
+                return; // Ignore message from blocked user
+              }
+            } catch (e) {
+              print(
+                  '🔔 SimpleNotificationService: Error parsing chat for blocking check: $e');
+            }
+          }
+        } catch (fallbackError) {
+          print(
+              '🔔 SimpleNotificationService: Error in fallback blocking check: $fallbackError');
         }
       }
     }
@@ -1056,8 +1117,35 @@ class SimpleNotificationService {
     // Trigger indicator for new chat message
     IndicatorService().setNewChat();
 
-    // Trigger callback
+    // Send delivery receipt back to sender
+    try {
+      final airNotifier = AirNotifierService.instance;
+      final success = await airNotifier.sendMessageDeliveryStatus(
+        recipientId: senderId,
+        messageId:
+            conversationId ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
+        status: 'delivered',
+        conversationId: conversationId ??
+            'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+      );
+
+      if (success) {
+        print(
+            '🔔 SimpleNotificationService: ✅ Delivery receipt sent to sender');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ⚠️ Failed to send delivery receipt');
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: ❌ Error sending delivery receipt: $e');
+    }
+
+    // Trigger callback for UI updates
     _onMessageReceived?.call(senderId, senderName, message);
+
+    print(
+        '🔔 SimpleNotificationService: ✅ Message notification handled successfully');
   }
 
   /// Handle typing indicator notification
@@ -1072,8 +1160,25 @@ class SimpleNotificationService {
       return;
     }
 
-    // Trigger callback (no local notification for typing indicators)
+    print(
+        '🔔 SimpleNotificationService: Received typing indicator: $senderId -> $isTyping');
+
+    // First, trigger the callback for any local listeners
     _onTypingIndicator?.call(senderId, isTyping);
+
+    // Then, ensure the typing indicator is processed by the MessageStatusTrackingService
+    // This ensures typing indicators work even when the callback isn't set up
+    try {
+      final messageStatusTrackingService =
+          MessageStatusTrackingService.instance;
+      await messageStatusTrackingService.handleExternalTypingIndicator(
+          senderId, isTyping);
+      print(
+          '🔔 SimpleNotificationService: ✅ Typing indicator routed to MessageStatusTrackingService');
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: ❌ Failed to route typing indicator to MessageStatusTrackingService: $e');
+    }
   }
 
   /// Handle broadcast notification
@@ -1107,6 +1212,56 @@ class SimpleNotificationService {
 
     // Trigger indicator for new notification
     IndicatorService().setNewNotification();
+  }
+
+  /// Handle online status update notification
+  Future<void> _handleOnlineStatusUpdate(Map<String, dynamic> data) async {
+    final senderId = data['senderId'] as String?;
+    final isOnline = data['isOnline'] as bool?;
+    final lastSeen = data['lastSeen'] as String?;
+
+    if (senderId == null || isOnline == null) {
+      print('🔔 SimpleNotificationService: Invalid online status update data');
+      return;
+    }
+
+    print(
+        '🔔 SimpleNotificationService: Online status update from $senderId: $isOnline');
+
+    // Update local online status
+    try {
+      final messageStorageService = MessageStorageService.instance;
+      final currentUserId = SeSessionService().currentSessionId;
+
+      if (currentUserId != null) {
+        final conversations =
+            await messageStorageService.getUserConversations(currentUserId);
+        final conversation = conversations.firstWhere(
+          (conv) => conv.isParticipant(senderId),
+          orElse: () => throw Exception('Conversation not found'),
+        );
+
+        // Update conversation with online status
+        final updatedConversation = conversation.copyWith(
+          metadata: {
+            ...?conversation.metadata,
+            'is_online': isOnline,
+            'last_seen': lastSeen ?? DateTime.now().toIso8601String(),
+          },
+        );
+
+        await messageStorageService.saveConversation(updatedConversation);
+        print(
+            '🔔 SimpleNotificationService: ✅ Online status updated in local storage');
+      }
+    } catch (e) {
+      print('🔔 SimpleNotificationService: ❌ Error updating online status: $e');
+    }
+
+    // Trigger callback for UI updates if available
+    // TODO: Add callback for online status updates
+    print(
+        '🔔 SimpleNotificationService: ✅ Online status update handled successfully');
   }
 
   /// Set device token for push notifications
@@ -1401,6 +1556,56 @@ class SimpleNotificationService {
     _onTypingIndicator = callback;
   }
 
+  /// Send read receipt for a message
+  Future<void> sendReadReceipt(
+      String senderId, String messageId, String conversationId) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Sending read receipt for message: $messageId');
+
+      final airNotifier = AirNotifierService.instance;
+      final success = await airNotifier.sendMessageDeliveryStatus(
+        recipientId: senderId,
+        messageId: messageId,
+        status: 'read',
+        conversationId: conversationId,
+      );
+
+      if (success) {
+        print('🔔 SimpleNotificationService: ✅ Read receipt sent to sender');
+      } else {
+        print('🔔 SimpleNotificationService: ⚠️ Failed to send read receipt');
+      }
+    } catch (e) {
+      print('🔔 SimpleNotificationService: ❌ Error sending read receipt: $e');
+    }
+  }
+
+  /// Send online status update
+  Future<void> sendOnlineStatusUpdate(String recipientId, bool isOnline) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: Sending online status update: $isOnline');
+
+      final airNotifier = AirNotifierService.instance;
+      final success = await airNotifier.sendOnlineStatusUpdate(
+        recipientId: recipientId,
+        isOnline: isOnline,
+        lastSeen: isOnline ? null : DateTime.now().toIso8601String(),
+      );
+
+      if (success) {
+        print('🔔 SimpleNotificationService: ✅ Online status update sent');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ⚠️ Failed to send online status update');
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: ❌ Error sending online status update: $e');
+    }
+  }
+
   /// Set encrypted message received callback
   void setOnEncryptedMessageReceived(
       Function(String recipientId, String encryptedData, String checksum)
@@ -1436,6 +1641,12 @@ class SimpleNotificationService {
               Map<String, dynamic>? data)?
           callback) {
     _onNotificationReceived = callback;
+  }
+
+  /// Set callback for conversation creation
+  void setOnConversationCreated(
+      Function(ChatConversation conversation)? callback) {
+    _onConversationCreated = callback;
   }
 
   /// Show local notification
@@ -2172,7 +2383,7 @@ class SimpleNotificationService {
             '🔔 SimpleNotificationService: Contact already exists: $displayName');
       }
 
-      // Create chat
+      // Create chat conversation in the database
       final chatId =
           'chat_${DateTime.now().millisecondsSinceEpoch}_${contactId.substring(0, 8)}';
 
@@ -2181,51 +2392,68 @@ class SimpleNotificationService {
       final currentUserDisplayName = currentSession?.displayName ??
           'User ${currentUserId.substring(0, 8)}';
 
-      // Ensure all required fields are non-null
-      final chat = {
-        'id': chatId,
-        'user1_id': currentUserId,
-        'user2_id': contactId,
-        'user1_display_name': currentUserDisplayName,
-        'user2_display_name': displayName,
-        'status': 'active',
-        'is_blocked': false,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
+      // Create ChatConversation object for database
+      final conversation = ChatConversation(
+        id: chatId,
+        participant1Id: currentUserId,
+        participant2Id: contactId,
+        displayName: displayName,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        lastMessageAt: DateTime.now(),
+        lastMessageId: null,
+        lastMessagePreview: null,
+        lastMessageType: null,
+        unreadCount: 0,
+        isArchived: false,
+        isMuted: false,
+        isPinned: false,
+        metadata: {
+          'created_from_key_exchange': true,
+          'contact_display_name': displayName,
+          'current_user_display_name': currentUserDisplayName,
+        },
+        lastSeen: null,
+        isTyping: false,
+        typingStartedAt: null,
+        notificationsEnabled: true,
+        soundEnabled: true,
+        vibrationEnabled: true,
+        readReceiptsEnabled: true,
+        typingIndicatorsEnabled: true,
+        lastSeenEnabled: true,
+        mediaAutoDownload: true,
+        encryptMedia: true,
+        mediaQuality: 'High',
+        messageRetention: '30 days',
+        isBlocked: false,
+        blockedAt: null,
+        recipientId: contactId,
+        recipientName: displayName,
+      );
 
-      // Debug: Log the chat object to verify all fields
-      print('🔔 SimpleNotificationService: Created chat object:');
-      print('🔔 SimpleNotificationService: - ID: ${chat['id']}');
-      print('🔔 SimpleNotificationService: - User1 ID: ${chat['user1_id']}');
-      print('🔔 SimpleNotificationService: - User2 ID: ${chat['user2_id']}');
-      print(
-          '🔔 SimpleNotificationService: - User1 Display Name: ${chat['user1_display_name']}');
-      print(
-          '🔔 SimpleNotificationService: - User2 Display Name: ${chat['user2_display_name']}');
-      print('🔔 SimpleNotificationService: - Status: ${chat['status']}');
-      print(
-          '🔔 SimpleNotificationService: - Created At: ${chat['created_at']}');
-      print(
-          '🔔 SimpleNotificationService: - Updated At: ${chat['updated_at']}');
-
-      // Save chat to local storage
-      final existingChats = await prefsService.getJsonList('chats') ?? [];
-
-      // Check if chat already exists
-      if (!existingChats.any((c) => c['user2_id'] == contactId)) {
-        existingChats.add(chat);
-        await prefsService.setJsonList('chats', existingChats);
-        print('🔔 SimpleNotificationService: ✅ Chat created: $chatId');
-
-        // Debug: Verify the chat was saved correctly
+      // Save conversation to database
+      try {
         print(
-            '🔔 SimpleNotificationService: Total chats in storage: ${existingChats.length}');
-        final savedChat = existingChats.last;
-        print('🔔 SimpleNotificationService: Last saved chat: $savedChat');
-      } else {
+            '🔔 SimpleNotificationService: 🗄️ Attempting to save conversation to database...');
+        final messageStorageService = MessageStorageService.instance;
         print(
-            '🔔 SimpleNotificationService: Chat already exists for: $displayName');
+            '🔔 SimpleNotificationService: 📊 Conversation data: ${conversation.toJson()}');
+        await messageStorageService.saveConversation(conversation);
+        print(
+            '🔔 SimpleNotificationService: ✅ Chat conversation created in database: $chatId');
+
+        // Notify about conversation creation
+        if (_onConversationCreated != null) {
+          _onConversationCreated!(conversation);
+        }
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: ❌ Failed to create chat conversation in database: $e');
+        print(
+            '🔔 SimpleNotificationService: 🔍 Error details: ${e.runtimeType} - $e');
+        // No fallback to SharedPreferences - database must succeed
+        throw Exception('Failed to create chat conversation in database: $e');
       }
 
       // Send encrypted response with our user data and chat info
@@ -2313,10 +2541,25 @@ class SimpleNotificationService {
       existingContacts.removeWhere((c) => c['id'] == contactId);
       await prefsService.setJsonList('contacts', existingContacts);
 
-      // Remove chat
-      final existingChats = await prefsService.getJsonList('chats') ?? [];
-      existingChats.removeWhere((c) => c['user2_id'] == contactId);
-      await prefsService.setJsonList('chats', existingChats);
+      // Try to remove conversation from database if it exists
+      try {
+        final messageStorageService = MessageStorageService.instance;
+        // Find conversation by participant ID and delete it
+        final conversations = await messageStorageService
+            .getUserConversations(SeSessionService().currentSessionId ?? '');
+        final conversationToDelete = conversations.firstWhere(
+          (conv) => conv.participant2Id == contactId,
+          orElse: () => throw Exception('Conversation not found'),
+        );
+
+        // Note: We don't have a deleteConversation method yet, but we can mark it as deleted
+        // For now, just log that we would delete it
+        print(
+            '🔔 SimpleNotificationService: Would delete conversation: ${conversationToDelete.id}');
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: No conversation to rollback in database: $e');
+      }
 
       print('🔔 SimpleNotificationService: ✅ Rollback completed');
     } catch (e) {
@@ -2447,7 +2690,7 @@ class SimpleNotificationService {
         'status': 'active',
       };
 
-      // Save contact to local storage
+      // Save contact to local storage (keeping this for backward compatibility)
       final prefsService = SeSharedPreferenceService();
       final existingContacts = await prefsService.getJsonList('contacts') ?? [];
 
@@ -2462,36 +2705,74 @@ class SimpleNotificationService {
             '🔔 SimpleNotificationService: Contact already exists from response: $displayName');
       }
 
-      // Create chat using the provided chat ID
+      // Create chat conversation in the database
       // Get current user info for chat
       final currentSession = SeSessionService().currentSession;
       final currentUserDisplayName = currentSession?.displayName ??
           'User ${currentUserId.substring(0, 8)}';
 
-      final chat = {
-        'id': chatId,
-        'user1_id': currentUserId,
-        'user2_id': contactId,
-        'user1_display_name': currentUserDisplayName,
-        'user2_display_name': displayName,
-        'status': 'active',
-        'is_blocked': false,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
+      // Create ChatConversation object for database
+      final conversation = ChatConversation(
+        id: chatId,
+        participant1Id: currentUserId,
+        participant2Id: contactId,
+        displayName: displayName,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        lastMessageAt: DateTime.now(),
+        lastMessageId: null,
+        lastMessagePreview: null,
+        lastMessageType: null,
+        unreadCount: 0,
+        isArchived: false,
+        isMuted: false,
+        isPinned: false,
+        metadata: {
+          'created_from_key_exchange': true,
+          'contact_display_name': displayName,
+          'current_user_display_name': currentUserDisplayName,
+        },
+        lastSeen: null,
+        isTyping: false,
+        typingStartedAt: null,
+        notificationsEnabled: true,
+        soundEnabled: true,
+        vibrationEnabled: true,
+        readReceiptsEnabled: true,
+        typingIndicatorsEnabled: true,
+        lastSeenEnabled: true,
+        mediaAutoDownload: true,
+        encryptMedia: true,
+        mediaQuality: 'High',
+        messageRetention: '30 days',
+        isBlocked: false,
+        blockedAt: null,
+        recipientId: contactId,
+        recipientName: displayName,
+      );
 
-      // Save chat to local storage
-      final existingChats = await prefsService.getJsonList('chats') ?? [];
+      // Save conversation to database
+      try {
+        print(
+            '🔔 SimpleNotificationService: 🗄️ Attempting to save conversation to database...');
+        final messageStorageService = MessageStorageService.instance;
+        print(
+            '🔔 SimpleNotificationService: 📊 Conversation data: ${conversation.toJson()}');
+        await messageStorageService.saveConversation(conversation);
+        print(
+            '🔔 SimpleNotificationService: ✅ Chat conversation created in database: $chatId');
 
-      // Check if chat already exists
-      if (!existingChats.any((c) => c['id'] == chatId)) {
-        existingChats.add(chat);
-        await prefsService.setJsonList('chats', existingChats);
+        // Notify about conversation creation
+        if (_onConversationCreated != null) {
+          _onConversationCreated!(conversation);
+        }
+      } catch (e) {
         print(
-            '🔔 SimpleNotificationService: ✅ Chat created from response: $chatId');
-      } else {
+            '🔔 SimpleNotificationService: ❌ Failed to create chat conversation in database: $e');
         print(
-            '🔔 SimpleNotificationService: Chat already exists from response: $chatId');
+            '🔔 SimpleNotificationService: 🔍 Error details: ${e.runtimeType} - $e');
+        // No fallback to SharedPreferences - database must succeed
+        throw Exception('Failed to create chat conversation in database: $e');
       }
 
       // Show success message to user

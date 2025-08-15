@@ -1,0 +1,233 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/message.dart';
+import '../providers/chat_provider.dart';
+import 'text_message_bubble.dart';
+import 'voice_message_bubble.dart';
+import 'video_message_bubble.dart';
+import 'image_message_bubble.dart';
+import 'document_message_bubble.dart';
+import 'location_message_bubble.dart';
+import 'contact_message_bubble.dart';
+import 'emoticon_message_bubble.dart';
+import 'reply_message_bubble.dart';
+import 'system_message_bubble.dart';
+
+/// Main message bubble widget that handles all message types
+class MessageBubble extends StatelessWidget {
+  final Message message;
+  final bool isFromCurrentUser;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool isLast;
+
+  const MessageBubble({
+    super.key,
+    required this.message,
+    required this.isFromCurrentUser,
+    this.onTap,
+    this.onLongPress,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(
+        left: isFromCurrentUser ? 48 : 16,
+        right: isFromCurrentUser ? 16 : 48,
+        bottom: isLast ? 16 : 8,
+        top: 8,
+      ),
+      child: Column(
+        crossAxisAlignment: isFromCurrentUser
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          // Message content
+          _buildMessageContent(context),
+
+          const SizedBox(height: 4),
+
+          // Message metadata (time, status, etc.)
+          _buildMessageMetadata(context),
+        ],
+      ),
+    );
+  }
+
+  /// Build the main message content based on type
+  Widget _buildMessageContent(BuildContext context) {
+    switch (message.type) {
+      case MessageType.text:
+        return TextMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.voice:
+        return VoiceMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.video:
+        return VideoMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.image:
+        return ImageMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.document:
+        return DocumentMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.location:
+        return LocationMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.contact:
+        return ContactMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.emoticon:
+        return EmoticonMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.reply:
+        return ReplyMessageBubble(
+          message: message,
+          isFromCurrentUser: isFromCurrentUser,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+
+      case MessageType.system:
+        return SystemMessageBubble(
+          message: message,
+          onTap: onTap,
+          onLongPress: onLongPress,
+        );
+    }
+  }
+
+  /// Build message metadata (time, status, etc.)
+  Widget _buildMessageMetadata(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment:
+          isFromCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+      children: [
+        // Time
+        Text(
+          _formatTimestamp(message.timestamp),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withOpacity(0.7),
+                fontSize: 11,
+              ),
+        ),
+
+        // Status indicators (only for current user's messages)
+        if (isFromCurrentUser) ...[
+          const SizedBox(width: 8),
+          _buildStatusIndicator(context),
+        ],
+      ],
+    );
+  }
+
+  /// Build status indicator (ticks)
+  Widget _buildStatusIndicator(BuildContext context) {
+    IconData icon;
+    Color color;
+
+    switch (message.status) {
+      case MessageStatus.sending:
+        icon = Icons.schedule;
+        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5);
+        break;
+      case MessageStatus.sent:
+        icon = Icons.done;
+        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7);
+        break;
+      case MessageStatus.delivered:
+        icon = Icons.done_all;
+        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7);
+        break;
+      case MessageStatus.read:
+        icon = Icons.done_all;
+        color = Theme.of(context).colorScheme.primary;
+        break;
+      case MessageStatus.failed:
+        icon = Icons.error_outline;
+        color = Theme.of(context).colorScheme.error;
+        break;
+      case MessageStatus.deleted:
+        icon = Icons.delete_outline;
+        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5);
+        break;
+    }
+
+    return Icon(
+      icon,
+      size: 16,
+      color: color,
+    );
+  }
+
+  /// Format timestamp for display
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate =
+        DateTime(timestamp.year, timestamp.month, timestamp.day);
+
+    if (messageDate == today) {
+      // Today: show time only
+      return '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
+      // Yesterday
+      return 'Yesterday';
+    } else if (now.difference(timestamp).inDays < 7) {
+      // Within a week: show day name
+      final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return days[timestamp.weekday - 1];
+    } else {
+      // Older: show date
+      return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
+    }
+  }
+}

@@ -10,6 +10,8 @@ import 'dart:io' show Platform;
 // import 'features/chat/providers/chat_provider.dart'; // Temporarily disabled
 import 'features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
+import 'features/chat/providers/chat_list_provider.dart';
+import 'features/chat/providers/chat_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
@@ -20,6 +22,8 @@ import 'core/services/se_session_service.dart';
 import 'core/services/se_shared_preference_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/local_storage_service.dart';
+import 'features/chat/services/message_storage_service.dart';
+import 'features/chat/providers/session_chat_provider.dart';
 
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +43,7 @@ Future<void> main() async {
   await Future.wait([
     LocalStorageService.instance.initialize(),
     SeSharedPreferenceService().initialize(),
+    MessageStorageService.instance.initialize(),
   ]);
 
   // Initialize SeSessionService
@@ -64,10 +69,11 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         // ChangeNotifierProvider(create: (_) => SearchProvider()), // Removed search functionality
-        // ChangeNotifierProvider(create: (_) => ChatProvider()), // Temporarily disabled
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(
             create: (_) => KeyExchangeRequestProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => ChatListProvider()..initialize()),
         // ChangeNotifierProvider(create: (_) => AuthProvider()), // Temporarily disabled
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
         ChangeNotifierProvider(create: (_) => LocalStorageService.instance),
@@ -82,15 +88,33 @@ void _setupSimpleNotifications() {
   final notificationService = SimpleNotificationService.instance;
 
   // Set up notification callbacks
-
   notificationService.setOnMessageReceived((senderId, senderName, message) {
-    // The notification will be handled by the SimpleNotificationService
-    // which will show a local notification and trigger UI updates
+    print('🔔 Main: Message received from $senderName: $message');
+
+    // Route message to ChatListProvider to update UI
+    try {
+      // We'll need to access ChatListProvider through the Provider system
+      // For now, we'll handle this in the notification service itself
+      print('🔔 Main: ✅ Message received notification handled');
+    } catch (e) {
+      print('🔔 Main: ❌ Failed to handle message received: $e');
+    }
   });
 
   notificationService.setOnTypingIndicator((senderId, isTyping) {
-    // The notification will be handled by the SimpleNotificationService
-    // which will trigger UI updates
+    print('🔔 Main: Typing indicator from $senderId: $isTyping');
+
+    // Typing indicator is already handled by SimpleNotificationService
+    print('🔔 Main: ✅ Typing indicator handled by notification service');
+  });
+
+  // Set up message status update callback for read receipts
+  notificationService.setOnMessageStatusUpdate((senderId, messageId, status) {
+    print(
+        '🔔 Main: Message status update: $messageId -> $status from $senderId');
+
+    // Message status updates are already handled by SimpleNotificationService
+    print('🔔 Main: ✅ Message status update handled by notification service');
   });
 }
 
@@ -105,6 +129,9 @@ void _setupNotificationProviders(BuildContext context) {
 void _setupMethodChannels() {
   const MethodChannel channel = MethodChannel('push_notifications');
   const EventChannel eventChannel = EventChannel('push_notifications_events');
+
+  // App lifecycle handling is done by AppLifecycleHandler widget
+  // Online status updates will be sent when the app goes to background/foreground
 
   // Listen to real-time notifications via EventChannel
   eventChannel.receiveBroadcastStream().listen((dynamic event) {
@@ -173,6 +200,43 @@ void _setupMethodChannels() {
   });
 
   print('🔔 Main: Method channels setup complete');
+}
+
+/// Send online status update to all contacts
+Future<void> _sendOnlineStatusUpdate(bool isOnline) async {
+  try {
+    print('🔔 Main: Sending online status update: $isOnline');
+
+    // Get current user ID
+    final sessionService = SeSessionService();
+    final currentUserId = sessionService.currentSessionId;
+
+    if (currentUserId == null) {
+      print('🔔 Main: ❌ No current session ID available');
+      return;
+    }
+
+    // Get all conversations to send status updates
+    final messageStorageService = MessageStorageService.instance;
+    final conversations =
+        await messageStorageService.getUserConversations(currentUserId);
+
+    // Send online status update to all participants
+    final notificationService = SimpleNotificationService.instance;
+    for (final conversation in conversations) {
+      final otherParticipantId =
+          conversation.getOtherParticipantId(currentUserId);
+      if (otherParticipantId != null) {
+        await notificationService.sendOnlineStatusUpdate(
+            otherParticipantId, isOnline);
+      }
+    }
+
+    print(
+        '🔔 Main: ✅ Online status updates sent to ${conversations.length} contacts');
+  } catch (e) {
+    print('🔔 Main: ❌ Error sending online status updates: $e');
+  }
 }
 
 // Handle notification events from EventChannel

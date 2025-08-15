@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'se_shared_preference_service.dart';
+import 'se_session_service.dart';
+import '../../features/chat/services/message_storage_service.dart';
 
 class IndicatorService extends ChangeNotifier {
   static final IndicatorService _instance = IndicatorService._internal();
@@ -20,18 +22,29 @@ class IndicatorService extends ChangeNotifier {
     try {
       final prefsService = SeSharedPreferenceService();
 
-      // Check for new chats (chats with recent activity)
-      final chatsJson = await prefsService.getJsonList('chats') ?? [];
-      final now = DateTime.now();
-      _hasNewChats = chatsJson.any((chat) {
-        final lastMessageAt = chat['last_message_at'];
-        if (lastMessageAt != null) {
-          final lastMessageTime = DateTime.parse(lastMessageAt);
-          return now.difference(lastMessageTime).inMinutes <
-              5; // New if within 5 minutes
+      // Check for new chats (conversations with recent activity from database)
+      try {
+        final messageStorageService = MessageStorageService.instance;
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null) {
+          final conversations =
+              await messageStorageService.getUserConversations(currentUserId);
+          final now = DateTime.now();
+          _hasNewChats = conversations.any((conv) {
+            final lastMessageAt = conv.lastMessageAt;
+            if (lastMessageAt != null) {
+              return now.difference(lastMessageAt).inMinutes <
+                  5; // New if within 5 minutes
+            }
+            return false;
+          });
+        } else {
+          _hasNewChats = false;
         }
-        return false;
-      });
+      } catch (e) {
+        print('🔔 IndicatorService: Error checking database for new chats: $e');
+        _hasNewChats = false;
+      }
 
       // Check for new invitations (pending invitations)
       final invitationsJson =
@@ -50,6 +63,7 @@ class IndicatorService extends ChangeNotifier {
       // Check for new key exchange requests (within last 5 minutes)
       final keyExchangeRequestsJson =
           await prefsService.getJsonList('key_exchange_requests') ?? [];
+      final now = DateTime.now();
       final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
       _hasNewKeyExchange = keyExchangeRequestsJson.any((request) {
         try {

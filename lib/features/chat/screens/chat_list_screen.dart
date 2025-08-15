@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
-import '../../../shared/models/chat.dart';
-import '../../../shared/models/message.dart';
-import '../../../core/services/se_session_service.dart';
-import '../../../core/services/se_shared_preference_service.dart';
-import '../../../core/services/online_status_service.dart';
-import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
-import 'chat_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
+import '../models/message.dart';
+import '../models/chat_conversation.dart';
+import '../providers/chat_list_provider.dart';
+import '../widgets/chat_list_item.dart';
+import '../widgets/chat_search_bar.dart';
+import '../widgets/empty_chat_list.dart';
+import '../widgets/chat_list_header.dart';
+import '../../../shared/widgets/connection_status_widget.dart';
+import '../../../shared/widgets/app_icon.dart';
+import '../../../shared/widgets/key_exchange_request_dialog.dart';
+import '../screens/chat_screen.dart';
+
+/// Main screen for displaying the list of chat conversations
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
@@ -15,102 +22,79 @@ class ChatListScreen extends StatefulWidget {
   State<ChatListScreen> createState() => _ChatListScreenState();
 }
 
-class _ChatListScreenState extends State<ChatListScreen> {
-  final SeSharedPreferenceService _prefsService = SeSharedPreferenceService();
-  List<Chat> _chats = [];
-  bool _isLoading = true;
+class _ChatListScreenState extends State<ChatListScreen>
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _loadChats();
+    _initializeAnimations();
+    _initializeChatList();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChatListProvider>().onScreenVisible();
+    });
+  }
 
-    // Initialize online status service
-    OnlineStatusService.instance.initialize();
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh conversations when dependencies change (e.g., when returning to screen)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<ChatListProvider>().onScreenVisible();
+      }
+    });
+  }
+
+  void _initializeAnimations() {
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _slideController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeInOut,
+    ));
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    ));
+
+    _fadeController.forward();
+    _slideController.forward();
+  }
+
+  void _initializeChatList() {
+    // Initialize the chat list provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChatListProvider>().initialize();
+    });
   }
 
   @override
   void dispose() {
-    // Clean up online status listeners
-    for (final chat in _chats) {
-      final otherUserId =
-          chat.getOtherUserId(SeSessionService().currentSessionId ?? '');
-      OnlineStatusService.instance
-          .removeListener(otherUserId, _updateOnlineStatus);
-    }
+    _fadeController.dispose();
+    _slideController.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadChats() async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
-      final chats = <Chat>[];
-
-      for (final chatJson in chatsJson) {
-        try {
-          chats.add(Chat.fromJson(chatJson));
-        } catch (e) {
-          print('📱 ChatListScreen: Error parsing chat: $e');
-        }
-      }
-
-      setState(() {
-        _chats = chats;
-        _isLoading = false;
-      });
-
-      // Set up online status listeners for each chat
-      for (final chat in _chats) {
-        final otherUserId =
-            chat.getOtherUserId(SeSessionService().currentSessionId ?? '');
-        OnlineStatusService.instance
-            .addListener(otherUserId, _updateOnlineStatus);
-      }
-
-      print(
-          '📱 ChatListScreen: Loaded ${_chats.length} chats from SharedPreferences');
-    } catch (e) {
-      print('📱 ChatListScreen: Error loading chats: $e');
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _openChat(Chat chat) {
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => ChatScreen(chat: chat)));
-  }
-
-  /// Update UI when online status changes
-  void _updateOnlineStatus(OnlineStatusInfo status) {
-    // This will trigger a rebuild with the new status
-    setState(() {});
-  }
-
-  void _shareApp() {
-    const String shareText = '''
-🔒 Join me on SeChat - Private & Secure Messaging! 
-
-✨ Features:
-• End-to-end encrypted conversations
-• Anonymous messaging
-• No personal data required
-• Clean, modern interface
-
-Download now and let's chat securely!
-
-#SeChat #PrivateMessaging #Encrypted
-    ''';
-
-    Share.share(
-      shareText,
-      subject: 'Join me on SeChat - Secure Messaging App',
-    );
   }
 
   @override
@@ -121,95 +105,246 @@ Download now and let's chat securely!
         top: false,
         child: Column(
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey[300]!),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.chat,
-                      color: Color(0xFFFF6B35),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    child: Text(
-                      'Chats',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                  if (_chats.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${_chats.length}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.search,
-                      color: Colors.grey,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // Header with connection status
+            _buildHeader(),
 
-            // Connection Status
-            const ConnectionStatusWidget(),
+            // Search bar
+            _buildSearchBar(),
 
-            // Chats List
+            // Chat list
             Expanded(
-              child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFFFF6B35),
-                      ),
-                    )
-                  : _chats.isEmpty
-                      ? _buildEmptyState()
-                      : _buildChatsList(),
+              child: _buildChatList(),
             ),
           ],
         ),
       ),
+      floatingActionButton: _buildFloatingActionButton(),
     );
   }
 
+  /// Build the header section
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[300]!),
+        ),
+      ),
+      child: Row(
+        children: [
+          // App icon and title
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.chat_bubble_outline,
+              color: Color(0xFFFF6B35),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Chats',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Consumer<ChatListProvider>(
+                  builder: (context, provider, child) {
+                    final totalConversations = provider.conversations.length;
+                    final unreadCount = provider.totalUnreadCount;
+
+                    if (totalConversations == 0) {
+                      return Text(
+                        'Send key exchange to start chatting',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                        ),
+                      );
+                    }
+
+                    return Text(
+                      '$totalConversations conversation${totalConversations == 1 ? '' : 's'}',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          // Connection status
+          const ConnectionStatusWidget(),
+
+          // Settings button
+          IconButton(
+            onPressed: _openSettings,
+            icon: Icon(
+              Icons.settings,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            tooltip: 'Settings',
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build the search bar
+  Widget _buildSearchBar() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ChatSearchBar(
+        onSearchChanged: (query) {
+          context.read<ChatListProvider>().searchConversations(query);
+        },
+        onSearchCleared: () {
+          context.read<ChatListProvider>().clearSearch();
+        },
+      ),
+    );
+  }
+
+  /// Build the chat list
+  Widget _buildChatList() {
+    return Consumer<ChatListProvider>(
+      builder: (context, provider, child) {
+        if (provider.hasError) {
+          return _buildErrorState(provider);
+        }
+
+        if (provider.isLoading) {
+          return _buildLoadingState();
+        }
+
+        if (provider.conversations.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        return _buildConversationList(provider);
+      },
+    );
+  }
+
+  /// Build loading state
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(
+            color: Color(0xFFFF6B35),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Loading conversations...',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'This should only take a few seconds',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Debug button to force reset loading state
+          OutlinedButton(
+            onPressed: () {
+              context.read<ChatListProvider>().forceResetLoading();
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.grey[600],
+              side: BorderSide(color: Colors.grey[400]!),
+            ),
+            child: const Text('Debug: Reset Loading'),
+          ),
+          const SizedBox(height: 8),
+          // Debug button to force database recreation
+          OutlinedButton(
+            onPressed: () {
+              context.read<ChatListProvider>().forceDatabaseRecreation();
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red[600],
+              side: BorderSide(color: Colors.red[400]!),
+            ),
+            child: const Text('Debug: Recreate Database'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build error state
+  Widget _buildErrorState(ChatListProvider provider) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.grey[600],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Failed to load conversations',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            provider.errorMessage ??
+                'An error occurred while loading conversations',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () => provider.retry(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6B35),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build empty state
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -218,172 +353,522 @@ Download now and let's chat securely!
           Icon(
             Icons.chat_bubble_outline,
             size: 64,
-            color: Colors.grey[400],
+            color: Colors.grey[600],
           ),
           const SizedBox(height: 16),
           Text(
             'No conversations yet',
             style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[600],
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[400],
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Start a conversation by accepting an invitation',
+            'Send a key exchange request to start a new conversation',
             style: TextStyle(
+              color: Colors.grey[600],
               fontSize: 14,
-              color: Colors.grey[500],
             ),
             textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: _startNewChat,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF6B35),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Send Key Exchange'),
+              ),
+              const SizedBox(width: 16),
+              OutlinedButton(
+                onPressed: () =>
+                    context.read<ChatListProvider>().refreshConversations(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFFF6B35),
+                  side: const BorderSide(color: Color(0xFFFF6B35)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Refresh'),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChatsList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-      itemCount: _chats.length,
-      itemBuilder: (context, index) {
-        // Reverse the index to show newest chats at the bottom
-        final reversedIndex = _chats.length - 1 - index;
-        final chat = _chats[reversedIndex];
-        return _buildChatCard(chat);
-      },
+  /// Build conversation list
+  Widget _buildConversationList(ChatListProvider provider) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await provider.refreshConversations();
+          },
+          child: ListView.builder(
+            padding:
+                const EdgeInsets.only(bottom: 24, left: 24, right: 24, top: 24),
+            itemCount: provider.filteredConversations.length,
+            itemBuilder: (context, index) {
+              final conversation = provider.filteredConversations[index];
+              final isLast = index == provider.filteredConversations.length - 1;
+
+              return ChatListItem(
+                conversation: conversation,
+                onTap: () => _openChat(conversation),
+                onLongPress: () => _showConversationOptions(conversation),
+                onDelete: () => _deleteConversation(conversation),
+                isLast: isLast,
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildChatCard(Chat chat) {
-    final currentUserId = SeSessionService().currentSessionId ?? '';
-    final otherUserDisplayName = chat.getOtherUserDisplayName(currentUserId);
+  /// Build floating action button
+  Widget _buildFloatingActionButton() {
+    return FloatingActionButton(
+      onPressed: _startNewChat,
+      backgroundColor: const Color(0xFFFF6B35),
+      foregroundColor: Colors.white,
+      elevation: 4,
+      tooltip: 'Send key exchange request',
+      child: const Icon(Icons.chat_bubble_outline),
+    );
+  }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
+  /// Open chat conversation
+  void _openChat(ChatConversation conversation) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(
+          conversationId: conversation.id,
+          recipientId: conversation.recipientId ?? 'unknown',
+          recipientName: conversation.recipientName ?? 'Unknown User',
+        ),
       ),
-      child: InkWell(
-        onTap: () => _openChat(chat),
-        onLongPress: () => _showChatActions(context, chat),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              // Avatar
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: chat.getBlockedStatus()
-                      ? Colors.grey[400]
-                      : const Color(0xFFFF6B35),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Center(
-                  child: Text(
-                    otherUserDisplayName.substring(0, 1).toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
+    );
+  }
+
+  /// Start new chat
+  void _startNewChat() {
+    // Open key exchange request dialog to start a new conversation
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const KeyExchangeRequestDialog(),
+    );
+  }
+
+  /// Open settings
+  void _openSettings() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const GeneralChatSettingsScreen(),
+      ),
+    );
+  }
+
+  /// Show conversation options
+  void _showConversationOptions(ChatConversation conversation) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => _buildConversationOptions(conversation),
+    );
+  }
+
+  /// Build conversation options bottom sheet
+  Widget _buildConversationOptions(ChatConversation conversation) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurfaceVariant
+                  .withOpacity(0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Conversation info
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              child: Text(
+                (conversation.recipientName?.isNotEmpty ?? false)
+                    ? conversation.recipientName![0].toUpperCase()
+                    : '?',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 16),
+            ),
+            title: Text(
+              conversation.recipientName ?? 'Unknown User',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            subtitle: Text(
+              'Messages',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ),
 
-              // Chat info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          const Divider(),
+
+          // Options
+          ListTile(
+            leading: Icon(
+              Icons.notifications,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            title: Text(
+              conversation.isMuted
+                  ? 'Unmute notifications'
+                  : 'Mute notifications',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _toggleMuteNotifications(conversation);
+            },
+          ),
+
+          ListTile(
+            leading: Icon(
+              Icons.block,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            title: Text(
+              'Block user',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _blockUser(conversation);
+            },
+          ),
+
+          ListTile(
+            leading: Icon(
+              Icons.delete_forever,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            title: Text(
+              'Delete conversation',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _deleteConversation(conversation);
+            },
+          ),
+
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  /// Toggle mute notifications for conversation
+  void _toggleMuteNotifications(ChatConversation conversation) {
+    context.read<ChatListProvider>().toggleMuteNotifications(conversation.id);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          conversation.isMuted
+              ? 'Notifications unmuted for ${conversation.recipientName}'
+              : 'Notifications muted for ${conversation.recipientName}',
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Block user
+  void _blockUser(ChatConversation conversation) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Block User'),
+        content: Text(
+          'Are you sure you want to block ${conversation.recipientName}? '
+          'This will prevent them from sending you messages.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context.read<ChatListProvider>().blockUser(conversation.id);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content:
+                      Text('${conversation.recipientName} has been blocked'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Block'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Delete conversation
+  void _deleteConversation(ChatConversation conversation) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Conversation'),
+        content: Text(
+          'Are you sure you want to delete the conversation with ${conversation.recipientName}? '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              context
+                  .read<ChatListProvider>()
+                  .deleteConversation(conversation.id);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'Conversation with ${conversation.recipientName} deleted'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Simple general chat settings screen
+class GeneralChatSettingsScreen extends StatefulWidget {
+  const GeneralChatSettingsScreen({super.key});
+
+  @override
+  State<GeneralChatSettingsScreen> createState() =>
+      _GeneralChatSettingsScreenState();
+}
+
+class _GeneralChatSettingsScreenState extends State<GeneralChatSettingsScreen> {
+  bool _notificationsEnabled = true;
+  bool _soundEnabled = true;
+  bool _vibrationEnabled = true;
+  bool _readReceiptsEnabled = true;
+  bool _typingIndicatorsEnabled = true;
+  bool _lastSeenEnabled = true;
+  bool _mediaAutoDownload = true;
+  bool _encryptMedia = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          'Chat Settings',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            otherUserDisplayName,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: chat.getBlockedStatus()
-                                  ? Colors.grey[600]
-                                  : Colors.black,
-                            ),
-                          ),
-                        ),
-                        if (chat.getBlockedStatus())
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'BLOCKED',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red[700],
-                              ),
-                            ),
-                          ),
-                      ],
+                    Icon(
+                      Icons.settings,
+                      color: const Color(0xFFFF6B35),
+                      size: 24,
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        // Online status indicator
-                        _buildOnlineStatusIndicator(chat),
-                        const SizedBox(width: 6),
-
-                        // Last message
-                        Expanded(
-                          child: FutureBuilder<List<Message>>(
-                            future: _getLastMessage(chat.id),
-                            builder: (context, snapshot) {
-                              String lastMessageText = 'No messages yet';
-                              if (snapshot.hasData &&
-                                  snapshot.data!.isNotEmpty) {
-                                final lastMessage = snapshot.data!.first;
-                                lastMessageText = lastMessage.content;
-                              }
-
-                              return Text(
-                                lastMessageText,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: chat.getBlockedStatus()
-                                      ? Colors.grey[500]
-                                      : Colors.grey[600],
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                    const SizedBox(width: 12),
+                    const Text(
+                      'General Chat Settings',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFF6B35),
+                      ),
                     ),
                   ],
                 ),
               ),
 
-              // Menu button
-              IconButton(
-                onPressed: () => _showChatActions(context, chat),
-                icon: Icon(
-                  Icons.more_vert,
-                  color: Colors.grey[600],
-                ),
+              const SizedBox(height: 24),
+
+              // Notification settings
+              _buildSettingsSection(
+                'Notifications',
+                Icons.notifications,
+                [
+                  SwitchListTile(
+                    title: const Text('Enable notifications'),
+                    subtitle:
+                        const Text('Receive notifications for new messages'),
+                    value: _notificationsEnabled,
+                    onChanged: (value) =>
+                        setState(() => _notificationsEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Sound'),
+                    subtitle: const Text('Play sound for notifications'),
+                    value: _soundEnabled,
+                    onChanged: (value) => setState(() => _soundEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Vibration'),
+                    subtitle: const Text('Vibrate for notifications'),
+                    value: _vibrationEnabled,
+                    onChanged: (value) =>
+                        setState(() => _vibrationEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // Privacy settings
+              _buildSettingsSection(
+                'Privacy',
+                Icons.privacy_tip,
+                [
+                  SwitchListTile(
+                    title: const Text('Read receipts'),
+                    subtitle: const Text('Show when messages are read'),
+                    value: _readReceiptsEnabled,
+                    onChanged: (value) =>
+                        setState(() => _readReceiptsEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Typing indicators'),
+                    subtitle: const Text('Show when someone is typing'),
+                    value: _typingIndicatorsEnabled,
+                    onChanged: (value) =>
+                        setState(() => _typingIndicatorsEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Last seen'),
+                    subtitle: const Text('Show when you were last online'),
+                    value: _lastSeenEnabled,
+                    onChanged: (value) =>
+                        setState(() => _lastSeenEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // Media settings
+              _buildSettingsSection(
+                'Media',
+                Icons.photo_library,
+                [
+                  SwitchListTile(
+                    title: const Text('Auto-download media'),
+                    subtitle:
+                        const Text('Automatically download images and videos'),
+                    value: _mediaAutoDownload,
+                    onChanged: (value) =>
+                        setState(() => _mediaAutoDownload = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Encrypt media'),
+                    subtitle: const Text('Encrypt media files for security'),
+                    value: _encryptMedia,
+                    onChanged: (value) => setState(() => _encryptMedia = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                ],
               ),
             ],
           ),
@@ -392,330 +877,38 @@ Download now and let's chat securely!
     );
   }
 
-  String _formatTimestamp(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inDays == 0) {
-      if (difference.inHours == 0) {
-        return '${difference.inMinutes}m';
-      }
-      return '${difference.inHours}h';
-    } else if (difference.inDays == 1) {
-      return 'Yesterday';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d';
-    } else {
-      return '${dateTime.day}/${dateTime.month}';
-    }
-  }
-
-  Future<List<Message>> _getLastMessage(String chatId) async {
-    try {
-      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
-      final chatMessages = <Message>[];
-
-      for (final messageJson in messagesJson) {
-        try {
-          final message = Message.fromJson(messageJson);
-          if (message.chatId == chatId && !message.isDeleted) {
-            chatMessages.add(message);
-          }
-        } catch (e) {
-          print('📱 ChatListScreen: Error parsing message: $e');
-        }
-      }
-
-      // Sort by creation time and return the last message
-      chatMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      return chatMessages.isNotEmpty ? [chatMessages.last] : [];
-    } catch (e) {
-      print('📱 ChatListScreen: Error getting last message: $e');
-      return [];
-    }
-  }
-
-  void _showChatActions(BuildContext context, Chat chat) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+  Widget _buildSettingsSection(
+      String title, IconData icon, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
+            Icon(
+              icon,
+              color: Colors.grey[600],
+              size: 20,
             ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: Icon(
-                chat.getBlockedStatus() ? Icons.block : Icons.block_outlined,
-                color: chat.getBlockedStatus() ? Colors.red : Colors.grey[600],
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
               ),
-              title: Text(
-                chat.getBlockedStatus() ? 'Unblock User' : 'Block User',
-                style: TextStyle(
-                  color: chat.getBlockedStatus() ? Colors.red : Colors.black,
-                ),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _toggleBlockChat(chat);
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_sweep,
-                color: Colors.orange,
-              ),
-              title: const Text(
-                'Clear All Messages',
-                style: TextStyle(color: Colors.orange),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _showClearMessagesConfirmation(context, chat);
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_forever,
-                color: Colors.red,
-              ),
-              title: const Text(
-                'Delete Chat',
-                style: TextStyle(color: Colors.red),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _showDeleteChatConfirmation(context, chat);
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _toggleBlockChat(Chat chat) async {
-    try {
-      final updatedChat = chat.copyWith(
-        isBlocked: !chat.getBlockedStatus(),
-        blockedAt: !chat.getBlockedStatus() ? DateTime.now() : null,
-        updatedAt: DateTime.now(),
-      );
-
-      // Update chat in SharedPreferences
-      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
-      final index = chatsJson.indexWhere((c) => c['id'] == chat.id);
-
-      if (index != -1) {
-        chatsJson[index] = updatedChat.toJson();
-        await _prefsService.setJsonList('chats', chatsJson);
-
-        // Refresh the chat list
-        _loadChats();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              updatedChat.getBlockedStatus()
-                  ? 'User blocked'
-                  : 'User unblocked',
-            ),
-            backgroundColor:
-                updatedChat.getBlockedStatus() ? Colors.red : Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      print('📱 ChatListScreen: ❌ Error toggling block status: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to update block status'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _showClearMessagesConfirmation(BuildContext context, Chat chat) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear All Messages'),
-        content: const Text(
-          'This will permanently delete all messages in this conversation. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _clearAllMessages(chat);
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.orange,
-            ),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteChatConfirmation(BuildContext context, Chat chat) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Chat'),
-        content: const Text(
-          'This will permanently delete this conversation and all its messages. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _deleteChat(chat);
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _clearAllMessages(Chat chat) async {
-    try {
-      // Remove all messages for this chat
-      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
-      final filteredMessages =
-          messagesJson.where((m) => m['chat_id'] != chat.id).toList();
-      await _prefsService.setJsonList('messages', filteredMessages);
-
-      // Update chat to remove last message info
-      final updatedChat = chat.copyWith(
-        lastMessageAt: null,
-        updatedAt: DateTime.now(),
-      );
-
-      // Update chat in SharedPreferences
-      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
-      final index = chatsJson.indexWhere((c) => c['id'] == chat.id);
-
-      if (index != -1) {
-        chatsJson[index] = updatedChat.toJson();
-        await _prefsService.setJsonList('chats', chatsJson);
-
-        // Refresh the chat list
-        _loadChats();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All messages cleared'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    } catch (e) {
-      print('📱 ChatListScreen: ❌ Error clearing messages: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to clear messages'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  void _deleteChat(Chat chat) async {
-    try {
-      // Remove all messages for this chat
-      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
-      final filteredMessages =
-          messagesJson.where((m) => m['chat_id'] != chat.id).toList();
-      await _prefsService.setJsonList('messages', filteredMessages);
-
-      // Remove chat from SharedPreferences
-      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
-      final filteredChats = chatsJson.where((c) => c['id'] != chat.id).toList();
-      await _prefsService.setJsonList('chats', filteredChats);
-
-      // Refresh the chat list
-      _loadChats();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chat deleted'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } catch (e) {
-      print('📱 ChatListScreen: ❌ Error deleting chat: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to delete chat'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  /// Build WhatsApp-style online status indicator for chat list
-  Widget _buildOnlineStatusIndicator(Chat chat) {
-    // Get current user ID and other user ID
-    final currentUserId = SeSessionService().currentSessionId ?? '';
-    final otherUserId = chat.getOtherUserId(currentUserId);
-
-    // Get online status from service
-    final statusInfo = OnlineStatusService.instance.getStatus(otherUserId);
-
-    // Don't show online status for blocked chats
-    if (chat.getBlockedStatus()) {
-      return const SizedBox.shrink();
-    }
-
-    // Online - green dot
-    if (statusInfo.isOnline) {
-      return Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(
-          color: Colors.green,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 1,
-              spreadRadius: 0.5,
             ),
           ],
         ),
-      );
-    }
-
-    // Offline - show nothing (we'll show last seen in the chat screen)
-    return const SizedBox.shrink();
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(children: children),
+        ),
+      ],
+    );
   }
 }
