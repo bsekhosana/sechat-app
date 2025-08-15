@@ -24,6 +24,8 @@ import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:flutter/material.dart';
 import '../config/airnotifier_config.dart';
 import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_provider.dart';
+import 'package:sechat_app/features/chat/models/chat_conversation.dart';
+import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 
 /// Simple, consolidated notification service with end-to-end encryption
 class SimpleNotificationService {
@@ -58,6 +60,9 @@ class SimpleNotificationService {
   // Notification provider callback
   Function(String title, String body, String type, Map<String, dynamic>? data)?
       _onNotificationReceived;
+
+  // Conversation creation callback
+  Function(ChatConversation conversation)? _onConversationCreated;
 
   // Prevent duplicate notification processing
   final Set<String> _processedNotifications = <String>{};
@@ -1014,23 +1019,50 @@ class SimpleNotificationService {
     // Check if sender is blocked
     final currentUserId = SeSessionService().currentSessionId;
     if (currentUserId != null) {
-      final prefsService = SeSharedPreferenceService();
-      final chatsJson = await prefsService.getJsonList('chats') ?? [];
+      try {
+        // Check database first for blocking status
+        final messageStorageService = MessageStorageService.instance;
+        final conversations =
+            await messageStorageService.getUserConversations(currentUserId);
 
-      // Find chat with this sender
-      for (final chatJson in chatsJson) {
-        try {
-          final chat = Chat.fromJson(chatJson);
-          final otherUserId = chat.getOtherUserId(currentUserId);
+        // Find conversation with this sender
+        final conversation = conversations.firstWhere(
+          (conv) => conv.getOtherParticipantId(currentUserId) == senderId,
+          orElse: () => throw Exception('Conversation not found'),
+        );
 
-          if (otherUserId == senderId && chat.getBlockedStatus()) {
-            print(
-                '🔔 SimpleNotificationService: Message from blocked user ignored: $senderName');
-            return; // Ignore message from blocked user
-          }
-        } catch (e) {
+        if (conversation.isBlocked == true) {
           print(
-              '🔔 SimpleNotificationService: Error parsing chat for blocking check: $e');
+              '🔔 SimpleNotificationService: Message from blocked user ignored: $senderName');
+          return; // Ignore message from blocked user
+        }
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: Error checking database for blocking status: $e');
+        // Fallback to SharedPreferences if database fails
+        try {
+          final prefsService = SeSharedPreferenceService();
+          final chatsJson = await prefsService.getJsonList('chats') ?? [];
+
+          // Find chat with this sender
+          for (final chatJson in chatsJson) {
+            try {
+              final chat = Chat.fromJson(chatJson);
+              final otherUserId = chat.getOtherUserId(currentUserId);
+
+              if (otherUserId == senderId && chat.getBlockedStatus()) {
+                print(
+                    '🔔 SimpleNotificationService: Message from blocked user ignored: $senderName');
+                return; // Ignore message from blocked user
+              }
+            } catch (e) {
+              print(
+                  '🔔 SimpleNotificationService: Error parsing chat for blocking check: $e');
+            }
+          }
+        } catch (fallbackError) {
+          print(
+              '🔔 SimpleNotificationService: Error in fallback blocking check: $fallbackError');
         }
       }
     }
@@ -1436,6 +1468,12 @@ class SimpleNotificationService {
               Map<String, dynamic>? data)?
           callback) {
     _onNotificationReceived = callback;
+  }
+
+  /// Set callback for conversation creation
+  void setOnConversationCreated(
+      Function(ChatConversation conversation)? callback) {
+    _onConversationCreated = callback;
   }
 
   /// Show local notification
@@ -2172,7 +2210,7 @@ class SimpleNotificationService {
             '🔔 SimpleNotificationService: Contact already exists: $displayName');
       }
 
-      // Create chat
+      // Create chat conversation in the database
       final chatId =
           'chat_${DateTime.now().millisecondsSinceEpoch}_${contactId.substring(0, 8)}';
 
@@ -2181,51 +2219,68 @@ class SimpleNotificationService {
       final currentUserDisplayName = currentSession?.displayName ??
           'User ${currentUserId.substring(0, 8)}';
 
-      // Ensure all required fields are non-null
-      final chat = {
-        'id': chatId,
-        'user1_id': currentUserId,
-        'user2_id': contactId,
-        'user1_display_name': currentUserDisplayName,
-        'user2_display_name': displayName,
-        'status': 'active',
-        'is_blocked': false,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
+      // Create ChatConversation object for database
+      final conversation = ChatConversation(
+        id: chatId,
+        participant1Id: currentUserId,
+        participant2Id: contactId,
+        displayName: displayName,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        lastMessageAt: DateTime.now(),
+        lastMessageId: null,
+        lastMessagePreview: null,
+        lastMessageType: null,
+        unreadCount: 0,
+        isArchived: false,
+        isMuted: false,
+        isPinned: false,
+        metadata: {
+          'created_from_key_exchange': true,
+          'contact_display_name': displayName,
+          'current_user_display_name': currentUserDisplayName,
+        },
+        lastSeen: null,
+        isTyping: false,
+        typingStartedAt: null,
+        notificationsEnabled: true,
+        soundEnabled: true,
+        vibrationEnabled: true,
+        readReceiptsEnabled: true,
+        typingIndicatorsEnabled: true,
+        lastSeenEnabled: true,
+        mediaAutoDownload: true,
+        encryptMedia: true,
+        mediaQuality: 'High',
+        messageRetention: '30 days',
+        isBlocked: false,
+        blockedAt: null,
+        recipientId: contactId,
+        recipientName: displayName,
+      );
 
-      // Debug: Log the chat object to verify all fields
-      print('🔔 SimpleNotificationService: Created chat object:');
-      print('🔔 SimpleNotificationService: - ID: ${chat['id']}');
-      print('🔔 SimpleNotificationService: - User1 ID: ${chat['user1_id']}');
-      print('🔔 SimpleNotificationService: - User2 ID: ${chat['user2_id']}');
-      print(
-          '🔔 SimpleNotificationService: - User1 Display Name: ${chat['user1_display_name']}');
-      print(
-          '🔔 SimpleNotificationService: - User2 Display Name: ${chat['user2_display_name']}');
-      print('🔔 SimpleNotificationService: - Status: ${chat['status']}');
-      print(
-          '🔔 SimpleNotificationService: - Created At: ${chat['created_at']}');
-      print(
-          '🔔 SimpleNotificationService: - Updated At: ${chat['updated_at']}');
-
-      // Save chat to local storage
-      final existingChats = await prefsService.getJsonList('chats') ?? [];
-
-      // Check if chat already exists
-      if (!existingChats.any((c) => c['user2_id'] == contactId)) {
-        existingChats.add(chat);
-        await prefsService.setJsonList('chats', existingChats);
-        print('🔔 SimpleNotificationService: ✅ Chat created: $chatId');
-
-        // Debug: Verify the chat was saved correctly
+      // Save conversation to database
+      try {
         print(
-            '🔔 SimpleNotificationService: Total chats in storage: ${existingChats.length}');
-        final savedChat = existingChats.last;
-        print('🔔 SimpleNotificationService: Last saved chat: $savedChat');
-      } else {
+            '🔔 SimpleNotificationService: 🗄️ Attempting to save conversation to database...');
+        final messageStorageService = MessageStorageService.instance;
         print(
-            '🔔 SimpleNotificationService: Chat already exists for: $displayName');
+            '🔔 SimpleNotificationService: 📊 Conversation data: ${conversation.toJson()}');
+        await messageStorageService.saveConversation(conversation);
+        print(
+            '🔔 SimpleNotificationService: ✅ Chat conversation created in database: $chatId');
+
+        // Notify about conversation creation
+        if (_onConversationCreated != null) {
+          _onConversationCreated!(conversation);
+        }
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: ❌ Failed to create chat conversation in database: $e');
+        print(
+            '🔔 SimpleNotificationService: 🔍 Error details: ${e.runtimeType} - $e');
+        // No fallback to SharedPreferences - database must succeed
+        throw Exception('Failed to create chat conversation in database: $e');
       }
 
       // Send encrypted response with our user data and chat info
@@ -2313,10 +2368,25 @@ class SimpleNotificationService {
       existingContacts.removeWhere((c) => c['id'] == contactId);
       await prefsService.setJsonList('contacts', existingContacts);
 
-      // Remove chat
-      final existingChats = await prefsService.getJsonList('chats') ?? [];
-      existingChats.removeWhere((c) => c['user2_id'] == contactId);
-      await prefsService.setJsonList('chats', existingChats);
+      // Try to remove conversation from database if it exists
+      try {
+        final messageStorageService = MessageStorageService.instance;
+        // Find conversation by participant ID and delete it
+        final conversations = await messageStorageService
+            .getUserConversations(SeSessionService().currentSessionId ?? '');
+        final conversationToDelete = conversations.firstWhere(
+          (conv) => conv.participant2Id == contactId,
+          orElse: () => throw Exception('Conversation not found'),
+        );
+
+        // Note: We don't have a deleteConversation method yet, but we can mark it as deleted
+        // For now, just log that we would delete it
+        print(
+            '🔔 SimpleNotificationService: Would delete conversation: ${conversationToDelete.id}');
+      } catch (e) {
+        print(
+            '🔔 SimpleNotificationService: No conversation to rollback in database: $e');
+      }
 
       print('🔔 SimpleNotificationService: ✅ Rollback completed');
     } catch (e) {
@@ -2447,7 +2517,7 @@ class SimpleNotificationService {
         'status': 'active',
       };
 
-      // Save contact to local storage
+      // Save contact to local storage (keeping this for backward compatibility)
       final prefsService = SeSharedPreferenceService();
       final existingContacts = await prefsService.getJsonList('contacts') ?? [];
 
@@ -2462,36 +2532,74 @@ class SimpleNotificationService {
             '🔔 SimpleNotificationService: Contact already exists from response: $displayName');
       }
 
-      // Create chat using the provided chat ID
+      // Create chat conversation in the database
       // Get current user info for chat
       final currentSession = SeSessionService().currentSession;
       final currentUserDisplayName = currentSession?.displayName ??
           'User ${currentUserId.substring(0, 8)}';
 
-      final chat = {
-        'id': chatId,
-        'user1_id': currentUserId,
-        'user2_id': contactId,
-        'user1_display_name': currentUserDisplayName,
-        'user2_display_name': displayName,
-        'status': 'active',
-        'is_blocked': false,
-        'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
+      // Create ChatConversation object for database
+      final conversation = ChatConversation(
+        id: chatId,
+        participant1Id: currentUserId,
+        participant2Id: contactId,
+        displayName: displayName,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        lastMessageAt: DateTime.now(),
+        lastMessageId: null,
+        lastMessagePreview: null,
+        lastMessageType: null,
+        unreadCount: 0,
+        isArchived: false,
+        isMuted: false,
+        isPinned: false,
+        metadata: {
+          'created_from_key_exchange': true,
+          'contact_display_name': displayName,
+          'current_user_display_name': currentUserDisplayName,
+        },
+        lastSeen: null,
+        isTyping: false,
+        typingStartedAt: null,
+        notificationsEnabled: true,
+        soundEnabled: true,
+        vibrationEnabled: true,
+        readReceiptsEnabled: true,
+        typingIndicatorsEnabled: true,
+        lastSeenEnabled: true,
+        mediaAutoDownload: true,
+        encryptMedia: true,
+        mediaQuality: 'High',
+        messageRetention: '30 days',
+        isBlocked: false,
+        blockedAt: null,
+        recipientId: contactId,
+        recipientName: displayName,
+      );
 
-      // Save chat to local storage
-      final existingChats = await prefsService.getJsonList('chats') ?? [];
+      // Save conversation to database
+      try {
+        print(
+            '🔔 SimpleNotificationService: 🗄️ Attempting to save conversation to database...');
+        final messageStorageService = MessageStorageService.instance;
+        print(
+            '🔔 SimpleNotificationService: 📊 Conversation data: ${conversation.toJson()}');
+        await messageStorageService.saveConversation(conversation);
+        print(
+            '🔔 SimpleNotificationService: ✅ Chat conversation created in database: $chatId');
 
-      // Check if chat already exists
-      if (!existingChats.any((c) => c['id'] == chatId)) {
-        existingChats.add(chat);
-        await prefsService.setJsonList('chats', existingChats);
+        // Notify about conversation creation
+        if (_onConversationCreated != null) {
+          _onConversationCreated!(conversation);
+        }
+      } catch (e) {
         print(
-            '🔔 SimpleNotificationService: ✅ Chat created from response: $chatId');
-      } else {
+            '🔔 SimpleNotificationService: ❌ Failed to create chat conversation in database: $e');
         print(
-            '🔔 SimpleNotificationService: Chat already exists from response: $chatId');
+            '🔔 SimpleNotificationService: 🔍 Error details: ${e.runtimeType} - $e');
+        // No fallback to SharedPreferences - database must succeed
+        throw Exception('Failed to create chat conversation in database: $e');
       }
 
       // Show success message to user

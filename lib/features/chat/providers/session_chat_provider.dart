@@ -3,7 +3,7 @@ import '../../../core/services/airnotifier_service.dart';
 import '../../../core/services/simple_notification_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
-import '../../../shared/models/message.dart';
+import '../models/message.dart';
 import 'dart:async';
 
 class SessionChatProvider extends ChangeNotifier {
@@ -57,13 +57,12 @@ class SessionChatProvider extends ChangeNotifier {
         // Create message object
         final message = Message(
           id: messageId,
-          chatId: recipientId,
+          conversationId: recipientId,
           senderId: _airNotifier.currentUserId ?? '',
-          content: content,
+          recipientId: recipientId,
           type: MessageType.text,
-          status: 'sent',
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
+          content: {'text': content},
+          status: MessageStatus.sent,
         );
 
         // Add message to chat
@@ -122,13 +121,12 @@ class SessionChatProvider extends ChangeNotifier {
       // Create message object
       final message = Message(
         id: messageId,
-        chatId: senderId,
+        conversationId: senderId,
         senderId: senderId,
-        content: content,
+        recipientId: _airNotifier.currentUserId ?? '',
         type: MessageType.text,
-        status: 'received',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+        content: {'text': content},
+        status: MessageStatus.sent,
       );
 
       // Add message to chat
@@ -258,9 +256,9 @@ class SessionChatProvider extends ChangeNotifier {
     if (chatIndex != -1) {
       final chat = _chats[chatIndex];
       _chats[chatIndex] = chat.copyWith(
-        lastMessageAt: message.createdAt,
+        lastMessageAt: message.timestamp,
         lastMessage: _convertToMessageMap(message),
-        updatedAt: message.createdAt,
+        updatedAt: message.timestamp,
       );
     }
   }
@@ -273,9 +271,9 @@ class SessionChatProvider extends ChangeNotifier {
       // Update existing chat
       final chat = _chats[existingChatIndex];
       _chats[existingChatIndex] = chat.copyWith(
-        lastMessageAt: message.createdAt,
+        lastMessageAt: message.timestamp,
         lastMessage: _convertToMessageMap(message),
-        updatedAt: message.createdAt,
+        updatedAt: message.timestamp,
       );
     } else {
       // Create new chat
@@ -299,9 +297,9 @@ class SessionChatProvider extends ChangeNotifier {
         user1DisplayName: 'Me',
         user2DisplayName: user.username,
         status: 'active',
-        lastMessageAt: message.createdAt,
-        createdAt: message.createdAt,
-        updatedAt: message.createdAt,
+        lastMessageAt: message.timestamp,
+        createdAt: message.timestamp,
+        updatedAt: message.timestamp,
       );
 
       _chats.add(chat);
@@ -313,10 +311,10 @@ class SessionChatProvider extends ChangeNotifier {
     return {
       'id': message.id,
       'sender_id': message.senderId,
-      'content': message.content,
+      'content': message.content['text'] ?? message.content.toString(),
       'type': message.type.toString().split('.').last,
-      'timestamp': message.createdAt.toIso8601String(),
-      'status': message.status,
+      'timestamp': message.timestamp.toIso8601String(),
+      'status': message.status.name,
     };
   }
 

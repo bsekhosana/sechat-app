@@ -10,6 +10,8 @@ import 'dart:io' show Platform;
 // import 'features/chat/providers/chat_provider.dart'; // Temporarily disabled
 import 'features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
+import 'features/chat/providers/chat_list_provider.dart';
+import 'features/chat/providers/chat_provider.dart';
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
@@ -20,6 +22,7 @@ import 'core/services/se_session_service.dart';
 import 'core/services/se_shared_preference_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/local_storage_service.dart';
+import 'features/chat/services/message_storage_service.dart';
 
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +42,7 @@ Future<void> main() async {
   await Future.wait([
     LocalStorageService.instance.initialize(),
     SeSharedPreferenceService().initialize(),
+    MessageStorageService.instance.initialize(),
   ]);
 
   // Initialize SeSessionService
@@ -64,10 +68,11 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         // ChangeNotifierProvider(create: (_) => SearchProvider()), // Removed search functionality
-        // ChangeNotifierProvider(create: (_) => ChatProvider()), // Temporarily disabled
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
         ChangeNotifierProvider(
             create: (_) => KeyExchangeRequestProvider()..initialize()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => ChatListProvider()..initialize()),
         // ChangeNotifierProvider(create: (_) => AuthProvider()), // Temporarily disabled
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
         ChangeNotifierProvider(create: (_) => LocalStorageService.instance),

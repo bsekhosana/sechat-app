@@ -57,98 +57,67 @@ class LocalStorageService extends ChangeNotifier {
   }
 
   // ==================== CHAT MANAGEMENT ====================
+  // Note: Chat operations are now handled by MessageStorageService
+  // These methods are kept for backward compatibility but are deprecated
 
+  @Deprecated('Use MessageStorageService.saveConversation instead')
   Future<void> saveChat(Chat chat) async {
-    final chatsJson = await _prefsService.getJsonList('chats') ?? [];
-    final existingIndex = chatsJson.indexWhere((c) => c['id'] == chat.id);
-
-    if (existingIndex != -1) {
-      chatsJson[existingIndex] = chat.toJson();
-    } else {
-      chatsJson.add(chat.toJson());
-    }
-
-    await _prefsService.setJsonList('chats', chatsJson);
-    notifyListeners();
+    print(
+        '📱 LocalStorageService: ⚠️ saveChat is deprecated, use MessageStorageService.saveConversation instead');
+    // No-op - chats are now stored in database
   }
 
+  @Deprecated('Use MessageStorageService instead')
   Future<void> saveChats(List<Chat> chats) async {
-    final chatsJson = chats.map((chat) => chat.toJson()).toList();
-    await _prefsService.setJsonList('chats', chatsJson);
-    notifyListeners();
+    print(
+        '📱 LocalStorageService: ⚠️ saveChats is deprecated, use MessageStorageService instead');
+    // No-op - chats are now stored in database
   }
 
+  @Deprecated('Use MessageStorageService.getUserConversations instead')
   Future<List<Chat>> getAllChats() async {
-    final chats = <Chat>[];
-    try {
-      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
-      for (final chatJson in chatsJson) {
-        try {
-          chats.add(Chat.fromJson(chatJson));
-        } catch (e) {
-          print('📱 LocalStorageService: Error parsing chat: $e');
-        }
-      }
-    } catch (e) {
-      print('📱 LocalStorageService: Error loading chats: $e');
-    }
-    return chats;
+    print(
+        '📱 LocalStorageService: ⚠️ getAllChats is deprecated, use MessageStorageService.getUserConversations instead');
+    return []; // No-op - chats are now stored in database
   }
 
+  @Deprecated('Use MessageStorageService instead')
   Future<void> deleteChat(String chatId) async {
-    final chatsJson = await _prefsService.getJsonList('chats') ?? [];
-    chatsJson.removeWhere((chat) => chat['id'] == chatId);
-    await _prefsService.setJsonList('chats', chatsJson);
-    notifyListeners();
+    print(
+        '📱 LocalStorageService: ⚠️ deleteChat is deprecated, use MessageStorageService instead');
+    // No-op - chats are now stored in database
   }
 
   // ==================== MESSAGE MANAGEMENT ====================
+  // Note: Message operations are now handled by MessageStorageService
+  // These methods are kept for backward compatibility but are deprecated
 
+  @Deprecated('Use MessageStorageService.saveMessage instead')
   Future<void> saveMessage(Message message) async {
-    final messagesJson = await _prefsService.getJsonList('messages') ?? [];
-    final existingIndex = messagesJson.indexWhere((m) => m['id'] == message.id);
-
-    if (existingIndex != -1) {
-      messagesJson[existingIndex] = message.toJson();
-    } else {
-      messagesJson.add(message.toJson());
-    }
-
-    await _prefsService.setJsonList('messages', messagesJson);
-    notifyListeners();
+    print(
+        '📱 LocalStorageService: ⚠️ saveMessage is deprecated, use MessageStorageService.saveMessage instead');
+    // No-op - messages are now stored in database
   }
 
+  @Deprecated('Use MessageStorageService instead')
   Future<void> saveMessages(List<Message> messages) async {
-    final messagesJson = messages.map((message) => message.toJson()).toList();
-    await _prefsService.setJsonList('messages', messagesJson);
-    notifyListeners();
+    print(
+        '📱 LocalStorageService: ⚠️ saveMessages is deprecated, use MessageStorageService instead');
+    // No-op - messages are now stored in database
   }
 
+  @Deprecated('Use MessageStorageService.getConversationMessages instead')
   Future<List<Message>> getMessagesForChat(String chatId) async {
-    final messages = <Message>[];
-    try {
-      final messagesJson = await _prefsService.getJsonList('messages') ?? [];
-      for (final messageJson in messagesJson) {
-        try {
-          final message = Message.fromJson(messageJson);
-          if (message.chatId == chatId) {
-            messages.add(message);
-          }
-        } catch (e) {
-          print('📱 LocalStorageService: Error parsing message: $e');
-        }
-      }
-    } catch (e) {
-      print('📱 LocalStorageService: Error loading messages: $e');
-    }
-    return messages;
+    print(
+        '📱 LocalStorageService: ⚠️ getMessagesForChat is deprecated, use MessageStorageService.getConversationMessages instead');
+    return []; // No-op - messages are now stored in database
   }
 
+  @Deprecated('Use MessageStorageService instead')
   Future<void> deleteMessage(String messageId) async {
-    final messagesJson = await _prefsService.getJsonList('messages') ?? [];
-    messagesJson.removeWhere((message) => message['id'] == messageId);
-    await _prefsService.setJsonList('messages', messagesJson);
-    notifyListeners();
+    print(
+        '📱 LocalStorageService: ⚠️ deleteMessage is deprecated, use MessageStorageService instead');
+    // No-op - messages are now stored in database
   }
 
   // ==================== USER MANAGEMENT ====================

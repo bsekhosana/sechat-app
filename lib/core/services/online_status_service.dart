@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sechat_app/core/services/secure_notification_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/se_shared_preference_service.dart';
+import '../../features/chat/services/message_storage_service.dart';
 
 /// Service to handle user online status
 class OnlineStatusService {
@@ -190,8 +191,7 @@ class OnlineStatusService {
   /// Get list of contact IDs
   Future<List<String>> _getContacts() async {
     try {
-      // Get chats and extract contact IDs
-      final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+      // Get conversations from database and extract contact IDs
       final contactIds = <String>{};
       final currentUserId = SeSessionService().currentSessionId;
 
@@ -199,14 +199,30 @@ class OnlineStatusService {
         return [];
       }
 
-      for (final chatJson in chatsJson) {
-        final user1Id = chatJson['user1_id'] as String?;
-        final user2Id = chatJson['user2_id'] as String?;
+      try {
+        final messageStorageService = MessageStorageService.instance;
+        final conversations =
+            await messageStorageService.getUserConversations(currentUserId);
 
-        if (user1Id == currentUserId && user2Id != null) {
-          contactIds.add(user2Id);
-        } else if (user2Id == currentUserId && user1Id != null) {
-          contactIds.add(user1Id);
+        for (final conversation in conversations) {
+          final otherParticipantId =
+              conversation.getOtherParticipantId(currentUserId);
+          contactIds.add(otherParticipantId);
+        }
+      } catch (e) {
+        print(
+            '🟢 OnlineStatusService: Error getting conversations from database: $e');
+        // Fallback to SharedPreferences if database fails
+        final chatsJson = await _prefsService.getJsonList('chats') ?? [];
+        for (final chatJson in chatsJson) {
+          final user1Id = chatJson['user1_id'] as String?;
+          final user2Id = chatJson['user2_id'] as String?;
+
+          if (user1Id == currentUserId && user2Id != null) {
+            contactIds.add(user2Id);
+          } else if (user2Id == currentUserId && user1Id != null) {
+            contactIds.add(user1Id);
+          }
         }
       }
 
