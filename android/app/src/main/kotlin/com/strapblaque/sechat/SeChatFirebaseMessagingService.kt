@@ -155,6 +155,9 @@ class SeChatFirebaseMessagingService : FirebaseMessagingService() {
             
             Log.d("SeChatFCM", "Wrapped notification data for Flutter: $wrappedData")
             
+            // Store notification for later processing (in case all methods fail)
+            storeNotificationForLaterProcessing(wrappedData)
+            
             // Method 1: Try EventChannel first (most reliable)
             try {
                 val mainActivity = MainActivity.instance
@@ -178,13 +181,59 @@ class SeChatFirebaseMessagingService : FirebaseMessagingService() {
             }
             
             // Method 2: Fallback to broadcast (this is already thread-safe)
-            val intent = Intent("FORWARD_NOTIFICATION_TO_FLUTTER")
-            intent.putExtra("notification_data", wrappedData)
-            sendBroadcast(intent)
+            try {
+                val intent = Intent("FORWARD_NOTIFICATION_TO_FLUTTER")
+                intent.putExtra("notification_data", wrappedData)
+                sendBroadcast(intent)
+                Log.d("SeChatFCM", "Fallback broadcast sent to MainActivity")
+            } catch (e: Exception) {
+                Log.e("SeChatFCM", "Broadcast intent failed: ${e.message}")
+            }
             
-            Log.d("SeChatFCM", "Fallback broadcast sent to MainActivity")
+            // Method 3: Add direct broadcast with package name as final fallback
+            try {
+                val intent = Intent("com.strapblaque.sechat.NOTIFICATION_RECEIVED")
+                intent.putExtra("notification_data", wrappedData)
+                intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+                intent.setPackage("com.strapblaque.sechat")
+                sendBroadcast(intent)
+                Log.d("SeChatFCM", "Direct broadcast intent sent as final fallback")
+            } catch (e: Exception) {
+                Log.e("SeChatFCM", "Direct broadcast intent failed: ${e.message}")
+            }
         } catch (e: Exception) {
             Log.e("SeChatFCM", "Error forwarding notification to Flutter: ${e.message}")
+        }
+    }
+    
+    private fun storeNotificationForLaterProcessing(data: HashMap<String, Any>) {
+        try {
+            // Get shared preferences
+            val sharedPrefs = getSharedPreferences("pending_notifications", Context.MODE_PRIVATE)
+            val editor = sharedPrefs.edit()
+            
+            // Generate unique ID for this notification
+            val notificationId = "notification_${System.currentTimeMillis()}"
+            
+            // Convert notification data to JSON
+            val gson = com.google.gson.Gson()
+            val notificationJson = gson.toJson(data)
+            
+            // Store notification
+            editor.putString(notificationId, notificationJson)
+            
+            // Store notification type for easier filtering
+            val type = (data["data"] as? HashMap<*, *>)?.get("type") as? String
+            if (type != null) {
+                editor.putString("${notificationId}_type", type)
+            }
+            
+            // Apply changes
+            editor.apply()
+            
+            Log.d("SeChatFCM", "✅ Notification stored for later processing: $notificationId (type: $type)")
+        } catch (e: Exception) {
+            Log.e("SeChatFCM", "❌ Error storing notification: ${e.message}")
         }
     }
 } 

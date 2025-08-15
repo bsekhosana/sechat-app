@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../models/message.dart';
-import '../providers/chat_provider.dart';
 import 'text_message_bubble.dart';
 import 'voice_message_bubble.dart';
 import 'video_message_bubble.dart';
@@ -180,16 +178,16 @@ class MessageBubble extends StatelessWidget {
         color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5);
         break;
       case MessageStatus.sent:
-        icon = Icons.done;
+        icon = Icons.check; // Single tick
         color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7);
         break;
       case MessageStatus.delivered:
-        icon = Icons.done_all;
+        icon = Icons.done_all; // Double ticks
         color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7);
         break;
       case MessageStatus.read:
-        icon = Icons.done_all;
-        color = Theme.of(context).colorScheme.primary;
+        icon = Icons.done_all; // Double blue ticks
+        color = Colors.blue; // Using blue color explicitly for read receipts
         break;
       case MessageStatus.failed:
         icon = Icons.error_outline;

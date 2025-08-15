@@ -9,6 +9,7 @@ import '../models/message.dart';
 import '../models/media_message.dart';
 import '../models/chat_conversation.dart';
 import '../../../core/services/se_shared_preference_service.dart';
+import '../../../core/services/se_session_service.dart';
 
 /// Service for managing local storage of chat messages and conversations
 class MessageStorageService {
@@ -700,9 +701,21 @@ class MessageStorageService {
 
   /// Get current user ID
   String _getCurrentUserId() {
-    // This will be implemented when we integrate with the session service
-    // For now, return a placeholder
-    return 'current_user_id';
+    try {
+      // Get the current user ID from the session service
+      final sessionId = SeSessionService().currentSessionId;
+      if (sessionId != null && sessionId.isNotEmpty) {
+        return sessionId;
+      }
+
+      // Fallback: generate a unique ID
+      print(
+          '💾 MessageStorageService: ⚠️ No user ID available, using timestamp fallback');
+      return 'user_${DateTime.now().millisecondsSinceEpoch}';
+    } catch (e) {
+      print('💾 MessageStorageService: ❌ Error getting current user ID: $e');
+      return 'user_${DateTime.now().millisecondsSinceEpoch}';
+    }
   }
 
   /// Get storage usage statistics
@@ -1149,6 +1162,62 @@ class MessageStorageService {
       print('💾 MessageStorageService: ✅ Database connection closed');
     } catch (e) {
       print('💾 MessageStorageService: ❌ Failed to close database: $e');
+    }
+  }
+
+  /// Create a message object with the correct type
+  static Message createMessage({
+    required String id,
+    required String conversationId,
+    required String senderId,
+    required String recipientId,
+    required Map<String, dynamic> content,
+    required String status,
+    DateTime? timestamp,
+  }) {
+    try {
+      MessageType messageType = MessageType.text;
+      MessageStatus messageStatus = MessageStatus.delivered;
+
+      // Convert status string to MessageStatus enum
+      switch (status) {
+        case 'sending':
+          messageStatus = MessageStatus.sending;
+          break;
+        case 'sent':
+          messageStatus = MessageStatus.sent;
+          break;
+        case 'delivered':
+          messageStatus = MessageStatus.delivered;
+          break;
+        case 'read':
+          messageStatus = MessageStatus.read;
+          break;
+        case 'failed':
+          messageStatus = MessageStatus.failed;
+          break;
+        case 'deleted':
+          messageStatus = MessageStatus.deleted;
+          break;
+        case 'received':
+        default:
+          messageStatus = MessageStatus.delivered;
+          break;
+      }
+
+      return Message(
+        id: id,
+        conversationId: conversationId,
+        senderId: senderId,
+        recipientId: recipientId,
+        type: messageType,
+        content: content,
+        status: messageStatus,
+        timestamp: timestamp ?? DateTime.now(),
+      );
+    } catch (e) {
+      print('💾 MessageStorageService: ❌ Error creating message: $e');
+      throw e;
     }
   }
 

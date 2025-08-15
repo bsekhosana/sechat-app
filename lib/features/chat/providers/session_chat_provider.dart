@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/services/airnotifier_service.dart';
 import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/encryption_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
 import '../models/message.dart';
@@ -31,7 +32,7 @@ class SessionChatProvider extends ChangeNotifier {
     // No real-time callbacks needed - everything goes through silent notifications
   }
 
-  // Send message using AirNotifier silent notifications
+  // Send message using encrypted notifications
   Future<void> sendMessage({
     required String recipientId,
     required String content,
@@ -46,12 +47,31 @@ class SessionChatProvider extends ChangeNotifier {
       final messageId =
           'msg_${DateTime.now().millisecondsSinceEpoch}_$recipientId';
 
-      // Send message via AirNotifier
-      final success = await _airNotifier.sendMessageNotification(
+      // Create message data for encryption
+      final messageData = {
+        'type': 'message',
+        'message_id': messageId,
+        'sender_id': _airNotifier.currentUserId ?? '',
+        'sender_name': _airNotifier.currentUserId ?? 'Anonymous User',
+        'message': content,
+        'conversation_id': recipientId,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      // Create properly encrypted payload using EncryptionService
+      final encryptedPayload = await EncryptionService.createEncryptedPayload(
+          messageData, recipientId);
+
+      // Send message via SimpleNotificationService with full encryption
+      final success =
+          await SimpleNotificationService.instance.sendEncryptedMessage(
         recipientId: recipientId,
         senderName: _airNotifier.currentUserId ?? 'Anonymous User',
         message: content,
         conversationId: recipientId,
+        encryptedData: encryptedPayload['data'] as String,
+        checksum: encryptedPayload['checksum'] as String,
+        messageId: messageId,
       );
 
       if (success) {

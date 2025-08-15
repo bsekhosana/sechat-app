@@ -123,7 +123,7 @@ class Message {
       'deleted_at': deletedAt?.toIso8601String(),
       'reply_to_message_id': replyToMessageId,
       'metadata': metadata != null ? jsonEncode(metadata) : null,
-      'is_encrypted': isEncrypted,
+      'is_encrypted': isEncrypted ? 1 : 0,
       'checksum': checksum,
       'file_size': fileSize,
       'mime_type': mimeType,

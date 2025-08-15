@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:sechat_app/features/chat/providers/chat_provider.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +21,7 @@ import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import 'package:sechat_app/core/services/key_exchange_service.dart';
 import 'package:sechat_app/shared/models/chat.dart';
 import 'package:sechat_app/shared/models/message.dart' as app_message;
+import 'package:sechat_app/features/chat/models/message.dart';
 import 'package:sechat_app/shared/models/key_exchange_request.dart';
 import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:flutter/material.dart';
@@ -45,8 +48,8 @@ class SimpleNotificationService {
   PermissionStatus _permissionStatus = PermissionStatus.denied;
 
   // Notification callbacks
-  Function(String senderId, String senderName, String message)?
-      _onMessageReceived;
+  Function(String senderId, String senderName, String message,
+      String conversationId, String? messageId)? _onMessageReceived;
   Function(String senderId, bool isTyping)? _onTypingIndicator;
   Function(String recipientId, String encryptedData, String checksum)?
       _onEncryptedMessageReceived;
@@ -597,10 +600,17 @@ class SimpleNotificationService {
           'encrypted': true,
           'type':
               'message', // Type indicator for routing (unencrypted for routing)
+          'senderId': SeSessionService().currentSessionId ??
+              '', // Sender ID for routing
+          'senderName': senderName, // Sender name for routing
+          'conversationId': conversationId, // Conversation ID for routing
           'data': encryptedData, // Encrypted sensitive data
           'checksum': checksum, // Checksum for verification
           'messageId': messageId, // Additional metadata
-          'conversationId': conversationId, // Additional metadata
+          // Add additional fields to ensure notification is processed
+          'action': 'message_received',
+          'priority': 'high',
+          'category': 'chat_message',
         },
         sound: 'message.wav',
         encrypted: true, // Mark as encrypted for AirNotifier server
@@ -631,6 +641,16 @@ class SimpleNotificationService {
           '🔔 SimpleNotificationService: Notification data keys: ${notificationData.keys.toList()}');
       print(
           '🔔 SimpleNotificationService: Notification data types: ${notificationData.map((key, value) => MapEntry(key, value.runtimeType))}');
+      print(
+          '🔔 SimpleNotificationService: 🔍 Processing notification type: ${notificationData['type']}');
+
+      // DEBUG: Check if this is a message notification
+      if (notificationData['type'] == 'message') {
+        print(
+            '🔔 SimpleNotificationService: 🔴 MESSAGE NOTIFICATION BEING PROCESSED');
+        print(
+            '🔔 SimpleNotificationService: 🔴 Message data: ${notificationData['data']}');
+      }
 
       // Check if notification is encrypted (handle both bool and string)
       final encryptedValue = notificationData['encrypted'];
@@ -639,7 +659,8 @@ class SimpleNotificationService {
 
       final isEncrypted = encryptedValue == true ||
           encryptedValue == 'true' ||
-          encryptedValue == '1';
+          encryptedValue == '1' ||
+          encryptedValue == 1;
 
       print('🔔 SimpleNotificationService: Is encrypted: $isEncrypted');
 
@@ -771,45 +792,110 @@ class SimpleNotificationService {
   /// Handle notification and trigger callbacks
   Future<void> handleNotification(Map<String, dynamic> notificationData) async {
     try {
-      print(
-          '🔔 SimpleNotificationService: 🔔 RECEIVED NOTIFICATION: $notificationData');
+      // Normalize to string-keyed map immediately
+      final safeRoot = _stringKeyed(notificationData);
 
-      // Prevent duplicate notification processing
-      final notificationId = _generateNotificationId(notificationData);
+      // Skip processing if this is a local notification (from our own app)
+      if (safeRoot['fromLocalNotification'] == true) {
+        print('🔔 SimpleNotificationService: ℹ️ Skipping local notification');
+        return;
+      }
+
+      // Check for fromLocalNotification in nested JSON strings (iOS specific)
+      if (Platform.isIOS) {
+        final payload = safeRoot['payload'];
+        if (payload is String) {
+          try {
+            final payloadData = jsonDecode(payload);
+            if (payloadData is Map &&
+                payloadData['fromLocalNotification'] == true) {
+              print(
+                  '🔔 SimpleNotificationService: ℹ️ Skipping local notification (found in nested JSON)');
+              return;
+            }
+          } catch (_) {}
+        }
+      }
+
+      // iOS duplicate filtering (use safeRoot)
+      if (Platform.isIOS && safeRoot['payload'] != null) {
+        final payloadStr = safeRoot['payload'].toString();
+        final iosNotificationId =
+            'ios_${sha256.convert(utf8.encode(payloadStr)).toString()}';
+        if (_processedNotifications.contains(iosNotificationId)) {
+          print(
+              '🔔 SimpleNotificationService: ℹ️ Skipping duplicate iOS notification');
+          return;
+        }
+        _processedNotifications.add(iosNotificationId);
+
+        try {
+          final payloadData = jsonDecode(payloadStr);
+          if (payloadData is Map && payloadData['message_id'] != null) {
+            final messageId = payloadData['message_id'];
+            final messageNotificationId = 'ios_msg_$messageId';
+            if (_processedNotifications.contains(messageNotificationId)) {
+              print(
+                  '🔔 SimpleNotificationService: ℹ️ Skipping duplicate iOS message notification: $messageId');
+              return;
+            }
+            _processedNotifications.add(messageNotificationId);
+          }
+        } catch (_) {}
+      }
+
+      // Skip processing if the sender is the current user
+      final currentUserId = SeSessionService().currentSessionId;
+      final senderId = safeRoot['senderId'] ?? safeRoot['sender_id'];
+      if (senderId == currentUserId) {
+        print(
+            '🔔 SimpleNotificationService: ℹ️ Skipping notification from self');
+        return;
+      }
+      if (Platform.isIOS && senderId == 'current_user_id') {
+        print(
+            '🔔 SimpleNotificationService: ℹ️ Skipping iOS notification with current_user_id sender');
+        return;
+      }
+
+      print(
+          '🔔 SimpleNotificationService: 🔔 RECEIVED NOTIFICATION: ${safeRoot.keys}');
+      print('🔔 SimpleNotificationService: 🔔 NOTIFICATION DATA: $safeRoot');
+
+      // DEBUG: Check if this is a message notification (guard types!)
+      final rootType = safeRoot['type'];
+      final rootData = safeRoot['data'];
+      final isMessage = rootType == 'message' ||
+          (rootData is Map && rootData['type'] == 'message') ||
+          (safeRoot['aps'] != null && rootType == 'message');
+      if (isMessage) {
+        print(
+            '🔔 SimpleNotificationService: 🔴 MESSAGE NOTIFICATION DETECTED: $rootType');
+      }
+
+      // Prevent duplicate processing (use safeRoot)
+      final notificationId = _generateNotificationId(safeRoot);
       if (_processedNotifications.contains(notificationId)) {
         print(
             '🔔 SimpleNotificationService: ⚠️ Duplicate notification detected, skipping: $notificationId');
         return;
       }
-
-      // Mark this notification as processed
       _processedNotifications.add(notificationId);
-
-      // Limit the size of processed notifications to prevent memory issues
       if (_processedNotifications.length > 1000) {
         print(
             '🔔 SimpleNotificationService: 🔧 Clearing old processed notifications to prevent memory buildup');
         _processedNotifications.clear();
-        _processedNotifications.add(notificationId); // Keep the current one
+        _processedNotifications.add(notificationId);
       }
-
       print(
           '🔔 SimpleNotificationService: ✅ Notification marked as processed: $notificationId');
 
-      // Convert Map<Object?, Object?> to Map<String, dynamic> safely
-      Map<String, dynamic> safeNotificationData = <String, dynamic>{};
-      notificationData.forEach((key, value) {
-        if (key is String) {
-          safeNotificationData[key] = value;
-        }
-      });
-
-      // Extract the actual data from the notification
+      // ==== Extract/normalize actualData ====
       Map<String, dynamic>? actualData;
 
       // Check if this is an iOS notification with aps structure
-      if (safeNotificationData.containsKey('aps')) {
-        final apsDataRaw = safeNotificationData['aps'];
+      if (safeRoot.containsKey('aps')) {
+        final apsDataRaw = safeRoot['aps'];
         Map<String, dynamic>? apsData;
 
         // Safely convert Map<Object?, Object?> to Map<String, dynamic>
@@ -828,7 +914,7 @@ class SimpleNotificationService {
           actualData = <String, dynamic>{};
 
           // Copy all fields except 'aps' to actualData
-          safeNotificationData.forEach((key, value) {
+          safeRoot.forEach((key, value) {
             if (key != 'aps' && key is String) {
               actualData![key] = value;
             }
@@ -895,27 +981,27 @@ class SimpleNotificationService {
           print(
               '🔔 SimpleNotificationService: Extracted data from iOS notification: $actualData');
         }
-      } else if (safeNotificationData.containsKey('data')) {
-        // Android notification structure
-        final dataField = safeNotificationData['data'];
+        // 3.2 Android-style nested data
+      } else if (safeRoot.containsKey('data')) {
+        final dataField = safeRoot['data'];
         if (dataField is Map) {
-          // Convert to Map<String, dynamic> safely
-          actualData = <String, dynamic>{};
-          dataField.forEach((key, value) {
-            if (key is String) {
-              actualData![key] = value;
-            }
-          });
-          print(
-              '🔔 SimpleNotificationService: Found data in nested field: $actualData');
+          actualData = _stringKeyed(dataField as Map);
+        } else if (_isStringBase64(dataField)) {
+          // Canonical encrypted format
+          actualData = {
+            if (safeRoot['type'] != null) 'type': safeRoot['type'],
+            'encrypted': true,
+            'data': dataField as String,
+            if (safeRoot['checksum'] != null) 'checksum': safeRoot['checksum'],
+          };
         } else {
-          print(
-              '🔔 SimpleNotificationService: Data field is not a Map: $dataField');
-          actualData = safeNotificationData;
+          // Unexpected; fall back to all root fields
+          actualData = safeRoot;
         }
+
+        // 3.3 Already top-level
       } else {
-        // Check if data is at top level
-        actualData = safeNotificationData;
+        actualData = safeRoot;
       }
 
       // Check if we have a payload field (iOS foreground notifications)
@@ -943,6 +1029,62 @@ class SimpleNotificationService {
         }
       }
 
+      // Handle iOS notifications with different structure
+      // ONLY restructure if this is actually an iOS notification with aps structure
+      // AND it's a specific type that needs restructuring (like user_data_response)
+      if (actualData != null &&
+          actualData.containsKey('aps') &&
+          actualData.containsKey('data') &&
+          actualData.containsKey('type') &&
+          actualData['type'] == 'user_data_response') {
+        // Only for specific iOS notification types
+
+        print(
+            '🔔 SimpleNotificationService: 🔴 iOS user_data_response notification detected, restructuring data');
+
+        // iOS notifications have aps + data structure, need to restructure for processing
+        final iosData = <String, dynamic>{
+          'type': actualData['type'],
+          'data': actualData['data'], // This is the encrypted string
+          'encrypted': true, // Mark as encrypted
+        };
+
+        // Add any other fields that might be needed
+        if (actualData.containsKey('checksum')) {
+          iosData['checksum'] = actualData['checksum'];
+        }
+
+        print(
+            '🔔 SimpleNotificationService: 🔴 Restructured iOS data: $iosData');
+        actualData = iosData;
+      }
+
+      // Handle iOS notifications with aps structure that don't need restructuring
+      // These are notifications like key_exchange_request, invitation_update, etc.
+      if (actualData != null &&
+          actualData.containsKey('aps') &&
+          actualData.containsKey('type') &&
+          actualData['type'] != 'user_data_response') {
+        print(
+            '🔔 SimpleNotificationService: 🔴 iOS notification with aps structure detected: ${actualData['type']}');
+
+        // For these notifications, we need to extract the actual data from the aps structure
+        // or from the notification payload itself
+        if (actualData.containsKey('data')) {
+          // If there's a data field, it might contain the actual notification data
+          final dataField = actualData['data'];
+          if (dataField is String) {
+            // This is likely encrypted data that needs to be processed
+            print(
+                '🔔 SimpleNotificationService: 🔴 iOS notification has encrypted data field');
+          } else if (dataField is Map) {
+            // This is structured data that can be used directly
+            print(
+                '🔔 SimpleNotificationService: 🔴 iOS notification has structured data field');
+          }
+        }
+      }
+
       print(
           '🔔 SimpleNotificationService: Processed notification data: $actualData');
 
@@ -953,12 +1095,18 @@ class SimpleNotificationService {
         return;
       }
 
+      print(
+          '🔔 SimpleNotificationService: 🔍 About to process notification with type: ${actualData['type']}, encrypted=${actualData['encrypted']}');
+
       final processedData = await processNotification(actualData);
       if (processedData == null) {
         print(
             '🔔 SimpleNotificationService: ❌ Failed to process notification data');
         return;
       }
+
+      print(
+          '🔔 SimpleNotificationService: ✅ Notification processed successfully, type: ${processedData['type']}');
 
       final type = processedData['type'] as String?;
       if (type == null) {
@@ -969,6 +1117,8 @@ class SimpleNotificationService {
 
       print(
           '🔔 SimpleNotificationService: Processing notification type: $type');
+      print(
+          '🔔 SimpleNotificationService: 🔴 FULL PROCESSED DATA: $processedData');
 
       switch (type) {
         case 'key_exchange_request':
@@ -1008,10 +1158,21 @@ class SimpleNotificationService {
           break;
 
         case 'message':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing message notification');
+          print(
+              '🔔 SimpleNotificationService: 🔴 MESSAGE NOTIFICATION DATA: $processedData');
           await _handleMessageNotification(processedData);
+          print(
+              '🔔 SimpleNotificationService: 🔴 MESSAGE NOTIFICATION HANDLED');
           break;
         case 'typing_indicator':
           await _handleTypingIndicatorNotification(processedData);
+          break;
+        case 'message_delivery_status':
+          print(
+              '🔔 SimpleNotificationService: 🎯 Processing message delivery status notification');
+          await _handleMessageDeliveryStatus(processedData);
           break;
         case 'broadcast':
           await _handleBroadcastNotification(processedData);
@@ -1019,6 +1180,7 @@ class SimpleNotificationService {
         case 'online_status_update':
           await _handleOnlineStatusUpdate(processedData);
           break;
+
         default:
           print(
               '🔔 SimpleNotificationService: Unknown notification type: $type');
@@ -1032,21 +1194,137 @@ class SimpleNotificationService {
 
   /// Handle message notification
   Future<void> _handleMessageNotification(Map<String, dynamic> data) async {
-    final senderId = data['senderId'] as String?;
-    final senderName = data['senderName'] as String?;
-    final message = data['message'] as String?;
-    final conversationId = data['conversationId'] as String?;
+    print('🔔 SimpleNotificationService: 🔍 Processing message data: $data');
 
+    // Handle both encrypted and unencrypted message formats
+    String? senderId, senderName, message, conversationId;
+
+    // IMPORTANT FIX: Handle iOS message notifications with different structures
+    // First check if this is an iOS notification with aps structure
+    if (data.containsKey('aps')) {
+      print(
+          '🔔 SimpleNotificationService: 🔴 iOS notification detected with aps structure');
+    }
+
+    // Handle both boolean and string encrypted values
+    final encryptedValue = data['encrypted'];
+    final isEncrypted = encryptedValue == true ||
+        encryptedValue == 'true' ||
+        encryptedValue == '1' ||
+        encryptedValue == 1;
+
+    if (isEncrypted) {
+      // Encrypted message format - data is in the 'data' field
+      final encryptedData = data['data'] as String?;
+      if (encryptedData != null) {
+        // For now, assume the encrypted data contains the message directly
+        // In a real implementation, this would be decrypted
+        message = encryptedData;
+        senderId = data['senderId'] as String?;
+        senderName = data['senderName'] as String?;
+        conversationId = data['conversationId'] as String?;
+
+        print(
+            '🔔 SimpleNotificationService: 🔴 Encrypted message parsed: $message from $senderName');
+      }
+    } else {
+      // Unencrypted message format
+      senderId = data['senderId'] as String?;
+      senderName = data['senderName'] as String?;
+      message = data['message'] as String?;
+      conversationId = data['conversationId'] as String?;
+
+      print(
+          '🔔 SimpleNotificationService: 🔴 Unencrypted message parsed: $message from $senderName');
+    }
+
+    // Check for snake_case field names in the decrypted data
+    if (senderId == null && data.containsKey('sender_id')) {
+      senderId = data['sender_id'] as String?;
+      print(
+          '🔔 SimpleNotificationService: 🔴 Using snake_case sender_id: $senderId');
+    }
+
+    if (senderName == null && data.containsKey('sender_name')) {
+      senderName = data['sender_name'] as String?;
+      print(
+          '🔔 SimpleNotificationService: 🔴 Using snake_case sender_name: $senderName');
+    }
+
+    if (conversationId == null && data.containsKey('conversation_id')) {
+      conversationId = data['conversation_id'] as String?;
+      print(
+          '🔔 SimpleNotificationService: 🔴 Using snake_case conversation_id: $conversationId');
+    }
+
+    // IMPORTANT FIX: Handle iOS notifications that might have a different structure
     if (senderId == null || senderName == null || message == null) {
-      print('🔔 SimpleNotificationService: Invalid message notification data');
-      return;
+      print(
+          '🔔 SimpleNotificationService: ⚠️ Missing fields in message notification data');
+      print(
+          '🔔 SimpleNotificationService: senderId: $senderId, senderName: $senderName, message: $message');
+
+      // Try to extract data from iOS notification structure
+      if (data.containsKey('aps')) {
+        print(
+            '🔔 SimpleNotificationService: 🔴 Attempting to extract data from iOS notification structure');
+
+        // Try to get sender ID and name from other fields
+        if (senderId == null) {
+          senderId =
+              data['senderId'] as String? ?? data['sender_id'] as String?;
+          print(
+              '🔔 SimpleNotificationService: 🔴 Extracted senderId: $senderId');
+        }
+
+        if (senderName == null) {
+          senderName =
+              data['senderName'] as String? ?? data['sender_name'] as String?;
+          print(
+              '🔔 SimpleNotificationService: 🔴 Extracted senderName: $senderName');
+        }
+
+        if (message == null) {
+          // Try to get message from data field
+          if (data.containsKey('data')) {
+            final dataField = data['data'];
+            if (dataField is String) {
+              message = dataField;
+              print(
+                  '🔔 SimpleNotificationService: 🔴 Extracted message from data field: $message');
+            } else if (dataField is Map) {
+              message = dataField['text'] as String? ??
+                  dataField['message'] as String?;
+              print(
+                  '🔔 SimpleNotificationService: 🔴 Extracted message from data map: $message');
+            }
+          }
+        }
+      }
+
+      // If still missing required fields, return
+      if (senderId == null || senderName == null || message == null) {
+        print(
+            '🔔 SimpleNotificationService: ❌ Invalid message notification data - missing required fields');
+        print(
+            '🔔 SimpleNotificationService: senderId: $senderId, senderName: $senderName, message: $message');
+        return;
+      }
     }
 
     print(
         '🔔 SimpleNotificationService: Processing message from $senderName: $message');
 
-    // Check if sender is blocked
+    // CRITICAL FIX: Don't show local notifications for messages from the current user
+    // This prevents the infinite notification loop
     final currentUserId = SeSessionService().currentSessionId;
+    if (currentUserId != null && senderId == currentUserId) {
+      print(
+          '🔔 SimpleNotificationService: ℹ️ Skipping local notification for message from self');
+      return;
+    }
+
+    // Check if sender is blocked
     if (currentUserId != null) {
       try {
         // Check database first for blocking status
@@ -1119,30 +1397,102 @@ class SimpleNotificationService {
 
     // Send delivery receipt back to sender
     try {
-      final airNotifier = AirNotifierService.instance;
-      final success = await airNotifier.sendMessageDeliveryStatus(
-        recipientId: senderId,
-        messageId:
-            conversationId ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
-        status: 'delivered',
-        conversationId: conversationId ??
-            'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
-      );
-
-      if (success) {
+      // Check if sender is not the current user
+      final currentUserId = SeSessionService().currentSessionId;
+      if (senderId == currentUserId) {
         print(
-            '🔔 SimpleNotificationService: ✅ Delivery receipt sent to sender');
+            '🔔 SimpleNotificationService: ℹ️ Skipping delivery receipt to self');
       } else {
-        print(
-            '🔔 SimpleNotificationService: ⚠️ Failed to send delivery receipt');
+        final airNotifier = AirNotifierService.instance;
+
+        // Use the message_id as the messageId parameter, not the conversationId
+        final messageId = data['message_id'] as String? ??
+            'msg_${DateTime.now().millisecondsSinceEpoch}';
+
+        final success = await airNotifier.sendMessageDeliveryStatus(
+          recipientId: senderId,
+          messageId: messageId,
+          status: 'delivered',
+          conversationId: conversationId ??
+              'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        );
+
+        if (success) {
+          print(
+              '🔔 SimpleNotificationService: ✅ Delivery receipt sent to sender: $senderId');
+        } else {
+          print(
+              '🔔 SimpleNotificationService: ⚠️ Failed to send delivery receipt');
+        }
       }
     } catch (e) {
       print(
           '🔔 SimpleNotificationService: ❌ Error sending delivery receipt: $e');
     }
 
-    // Trigger callback for UI updates
-    _onMessageReceived?.call(senderId, senderName, message);
+    // Create a Message object and save it to the database
+    try {
+      final messageStorageService = MessageStorageService.instance;
+      final currentUserId = SeSessionService().currentSessionId ?? '';
+
+      // Generate a unique message ID
+      final messageId = data['messageId'] as String? ??
+          data['message_id'] as String? ??
+          'msg_${DateTime.now().millisecondsSinceEpoch}';
+      final messageText =
+          message; // Store the message text in a separate variable to avoid naming conflict
+
+      // Import the correct Message class
+      final messageObj = MessageStorageService.createMessage(
+        id: messageId,
+        conversationId: conversationId ??
+            'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        senderId: senderId,
+        recipientId: currentUserId,
+        content: {'text': messageText},
+        status: 'received',
+      );
+
+      // Save message to database
+      if (messageObj != null) {
+        await messageStorageService.saveMessage(messageObj);
+        print(
+            '🔔 SimpleNotificationService: ✅ Message saved to database: $messageId');
+
+        // Try to route to active ChatProvider first (for chat screen updates)
+        try {
+          final bool handled = await ChatProvider.handleIncomingMessage(
+            conversationId: conversationId ??
+                'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+            message: messageObj,
+          );
+
+          if (handled) {
+            print(
+                '🔔 SimpleNotificationService: ✅ Message routed to active ChatProvider');
+          }
+        } catch (e) {
+          print(
+              '🔔 SimpleNotificationService: ⚠️ Failed to route to ChatProvider: $e');
+        }
+
+        // ALWAYS trigger callback for UI updates - this will route to ChatListProvider
+        // This ensures the chat list is updated regardless of whether the chat screen is active
+        print(
+            '🔔 SimpleNotificationService: 🔄 Triggering message received callback for ChatListProvider');
+        // Pass the conversation ID and message ID to ensure correct routing
+        _onMessageReceived?.call(
+            senderId,
+            senderName,
+            message,
+            conversationId ??
+                'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+            messageId);
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: ❌ Error saving message to database: $e');
+    }
 
     print(
         '🔔 SimpleNotificationService: ✅ Message notification handled successfully');
@@ -1547,7 +1897,9 @@ class SimpleNotificationService {
 
   /// Set message received callback
   void setOnMessageReceived(
-      Function(String senderId, String senderName, String message) callback) {
+      Function(String senderId, String senderName, String message,
+              String conversationId, String? messageId)
+          callback) {
     _onMessageReceived = callback;
   }
 
@@ -1684,12 +2036,17 @@ class SimpleNotificationService {
         iOS: iosDetails,
       );
 
+      // Add a marker to the data to identify this as a local notification
+      final Map<String, dynamic> localData =
+          Map<String, dynamic>.from(data ?? {});
+      localData['fromLocalNotification'] = true;
+
       await _localNotifications.show(
         DateTime.now().millisecondsSinceEpoch.hashCode,
         title,
         body,
         details,
-        payload: json.encode(data),
+        payload: json.encode(localData),
       );
 
       print('🔔 SimpleNotificationService: Local notification shown: $title');
@@ -1809,6 +2166,25 @@ class SimpleNotificationService {
       String recipientId, String publicKey) async {
     await _storage.write(key: 'recipient_key_$recipientId', value: publicKey);
     print('🔔 SimpleNotificationService: Stored public key for $recipientId');
+  }
+
+  /// Helper: Check if a value is likely base64 encoded
+  bool _isStringBase64(Object? v) {
+    if (v is! String) return false;
+    final s = v.trim();
+    // Quick heuristic: base64 is usually long and uses +/=
+    if (s.length < 32) return false;
+    final base64Regex = RegExp(r'^[A-Za-z0-9+/=]+$');
+    return base64Regex.hasMatch(s);
+  }
+
+  /// Helper: Convert Map<dynamic, dynamic> to Map<String, dynamic> safely
+  Map<String, dynamic> _stringKeyed(Map<dynamic, dynamic> m) {
+    final out = <String, dynamic>{};
+    m.forEach((k, v) {
+      if (k is String) out[k] = v;
+    });
+    return out;
   }
 
   /// Generate and store a test public key for a recipient (for demo purposes)
@@ -2572,15 +2948,52 @@ class SimpleNotificationService {
     try {
       print(
           '🔔 SimpleNotificationService: Processing encrypted user data response');
+      print(
+          '🔔 SimpleNotificationService: 🔍 Input data keys: ${data.keys.toList()}');
+      print('🔔 SimpleNotificationService: 🔍 Input data: $data');
 
-      // Extract encrypted data
-      final encryptedData = data['data'] as String?;
+      // Extract encrypted data - handle both direct and nested structures
+      String? encryptedData;
+
+      // Check if data is directly in the 'data' field
+      if (data.containsKey('data')) {
+        final dataField = data['data'];
+        if (dataField is String) {
+          encryptedData = dataField;
+          print(
+              '🔔 SimpleNotificationService: Found encrypted data in data field: ${encryptedData.length} characters');
+        } else {
+          print(
+              '🔔 SimpleNotificationService: Data field is not a string: ${dataField.runtimeType}');
+        }
+      }
+
+      // Check if data is in a nested structure (iOS aps format)
+      if (encryptedData == null && data.containsKey('aps')) {
+        print(
+            '🔔 SimpleNotificationService: 🔴 iOS notification with aps structure detected');
+
+        // Try to extract from the main data field
+        if (data.containsKey('data')) {
+          final dataField = data['data'];
+          if (dataField is String) {
+            encryptedData = dataField;
+            print(
+                '🔔 SimpleNotificationService: Found encrypted data in iOS notification: ${encryptedData.length} characters');
+          }
+        }
+      }
 
       if (encryptedData == null) {
         print(
-            '🔔 SimpleNotificationService: No encrypted data found in response');
+            '🔔 SimpleNotificationService: ❌ No encrypted data found in response');
+        print(
+            '🔔 SimpleNotificationService: Available fields: ${data.keys.toList()}');
         return;
       }
+
+      print(
+          '🔔 SimpleNotificationService: 🔐 Attempting to decrypt data: ${encryptedData.substring(0, 50)}...');
 
       // Decrypt the data using the new encryption service
       final decryptedData = await EncryptionService.decryptAesCbcPkcs7(
@@ -2588,12 +3001,25 @@ class SimpleNotificationService {
       );
 
       if (decryptedData == null) {
-        print('🔔 SimpleNotificationService: Failed to decrypt response data');
+        print(
+            '🔔 SimpleNotificationService: ❌ Failed to decrypt response data');
         return;
       }
 
       print(
           '🔔 SimpleNotificationService: ✅ Response data decrypted successfully');
+      print(
+          '🔔 SimpleNotificationService: 🔍 Decrypted data type: ${decryptedData.runtimeType}');
+      print('🔔 SimpleNotificationService: 🔍 Decrypted data: $decryptedData');
+
+      // Ensure decryptedData is a Map before processing
+      if (decryptedData is! Map<String, dynamic>) {
+        print(
+            '🔔 SimpleNotificationService: ❌ Decrypted data is not a Map: ${decryptedData.runtimeType}');
+        print(
+            '🔔 SimpleNotificationService: Decrypted data value: $decryptedData');
+        return;
+      }
 
       // Process the decrypted response data
       await _processDecryptedResponseData(decryptedData);
@@ -2618,7 +3044,9 @@ class SimpleNotificationService {
       }
     } catch (e) {
       print(
-          '🔔 SimpleNotificationService: Error processing user data response: $e');
+          '🔔 SimpleNotificationService: ❌ Error processing user data response: $e');
+      print(
+          '🔔 SimpleNotificationService: Error stack trace: ${StackTrace.current}');
     }
   }
 
@@ -2627,19 +3055,30 @@ class SimpleNotificationService {
       Map<String, dynamic> responseData) async {
     try {
       print('🔔 SimpleNotificationService: Processing decrypted response data');
+      print(
+          '🔔 SimpleNotificationService: 🔍 Response data keys: ${responseData.keys.toList()}');
+      print('🔔 SimpleNotificationService: 🔍 Response data: $responseData');
+      print(
+          '🔔 SimpleNotificationService: 🔍 Response data types: ${responseData.map((key, value) => MapEntry(key, value.runtimeType))}');
 
       final senderId = responseData['sender_id'] as String?;
       final displayName = responseData['display_name'] as String?;
       final chatId = responseData['chat_id'] as String?;
       final profileData = responseData['profile_data'] as Map<String, dynamic>?;
 
+      print(
+          '🔔 SimpleNotificationService: 🔍 Extracted fields - senderId: $senderId, displayName: $displayName, chatId: $chatId');
+
       if (senderId == null || displayName == null || chatId == null) {
-        print('🔔 SimpleNotificationService: Invalid response data');
+        print(
+            '🔔 SimpleNotificationService: ❌ Invalid response data - missing required fields');
+        print(
+            '🔔 SimpleNotificationService: Available fields: ${responseData.keys.toList()}');
         return;
       }
 
       print(
-          '🔔 SimpleNotificationService: Processing response for user: $displayName ($senderId)');
+          '🔔 SimpleNotificationService: ✅ Processing response for user: $displayName ($senderId)');
 
       // Update the Key Exchange Request display name from "session_..." to actual name
       await _updateKeyExchangeRequestDisplayName(senderId, displayName);
@@ -2877,7 +3316,47 @@ class SimpleNotificationService {
 
   /// Generate a unique ID for a notification to prevent duplicates
   String _generateNotificationId(Map<String, dynamic> notificationData) {
-    final dataJson = json.encode(notificationData);
+    // Extract only essential fields for deduplication
+    final Map<String, dynamic> essentialData = {};
+
+    // For messages, use message_id if available
+    if (notificationData['type'] == 'message' &&
+        notificationData['message_id'] != null) {
+      return 'msg_${notificationData['message_id']}';
+    }
+
+    // For typing indicators, use senderId + timestamp
+    if (notificationData['type'] == 'typing_indicator') {
+      final senderId =
+          notificationData['senderId'] ?? notificationData['sender_id'] ?? '';
+      final timestamp = notificationData['timestamp'] ??
+          DateTime.now().millisecondsSinceEpoch;
+      return 'typing_${senderId}_${timestamp}';
+    }
+
+    // For other notifications, use a subset of fields
+    if (notificationData['type'] != null) {
+      essentialData['type'] = notificationData['type'];
+    }
+    if (notificationData['senderId'] != null ||
+        notificationData['sender_id'] != null) {
+      essentialData['sender'] =
+          notificationData['senderId'] ?? notificationData['sender_id'];
+    }
+    if (notificationData['action'] != null) {
+      essentialData['action'] = notificationData['action'];
+    }
+    if (notificationData['timestamp'] != null) {
+      essentialData['timestamp'] = notificationData['timestamp'];
+    }
+    if (notificationData['message_id'] != null) {
+      essentialData['message_id'] = notificationData['message_id'];
+    }
+
+    // If we have essential data, use it; otherwise fall back to full data
+    final dataToHash =
+        essentialData.isNotEmpty ? essentialData : notificationData;
+    final dataJson = json.encode(dataToHash);
     final hash = sha256.convert(utf8.encode(dataJson)).toString();
     return hash;
   }
@@ -3154,6 +3633,82 @@ class SimpleNotificationService {
     } catch (e) {
       print(
           '🔔 SimpleNotificationService: Error notifying about key exchange completion: $e');
+    }
+  }
+
+  /// Handle message delivery status notification
+  Future<void> _handleMessageDeliveryStatus(Map<String, dynamic> data) async {
+    try {
+      print(
+          '🔔 SimpleNotificationService: 🔍 Processing message delivery status: $data');
+
+      final messageId =
+          data['messageId'] as String? ?? data['message_id'] as String?;
+      final status = data['status'] as String?;
+      final senderId =
+          data['senderId'] as String? ?? data['sender_id'] as String?;
+      final conversationId = data['conversationId'] as String? ??
+          data['conversation_id'] as String?;
+
+      if (messageId != null && status != null && senderId != null) {
+        // Convert status string to MessageStatus enum
+        MessageStatus messageStatus;
+        switch (status.toLowerCase()) {
+          case 'sent':
+            messageStatus = MessageStatus.sent;
+            break;
+          case 'delivered':
+            messageStatus = MessageStatus.delivered;
+            break;
+          case 'read':
+            messageStatus = MessageStatus.read;
+            break;
+          case 'failed':
+            messageStatus = MessageStatus.failed;
+            break;
+          default:
+            messageStatus = MessageStatus.delivered;
+            break;
+        }
+
+        // Update the message status in storage
+        final messageStorageService = MessageStorageService.instance;
+        await messageStorageService.updateMessageStatus(
+            messageId, messageStatus);
+
+        // Find and update the active ChatProvider instance for this conversation
+        if (conversationId != null) {
+          final success =
+              await ChatProvider.updateMessageStatusFromNotification(
+            conversationId: conversationId,
+            messageId: messageId,
+            status: messageStatus,
+          );
+
+          if (success) {
+            print(
+                '🔔 SimpleNotificationService: ✅ Message status updated in active ChatProvider UI');
+          } else {
+            print(
+                '🔔 SimpleNotificationService: ℹ️ No active ChatProvider found for conversation: $conversationId');
+          }
+        }
+
+        // Also notify the status tracking service
+        final statusTrackingService = MessageStatusTrackingService.instance;
+        // The service will handle the status update through its streams
+        print(
+            '🔔 SimpleNotificationService: ✅ Message status update sent to tracking service');
+
+        print(
+            '🔔 SimpleNotificationService: ✅ Message delivery status updated: $messageId -> $status');
+      } else {
+        print(
+            '🔔 SimpleNotificationService: ❌ Missing required fields for message delivery status');
+      }
+    } catch (e) {
+      print(
+          '🔔 SimpleNotificationService: ❌ Error handling message delivery status: $e');
     }
   }
 }

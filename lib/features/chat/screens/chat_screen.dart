@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
 
 import '../models/message.dart';
-import '../models/chat_conversation.dart';
 import '../providers/chat_provider.dart';
+import '../providers/chat_list_provider.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input_area.dart';
 import '../widgets/chat_header.dart';
 import '../widgets/typing_indicator.dart';
-import '../../../shared/widgets/connection_status_widget.dart';
 import '../services/contact_message_service.dart' show ContactData;
 
 /// Main screen for individual chat conversations
@@ -78,11 +76,24 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _initializeChat() {
     // Initialize the chat provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().initialize(
-            conversationId: widget.conversationId,
-            recipientId: widget.recipientId,
-            recipientName: widget.recipientName,
-          );
+      final chatProvider = context.read<ChatProvider>();
+
+      // Initialize the chat provider
+      chatProvider
+          .initialize(
+        conversationId: widget.conversationId,
+        recipientId: widget.recipientId,
+        recipientName: widget.recipientName,
+      )
+          .then((_) {
+        // Mark conversation as read when screen is opened
+        chatProvider.markAsRead();
+
+        // Also update the chat list counter
+        final chatListProvider =
+            Provider.of<ChatListProvider>(context, listen: false);
+        chatListProvider.markConversationAsRead(widget.conversationId);
+      });
     });
   }
 

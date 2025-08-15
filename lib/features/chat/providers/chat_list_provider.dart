@@ -171,6 +171,8 @@ class ChatListProvider extends ChangeNotifier {
     _statusTrackingService.statusUpdateStream?.listen((update) {
       _updateMessageStatus(update);
     });
+
+    // Note: Online status updates are handled through lastSeen updates
   }
 
   /// Setup conversation creation listener
@@ -220,15 +222,57 @@ class ChatListProvider extends ChangeNotifier {
       _conversations[index] = updatedConversation;
       _applySearchFilter();
       notifyListeners();
+
+      print(
+          '📱 ChatListProvider: ✅ Last seen updated for conversation: ${conversation.id}');
     }
   }
 
   /// Update message status for a conversation
   void _updateMessageStatus(MessageStatusUpdate update) {
-    // Find conversation by message ID (this will need to be implemented when we have message-conversation mapping)
-    // For now, we'll skip this update
-    print(
-        '📱 ChatListProvider: Message status update received for message: ${update.messageId}');
+    try {
+      print(
+          '📱 ChatListProvider: Message status update received for message: ${update.messageId}');
+
+      // Find conversation by message ID
+      ChatConversation? conversation;
+      try {
+        conversation = _conversations.firstWhere(
+          (conv) => conv.lastMessageId == update.messageId,
+        );
+      } catch (e) {
+        conversation = null;
+      }
+
+      if (conversation != null) {
+        // Update the conversation's last message status
+        final updatedConversation = conversation.copyWith(
+          updatedAt: DateTime.now(),
+        );
+
+        // Update in storage
+        _storageService.saveConversation(updatedConversation);
+
+        // Update local state
+        final index =
+            _conversations.indexWhere((c) => c.id == conversation!.id);
+        if (index != -1) {
+          _conversations[index] = updatedConversation;
+        }
+
+        // Apply search filter and notify listeners
+        _applySearchFilter();
+        notifyListeners();
+
+        print(
+            '📱 ChatListProvider: ✅ Message status updated for conversation: ${conversation!.id}');
+      } else {
+        print(
+            '📱 ChatListProvider: ⚠️ No conversation found for message: ${update.messageId}');
+      }
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error updating message status: $e');
+    }
   }
 
   /// Search conversations
@@ -301,6 +345,96 @@ class ChatListProvider extends ChangeNotifier {
     } catch (e) {
       print('📱 ChatListProvider: ❌ Failed to recreate database: $e');
       _setError('Failed to recreate database: $e');
+    }
+  }
+
+  /// Get the latest message for a conversation to show tick status
+  Future<Message?> getLatestMessage(String conversationId) async {
+    try {
+      final messages = await _storageService.getConversationMessages(
+        conversationId,
+        limit: 1,
+      );
+
+      if (messages.isNotEmpty) {
+        return messages.first;
+      }
+      return null;
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error getting latest message: $e');
+      return null;
+    }
+  }
+
+  /// Update conversation with latest message and status
+  Future<void> updateConversationWithLatestMessage(
+      String conversationId) async {
+    try {
+      final latestMessage = await getLatestMessage(conversationId);
+      if (latestMessage != null) {
+        final index = _conversations.indexWhere((c) => c.id == conversationId);
+        if (index != -1) {
+          final conversation = _conversations[index];
+          final updatedConversation = conversation.copyWith(
+            lastMessageAt: latestMessage.timestamp,
+            lastMessageId: latestMessage.id,
+            lastMessagePreview: _getMessagePreview(latestMessage),
+            lastMessageType: latestMessage.type,
+            updatedAt: DateTime.now(),
+          );
+
+          _conversations[index] = updatedConversation;
+          await _storageService.saveConversation(updatedConversation);
+
+          // Sort conversations by last message time
+          _conversations.sort((a, b) {
+            final aTime = a.lastMessageAt ?? a.createdAt;
+            final bTime = b.lastMessageAt ?? b.createdAt;
+            return bTime.compareTo(aTime);
+          });
+
+          _applySearchFilter();
+          notifyListeners();
+
+          print(
+              '📱 ChatListProvider: ✅ Conversation updated with latest message: $conversationId');
+        }
+      }
+    } catch (e) {
+      print(
+          '📱 ChatListProvider: ❌ Error updating conversation with latest message: $e');
+    }
+  }
+
+  /// Get message preview text
+  String _getMessagePreview(Message message) {
+    switch (message.type) {
+      case MessageType.text:
+        return message.content['text'] as String? ?? '';
+      case MessageType.voice:
+        final duration = message.content['duration'] as int? ?? 0;
+        return '🎤 Voice message (${duration}s)';
+      case MessageType.video:
+        final duration = message.content['duration'] as int? ?? 0;
+        return '🎥 Video message (${duration}s)';
+      case MessageType.image:
+        return '🖼️ Image';
+      case MessageType.document:
+        final fileName = message.content['file_name'] as String? ?? 'File';
+        return '📄 $fileName';
+      case MessageType.location:
+        return '📍 Location';
+      case MessageType.contact:
+        final contactName =
+            message.content['contact_name'] as String? ?? 'Contact';
+        return '👤 $contactName';
+      case MessageType.emoticon:
+        return message.content['emoticon'] as String? ?? '😊';
+      case MessageType.reply:
+        final replyText = message.content['reply_text'] as String? ?? '';
+        return '↩️ Reply: $replyText';
+      case MessageType.system:
+        return message.content['system_text'] as String? ?? 'System message';
     }
   }
 
@@ -553,6 +687,7 @@ class ChatListProvider extends ChangeNotifier {
     required String senderName,
     required String message,
     required String conversationId,
+    String? messageId, // Add messageId parameter
   }) async {
     try {
       print(
@@ -565,21 +700,36 @@ class ChatListProvider extends ChangeNotifier {
         return;
       }
 
-      // Check if conversation exists
+      // Check if conversation exists by ID first, then by participant
       ChatConversation? existingConversation;
+
+      // First try to find by exact conversation ID
       try {
         existingConversation = _conversations.firstWhere(
-          (conv) => conv.isParticipant(senderId),
+          (conv) => conv.id == conversationId,
         );
+        print(
+            '📱 ChatListProvider: ✅ Found conversation by ID: $conversationId');
       } catch (e) {
-        existingConversation = null;
+        // If not found by ID, try to find by participant
+        try {
+          existingConversation = _conversations.firstWhere(
+            (conv) => conv.isParticipant(senderId),
+          );
+          print(
+              '📱 ChatListProvider: ✅ Found conversation by participant: $senderId');
+        } catch (e) {
+          existingConversation = null;
+          print('📱 ChatListProvider: ⚠️ No existing conversation found');
+        }
       }
 
       if (existingConversation != null) {
         // Update existing conversation
         final updatedConversation = existingConversation.copyWith(
           lastMessageAt: DateTime.now(),
-          lastMessageId: conversationId,
+          lastMessageId: messageId ??
+              'msg_${DateTime.now().millisecondsSinceEpoch}', // Use provided messageId or generate one
           lastMessagePreview: message,
           lastMessageType: MessageType.text,
           unreadCount: existingConversation.unreadCount + 1,
@@ -658,6 +808,43 @@ class ChatListProvider extends ChangeNotifier {
       print('📱 ChatListProvider: ✅ Incoming message handled successfully');
     } catch (e) {
       print('📱 ChatListProvider: ❌ Error handling incoming message: $e');
+    }
+  }
+
+  /// Refresh a specific conversation with latest data
+  Future<void> refreshConversation(String conversationId) async {
+    try {
+      print('📱 ChatListProvider: 🔄 Refreshing conversation: $conversationId');
+
+      // Get the latest conversation data from storage
+      final currentUserId = _getCurrentUserId();
+      final conversations =
+          await _storageService.getUserConversations(currentUserId);
+
+      // Find and update the specific conversation
+      final index = _conversations.indexWhere((c) => c.id == conversationId);
+      if (index != -1) {
+        final updatedConversation = conversations.firstWhere(
+          (c) => c.id == conversationId,
+          orElse: () => _conversations[index],
+        );
+
+        _conversations[index] = updatedConversation;
+
+        // Sort conversations by last message time
+        _conversations.sort((a, b) {
+          final aTime = a.lastMessageAt ?? a.createdAt;
+          final bTime = b.lastMessageAt ?? b.createdAt;
+          return bTime.compareTo(aTime);
+        });
+
+        _applySearchFilter();
+        notifyListeners();
+
+        print('📱 ChatListProvider: ✅ Conversation refreshed: $conversationId');
+      }
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error refreshing conversation: $e');
     }
   }
 }

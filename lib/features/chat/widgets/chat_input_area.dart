@@ -376,12 +376,15 @@ class _ChatInputAreaState extends State<ChatInputArea>
   /// Build bundled record and send button
   Widget _buildRecordSendButton() {
     final hasText = _textController.text.trim().isNotEmpty;
+    final isFocused = _focusNode.hasFocus;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       width: 40,
       height: 40,
-      child: hasText ? _buildSendButton() : _buildVoiceRecordingButton(),
+      child: (hasText || isFocused)
+          ? _buildSendButton()
+          : _buildVoiceRecordingButton(),
     );
   }
 

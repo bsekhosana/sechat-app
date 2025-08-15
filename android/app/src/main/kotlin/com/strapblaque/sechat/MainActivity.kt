@@ -357,8 +357,10 @@ class MainActivity : FlutterActivity() {
     private fun setupNotificationReceiver() {
         notificationReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action == "FORWARD_NOTIFICATION_TO_FLUTTER") {
-                    Log.d("MainActivity", "Received FORWARD_NOTIFICATION_TO_FLUTTER broadcast")
+                if (intent?.action == "FORWARD_NOTIFICATION_TO_FLUTTER" || 
+                    intent?.action == "com.strapblaque.sechat.NOTIFICATION_RECEIVED") {
+                    
+                    Log.d("MainActivity", "Received notification broadcast: ${intent.action}")
                     val notificationData = intent.getSerializableExtra("notification_data") as? HashMap<String, Any>
                     if (notificationData != null) {
                         Log.d("MainActivity", "Received notification data from FCM service: $notificationData")
@@ -382,9 +384,71 @@ class MainActivity : FlutterActivity() {
         }
         
         // Register the receiver with explicit export flag for Android 14+
-        val filter = IntentFilter("FORWARD_NOTIFICATION_TO_FLUTTER")
+        val filter = IntentFilter().apply {
+            addAction("FORWARD_NOTIFICATION_TO_FLUTTER")
+            addAction("com.strapblaque.sechat.NOTIFICATION_RECEIVED")
+        }
         registerReceiver(notificationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        Log.d("MainActivity", "✅ Notification receiver registered")
+        Log.d("MainActivity", "✅ Notification receiver registered for multiple actions")
+        
+        // Process any stored notifications
+        processStoredNotifications()
+    }
+    
+    private fun processStoredNotifications() {
+        try {
+            Log.d("MainActivity", "Processing stored notifications...")
+            
+            // Get shared preferences
+            val sharedPrefs = getSharedPreferences("pending_notifications", Context.MODE_PRIVATE)
+            
+            // Get all stored notification keys
+            val allKeys = sharedPrefs.all.keys.toList()
+            val notificationKeys = allKeys.filter { it.startsWith("notification_") && !it.contains("_type") }
+            
+            if (notificationKeys.isEmpty()) {
+                Log.d("MainActivity", "No stored notifications found")
+                return
+            }
+            
+            Log.d("MainActivity", "Found ${notificationKeys.size} stored notifications")
+            
+            // Process each notification
+            val gson = com.google.gson.Gson()
+            val editor = sharedPrefs.edit()
+            
+            for (key in notificationKeys) {
+                try {
+                    val notificationJson = sharedPrefs.getString(key, null)
+                    if (notificationJson != null) {
+                        // Get notification type
+                        val typeKey = "${key}_type"
+                        val type = sharedPrefs.getString(typeKey, "unknown")
+                        
+                        Log.d("MainActivity", "Processing stored notification: $key (type: $type)")
+                        
+                        // Parse notification data
+                        val notificationData = gson.fromJson(notificationJson, HashMap::class.java) as HashMap<String, Any>
+                        
+                        // Forward to Flutter
+                        forwardNotificationToFlutter(notificationData)
+                        
+                        // Remove processed notification
+                        editor.remove(key)
+                        editor.remove(typeKey)
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "Error processing stored notification $key: ${e.message}")
+                }
+            }
+            
+            // Apply changes
+            editor.apply()
+            
+            Log.d("MainActivity", "✅ Finished processing stored notifications")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "❌ Error processing stored notifications: ${e.message}")
+        }
     }
     
     private fun forwardNotificationToFlutter(notificationData: HashMap<String, Any>) {

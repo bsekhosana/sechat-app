@@ -87,6 +87,10 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
       case "testMethodChannel":
         print("📱 iOS: Flutter requested test method channel")
         result("iOS method channel is working!")
+      case "processStoredNotifications":
+        print("📱 iOS: Flutter requested to process stored notifications")
+        self?.processStoredNotifications()
+        result(true)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -94,6 +98,14 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
     
     let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     print("📱 iOS: Application launch result: \(result)")
+    
+    // Schedule processing of stored notifications after a delay
+    // This ensures Flutter is fully initialized
+    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+      print("📱 iOS: Processing stored notifications after delay")
+      self?.processStoredNotifications()
+    }
+    
     return result
   }
   
@@ -733,25 +745,21 @@ extension AppDelegate {
       print("📱 iOS: Foreground Custom data: \(customData)")
     }
     
-    // Send enhanced notification to Flutter via EventChannel first, then MethodChannel
-    let controller = window?.rootViewController as! FlutterViewController
-    
-    // Try EventChannel first (most reliable)
-    if let eventSink = notificationEventSink {
-      eventSink(enhancedUserInfo)
-      print("📱 iOS: ✅ Notification sent via EventChannel")
-    } else {
-      print("📱 iOS: EventChannel not available, trying MethodChannel")
-      
-      // Fallback to MethodChannel
-      let channel = FlutterMethodChannel(
-        name: "push_notifications",
-        binaryMessenger: controller.binaryMessenger
-      )
-      
-      channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
-      print("📱 iOS: ✅ Notification sent via MethodChannel")
+    // Extract notification type for logging
+    var notificationType = "unknown"
+    if let type = userInfo["type"] as? String {
+      notificationType = type
+    } else if let data = userInfo["data"] as? [String: Any], let type = data["type"] as? String {
+      notificationType = type
     }
+    
+    print("📱 iOS: Foreground notification type detected: \(notificationType)")
+    
+    // Store notification for later processing (in case forwarding fails)
+    storeNotificationForLaterProcessing(enhancedUserInfo, type: notificationType)
+    
+    // Try to forward immediately
+    forwardNotificationToFlutter(enhancedUserInfo)
     
     completionHandler([.alert, .badge, .sound])
   }
@@ -789,25 +797,30 @@ extension AppDelegate {
       }
     }
     
-    // Send enhanced notification to Flutter via EventChannel first, then MethodChannel
-    let controller = window?.rootViewController as! FlutterViewController
-    
-    // Try EventChannel first (most reliable)
-    if let eventSink = notificationEventSink {
-      eventSink(enhancedUserInfo)
-      print("📱 iOS: ✅ Notification sent via EventChannel")
-    } else {
-      print("📱 iOS: EventChannel not available, trying MethodChannel")
-      
-      // Fallback to MethodChannel
-      let channel = FlutterMethodChannel(
-        name: "push_notifications",
-        binaryMessenger: controller.binaryMessenger
-      )
-      
-      channel.invokeMethod("onRemoteNotificationReceived", arguments: enhancedUserInfo)
-      print("📱 iOS: ✅ Notification sent via MethodChannel")
+    // Extract notification type for logging
+    var notificationType = "unknown"
+    if let type = userInfo["type"] as? String {
+      notificationType = type
+    } else if let data = userInfo["data"] as? [String: Any], let type = data["type"] as? String {
+      notificationType = type
     }
+    
+    print("📱 iOS: Tap notification type detected: \(notificationType)")
+    
+    // Store notification for later processing (in case forwarding fails)
+    storeNotificationForLaterProcessing(enhancedUserInfo, type: notificationType)
+    
+    // Add special flag to indicate this was from a tap
+    var notificationWithTapFlag = enhancedUserInfo
+    if var data = notificationWithTapFlag["data"] as? [String: Any] {
+      data["from_notification_tap"] = true
+      notificationWithTapFlag["data"] = data
+    } else {
+      notificationWithTapFlag["from_notification_tap"] = true
+    }
+    
+    // Try to forward immediately
+    forwardNotificationToFlutter(notificationWithTapFlag)
     
     completionHandler()
   }
@@ -907,13 +920,121 @@ extension AppDelegate {
       print("📱 iOS: Custom data: \(customData)")
     }
     
-    // Send enhanced notification to Flutter via EventChannel first, then MethodChannel
-    let controller = window?.rootViewController as! FlutterViewController
+    // Extract notification type for logging
+    var notificationType = "unknown"
+    if let type = userInfo["type"] as? String {
+      notificationType = type
+    } else if let data = userInfo["data"] as? [String: Any], let type = data["type"] as? String {
+      notificationType = type
+    }
+    
+    print("📱 iOS: Notification type detected: \(notificationType)")
+    
+    // Store notification for later processing
+    storeNotificationForLaterProcessing(enhancedUserInfo, type: notificationType)
+    
+    // Try to forward immediately if possible
+    if let controller = window?.rootViewController as? FlutterViewController {
+      // Try EventChannel first (most reliable)
+      notificationStreamHandler.sendEvent(enhancedUserInfo)
+      print("📱 iOS: ✅ Notification sent via EventChannel")
+    } else {
+      print("📱 iOS: ❌ FlutterViewController not available, notification stored for later")
+    }
+    
+    completionHandler(.newData)
+  }
+  
+  // Store notification for later processing
+  private func storeNotificationForLaterProcessing(_ userInfo: [AnyHashable: Any], type: String) {
+    do {
+      // Convert notification to JSON - handle AnyHashable keys
+      let notificationData = userInfo.reduce(into: [String: Any]()) { result, element in
+        if let key = element.key as? String {
+          result[key] = element.value
+        }
+      }
+      
+      let notificationId = "notification_\(Date().timeIntervalSince1970)"
+      
+      // Get existing stored notifications
+      var storedNotifications = UserDefaults.standard.dictionary(forKey: "pending_notifications") as? [String: Any] ?? [:]
+      
+      // Add new notification
+      storedNotifications[notificationId] = notificationData
+      
+      // Add type for easier filtering
+      storedNotifications["\(notificationId)_type"] = type
+      
+      // Save back to UserDefaults
+      UserDefaults.standard.set(storedNotifications, forKey: "pending_notifications")
+      
+      print("📱 iOS: ✅ Notification stored for later processing: \(notificationId) (type: \(type))")
+    } catch {
+      print("📱 iOS: ❌ Error storing notification: \(error)")
+    }
+  }
+  
+  // Process stored notifications
+  private func processStoredNotifications() {
+    print("📱 iOS: Processing stored notifications...")
+    
+    // Get stored notifications
+    guard let storedNotifications = UserDefaults.standard.dictionary(forKey: "pending_notifications") else {
+      print("📱 iOS: No stored notifications found")
+      return
+    }
+    
+    // Filter actual notification entries (not type markers)
+    let notificationEntries = storedNotifications.filter { !$0.key.contains("_type") }
+    
+    print("📱 iOS: Found \(notificationEntries.count) stored notifications")
+    
+    // Process each notification
+    for (key, value) in notificationEntries {
+      if let notificationData = value as? [String: Any] {
+        // Get notification type
+        let typeKey = "\(key)_type"
+        let type = storedNotifications[typeKey] as? String ?? "unknown"
+        
+        print("📱 iOS: Processing stored notification: \(key) (type: \(type))")
+        
+        // Forward to Flutter
+        forwardNotificationToFlutter(notificationData)
+      }
+    }
+    
+    // Clear processed notifications
+    UserDefaults.standard.removeObject(forKey: "pending_notifications")
+    print("📱 iOS: ✅ Finished processing stored notifications")
+  }
+  
+  // Forward notification to Flutter
+  private func forwardNotificationToFlutter(_ notificationData: [AnyHashable: Any]) {
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      print("📱 iOS: ❌ FlutterViewController not available for forwarding notification")
+      return
+    }
+    
+    // Convert AnyHashable keys to String keys for EventChannel
+    let stringKeyedData = notificationData.reduce(into: [String: Any]()) { result, element in
+      if let key = element.key as? String {
+        result[key] = element.value
+      }
+    }
     
     // Try EventChannel first (most reliable)
-    notificationStreamHandler.sendEvent(enhancedUserInfo)
-    print("📱 iOS: ✅ Notification sent via EventChannel")
-    completionHandler(.newData)
+    notificationStreamHandler.sendEvent(stringKeyedData)
+    print("📱 iOS: ✅ Notification forwarded via EventChannel")
+    
+    // Also try MethodChannel as backup
+    let channel = FlutterMethodChannel(
+      name: "push_notifications",
+      binaryMessenger: controller.binaryMessenger
+    )
+    
+    channel.invokeMethod("onRemoteNotificationReceived", arguments: stringKeyedData)
+    print("📱 iOS: ✅ Notification forwarded via MethodChannel")
   }
 }
 

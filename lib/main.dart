@@ -6,24 +6,32 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 
-// import 'features/search/providers/search_provider.dart'; // Removed search functionality
-// import 'features/chat/providers/chat_provider.dart'; // Temporarily disabled
+// import feature providers
 import 'features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
 import 'features/chat/providers/chat_list_provider.dart';
 import 'features/chat/providers/chat_provider.dart';
+import 'features/chat/providers/session_chat_provider.dart';
+
+// import screens
 import 'features/auth/screens/welcome_screen.dart';
 import 'features/auth/screens/main_nav_screen.dart';
 import 'features/auth/screens/login_screen.dart';
+
+// import widgets
 import 'shared/widgets/app_lifecycle_handler.dart';
 import 'shared/widgets/notification_permission_dialog.dart';
+
+// import services
 import 'core/services/simple_notification_service.dart';
 import 'core/services/se_session_service.dart';
 import 'core/services/se_shared_preference_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/local_storage_service.dart';
 import 'features/chat/services/message_storage_service.dart';
-import 'features/chat/providers/session_chat_provider.dart';
+
+// Global navigator key to access context from anywhere
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -88,14 +96,27 @@ void _setupSimpleNotifications() {
   final notificationService = SimpleNotificationService.instance;
 
   // Set up notification callbacks
-  notificationService.setOnMessageReceived((senderId, senderName, message) {
-    print('🔔 Main: Message received from $senderName: $message');
+  notificationService.setOnMessageReceived(
+      (senderId, senderName, message, conversationId, messageId) {
+    print(
+        '🔔 Main: Message received from $senderName: $message (ID: $messageId)');
 
     // Route message to ChatListProvider to update UI
     try {
-      // We'll need to access ChatListProvider through the Provider system
-      // For now, we'll handle this in the notification service itself
-      print('🔔 Main: ✅ Message received notification handled');
+      // Get the ChatListProvider instance and call handleIncomingMessage
+      final chatListProvider = Provider.of<ChatListProvider>(
+          navigatorKey.currentContext!,
+          listen: false);
+      chatListProvider.handleIncomingMessage(
+        senderId: senderId,
+        senderName: senderName,
+        message: message,
+        // Use the provided conversationId instead of generating a new one
+        conversationId: conversationId,
+        messageId: messageId,
+      );
+      print(
+          '🔔 Main: ✅ Message routed to ChatListProvider with conversationId: $conversationId, messageId: $messageId');
     } catch (e) {
       print('🔔 Main: ❌ Failed to handle message received: $e');
     }
@@ -278,6 +299,7 @@ class SeChatApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppLifecycleHandler(
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         title: 'SeChat',
         theme: ThemeData(
           colorScheme: ColorScheme.dark(
