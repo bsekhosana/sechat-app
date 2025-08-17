@@ -87,6 +87,30 @@ class ChatListItem extends StatelessWidget {
                               ),
                             ),
                           ),
+                        // Offline indicator (show when user was last seen)
+                        if (!_isUserOnline(conversation.lastSeen) &&
+                            conversation.lastSeen != null)
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[400],
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.access_time,
+                                size: 8,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                     const SizedBox(width: 16),
@@ -109,86 +133,125 @@ class ChatListItem extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
 
-                          // Message preview and time
-                          if (conversation.lastMessagePreview != null ||
-                              isTyping) ...[
-                            const SizedBox(height: 4),
+                          // Online status and last seen
+                          if (conversation.lastSeen != null) ...[
+                            const SizedBox(height: 2),
                             Row(
                               children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      // Message preview
-                                      Expanded(
-                                        child: Text(
-                                          isTyping
-                                              ? 'Typing...'
-                                              : conversation
-                                                      .lastMessagePreview ??
-                                                  '',
-                                          style: TextStyle(
-                                            color: hasUnread
-                                                ? Colors.grey[700]
-                                                : Colors.grey[600],
-                                            fontSize: 14,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      // Tick status for last message
-                                      if (!isTyping &&
-                                          conversation.lastMessageId != null)
-                                        _buildTickStatus(
-                                            conversation.lastMessageId!),
-                                    ],
-                                  ),
+                                Icon(
+                                  _isUserOnline(conversation.lastSeen)
+                                      ? Icons.circle
+                                      : Icons.access_time,
+                                  size: 10,
+                                  color: _isUserOnline(conversation.lastSeen)
+                                      ? Colors.green
+                                      : Colors.grey[500],
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 4),
                                 Text(
-                                  _formatTime(conversation.lastMessageAt),
+                                  _isUserOnline(conversation.lastSeen)
+                                      ? 'Online'
+                                      : 'Last seen ${_formatLastSeen(conversation.lastSeen!)}',
                                   style: TextStyle(
-                                    color: Colors.grey[500],
-                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                    fontSize: 11,
                                   ),
                                 ),
                               ],
                             ),
                           ],
 
+                          // Message preview and time
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              // Unread badge (left side)
+                              if (hasUnread)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF6B35),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${conversation.unreadCount}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    // Message preview or placeholder
+                                    Expanded(
+                                      child: Text(
+                                        isTyping
+                                            ? 'Typing...'
+                                            : conversation.lastMessagePreview !=
+                                                    null
+                                                ? conversation
+                                                    .lastMessagePreview!
+                                                : 'No messages yet',
+                                        style: TextStyle(
+                                          color: isTyping
+                                              ? Colors.grey[700]
+                                              : conversation
+                                                          .lastMessagePreview !=
+                                                      null
+                                                  ? (hasUnread
+                                                      ? Colors.grey[700]
+                                                      : Colors.grey[600])
+                                                  : Colors.grey[400],
+                                          fontSize: 14,
+                                          fontStyle:
+                                              conversation.lastMessagePreview !=
+                                                      null
+                                                  ? null
+                                                  : FontStyle.italic,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    // Tick status for last message (show for all messages, not just from others)
+                                    if (!isTyping &&
+                                        conversation.lastMessageId != null)
+                                      _buildTickStatus(
+                                          conversation.lastMessageId!),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                conversation.lastMessageAt != null
+                                    ? _formatTime(conversation.lastMessageAt)
+                                    : '',
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+
                           // Status indicators
-                          if (hasUnread || isMuted || isPinned) ...[
+                          if (isMuted || isPinned) ...[
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                if (hasUnread)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFFF6B35),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      '${conversation.unreadCount}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                if (isMuted) ...[
-                                  if (hasUnread) const SizedBox(width: 6),
+                                if (isMuted)
                                   Icon(
                                     Icons.volume_off,
                                     size: 14,
                                     color: Colors.grey[500],
                                   ),
-                                ],
                                 if (isPinned) ...[
-                                  if (hasUnread || isMuted)
-                                    const SizedBox(width: 6),
+                                  if (isMuted) const SizedBox(width: 6),
                                   Icon(
                                     Icons.push_pin,
                                     size: 14,
@@ -259,6 +322,22 @@ class ChatListItem extends StatelessWidget {
     return difference.inMinutes < 5;
   }
 
+  /// Format last seen time for display
+  String _formatLastSeen(DateTime lastSeen) {
+    final now = DateTime.now();
+    final difference = now.difference(lastSeen);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'just now';
+    }
+  }
+
   /// Build tick status indicator for message
   Widget _buildTickStatus(String messageId) {
     return Consumer<ChatListProvider>(
@@ -271,7 +350,7 @@ class ChatListItem extends StatelessWidget {
               final message = snapshot.data!;
               final currentUserId = _getCurrentUserId();
 
-              // Only show tick status for messages sent by current user
+              // Show tick status for messages sent by current user
               if (message.senderId == currentUserId) {
                 return Container(
                   margin: const EdgeInsets.only(left: 4),

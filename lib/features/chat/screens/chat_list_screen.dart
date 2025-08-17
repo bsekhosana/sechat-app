@@ -387,13 +387,23 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   /// Open chat conversation
   void _openChat(ChatConversation conversation) {
+    // Use recipientId if available, otherwise fall back to participant2Id
+    // This handles cases where older conversations might not have recipientId populated
+    final effectiveRecipientId =
+        conversation.recipientId ?? conversation.participant2Id ?? 'unknown';
+
+    // Use recipientName if available, otherwise fall back to displayName
+    final effectiveRecipientName = conversation.recipientName ??
+        conversation.displayName ??
+        'Unknown User';
+
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ChatScreen(
           conversationId: conversation.id,
-          recipientId: conversation.recipientId ?? 'unknown',
-          recipientName: conversation.recipientName ?? 'Unknown User',
+          recipientId: effectiveRecipientId,
+          recipientName: effectiveRecipientName,
         ),
       ),
     );

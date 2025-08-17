@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../notifications/providers/notification_provider.dart';
 import '../../../core/services/secure_notification_service.dart';
+import '../../../core/services/optimized_notification_service.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/services/indicator_service.dart';
 import '../../../shared/models/user.dart';
@@ -15,7 +16,7 @@ import '../../../core/services/se_session_service.dart';
 import '../../key_exchange/screens/key_exchange_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
 import '../../settings/screens/settings_screen.dart';
-import '../../chat/screens/chat_list_screen.dart';
+import '../../chat/screens/optimized_chat_list_screen.dart';
 import '../../key_exchange/providers/key_exchange_request_provider.dart';
 
 class MainNavScreen extends StatefulWidget {
@@ -90,23 +91,24 @@ Download now and let's chat securely!
   }
 
   void _setupNotificationProviders() {
-    // Connect KeyExchangeRequestProvider to SecureNotificationService
+    // Connect KeyExchangeRequestProvider to OptimizedNotificationService
     final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
 
     // Initialize the provider to load saved requests
     keyExchangeProvider.initialize();
 
-    // Connect the notification service to the provider
-    SecureNotificationService.instance.setOnKeyExchangeRequestReceived(
+    // Connect the optimized notification service to the provider
+    final optimizedNotificationService = OptimizedNotificationService();
+    optimizedNotificationService.setOnKeyExchangeRequestReceived(
       (data) => keyExchangeProvider.processReceivedKeyExchangeRequest(data),
     );
 
     print(
-        '🔔 MainNavScreen: ✅ KeyExchangeRequestProvider connected to SecureNotificationService and initialized');
+        '🔔 MainNavScreen: ✅ KeyExchangeRequestProvider connected to OptimizedNotificationService and initialized');
   }
 
   static final List<Widget> _screens = <Widget>[
-    const ChatListScreen(), // Chats
+    const OptimizedChatListScreen(), // Chats
     KeyExchangeScreen(), // Key Exchange
     NotificationsScreen(), // Notifications
     SettingsScreen(), // Settings

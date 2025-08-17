@@ -357,4 +357,28 @@ class SeSharedPreferenceService {
       return false;
     }
   }
+
+  /// Clear all contacts (for account deletion)
+  Future<void> clearAllContacts() async {
+    try {
+      await _ensureInitialized();
+      
+      // Remove contacts list
+      await _prefs!.remove('contacts');
+      
+      // Remove any other contact-related keys
+      final keys = _prefs!.getKeys();
+      final contactKeys = keys.where((key) => key.startsWith('contact_') || key.contains('contact'));
+      
+      for (final key in contactKeys) {
+        await _prefs!.remove(key);
+        print('🔍 SeSharedPreferenceService: ✅ Removed contact key: $key');
+      }
+      
+      print('🔍 SeSharedPreferenceService: 🗑️ All contacts cleared');
+    } catch (e) {
+      print('🔍 SeSharedPreferenceService: ❌ Error clearing contacts: $e');
+      rethrow;
+    }
+  }
 }

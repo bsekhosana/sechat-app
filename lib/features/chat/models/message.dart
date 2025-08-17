@@ -202,6 +202,15 @@ class Message {
   /// Check if message is from current user
   bool isFromCurrentUser(String currentUserId) => senderId == currentUserId;
 
+  /// Check if message is incoming (received from someone else)
+  bool get isIncoming => metadata?['messageDirection'] == 'incoming';
+
+  /// Check if message is outgoing (sent by current user)
+  bool get isOutgoing => metadata?['messageDirection'] == 'outgoing';
+
+  /// Get message direction for UI rendering
+  String get messageDirection => metadata?['messageDirection'] ?? 'unknown';
+
   /// Check if message can be deleted
   bool get canBeDeleted => status != MessageStatus.deleted;
 

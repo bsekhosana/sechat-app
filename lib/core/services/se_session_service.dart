@@ -4,10 +4,18 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:pointycastle/export.dart' as pc;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'se_shared_preference_service.dart';
 import '../utils/guid_generator.dart';
 import 'secure_notification_service.dart';
 import 'airnotifier_service.dart';
+import '../../features/chat/services/message_storage_service.dart';
+import 'local_storage_service.dart';
+import 'key_exchange_service.dart';
+import 'indicator_service.dart';
+import 'online_status_service.dart';
+import 'optimized_notification_service.dart';
+import 'encryption_service.dart';
 
 class SessionData {
   final String sessionId;
@@ -634,6 +642,196 @@ class SeSessionService {
       print('🔍 SeSessionService: Session data completely removed');
     } catch (e) {
       print('🔍 SeSessionService: Error deleting session: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete account completely - clears ALL data including database, shared prefs, and secure storage
+  Future<void> deleteAccount() async {
+    try {
+      print('🗑️ SeSessionService: Starting complete account deletion...');
+
+      // 1. Clear all notification service data
+      try {
+        await SecureNotificationService.instance
+            .clearAllDataOnAccountDeletion();
+        print('🗑️ SeSessionService: ✅ Notification service data cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - notification service cleanup failed: $e');
+      }
+
+      // 2. Clear all database data
+      try {
+        await MessageStorageService.instance.forceRecreateDatabase();
+        print(
+            '🗑️ SeSessionService: ✅ Database completely cleared and recreated');
+      } catch (e) {
+        print('🗑️ SeSessionService: ⚠️ Warning - database cleanup failed: $e');
+      }
+
+      // 3. Clear all shared preferences (including session data)
+      try {
+        await _prefsService.clear();
+        print('🗑️ SeSessionService: ✅ All shared preferences cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - shared preferences cleanup failed: $e');
+      }
+
+      // 4. Clear all secure storage (encryption keys, etc.)
+      try {
+        final storage = FlutterSecureStorage();
+        final secureKeys = await storage.readAll();
+        for (final key in secureKeys.keys) {
+          await storage.delete(key: key);
+        }
+        print('🗑️ SeSessionService: ✅ All secure storage cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - secure storage cleanup failed: $e');
+      }
+
+      // 4.5. Clear all encryption keys specifically
+      try {
+        await EncryptionService.clearAllRecipientPublicKeys();
+        print('🗑️ SeSessionService: ✅ All encryption keys cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - encryption keys cleanup failed: $e');
+      }
+
+      // 4.6. Clear all contacts
+      try {
+        await _prefsService.clearAllContacts();
+        print('🗑️ SeSessionService: ✅ All contacts cleared');
+      } catch (e) {
+        print('🗑️ SeSessionService: ⚠️ Warning - contacts cleanup failed: $e');
+      }
+
+      // 5. Clear all local storage service data
+      try {
+        await LocalStorageService.instance.clearAllData();
+        print('🗑️ SeSessionService: ✅ Local storage service data cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - local storage cleanup failed: $e');
+      }
+
+      // 6. Clear all key exchange service data
+      try {
+        await KeyExchangeService.instance.clearAllPendingExchanges();
+        print('🗑️ SeSessionService: ✅ Key exchange service data cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - key exchange service cleanup failed: $e');
+      }
+
+      // 7. Clear all indicator service data
+      try {
+        final indicatorService = IndicatorService();
+        indicatorService.clearChatIndicator();
+        indicatorService.clearInvitationIndicator();
+        indicatorService.clearNotificationIndicator();
+        indicatorService.clearKeyExchangeIndicator();
+        print('🗑️ SeSessionService: ✅ Indicator service data cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - indicator service cleanup failed: $e');
+      }
+
+      // 8. Clear all online status service data
+      try {
+        // OnlineStatusService doesn't have a clear method, but data will be cleared when service is reinitialized
+        print(
+            '🗑️ SeSessionService: ℹ️ Online status service data will be cleared on next initialization');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - online status service cleanup failed: $e');
+      }
+
+      // 9. Clear all optimized notification service data
+      try {
+        final optimizedNotificationService = OptimizedNotificationService();
+        // Clear optimized notification service data
+        optimizedNotificationService.clearProcessedNotifications();
+        print(
+            '🗑️ SeSessionService: ✅ Optimized notification service data cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - optimized notification service cleanup failed: $e');
+      }
+
+      // 10. Clear all provider states (if accessible)
+      try {
+        // Clear any cached provider states
+        _currentSession = null;
+        _messageCache.clear();
+        print('🗑️ SeSessionService: ✅ Provider states cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - provider state cleanup failed: $e');
+      }
+
+      // 11. Unregister device token from AirNotifier
+      try {
+        await unregisterDeviceToken();
+        print(
+            '🗑️ SeSessionService: ✅ Device token unregistered from AirNotifier');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - device token unregistration failed: $e');
+      }
+
+      print(
+          '🗑️ SeSessionService: ✅ Complete account deletion finished successfully');
+      print(
+          '🗑️ SeSessionService: ℹ️ All data has been cleared - user can now create a fresh account');
+    } catch (e) {
+      print(
+          '🗑️ SeSessionService: ❌ Error during complete account deletion: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete all chat conversations and messages (without deleting account)
+  Future<void> deleteAllChats() async {
+    try {
+      print('🗑️ SeSessionService: 🗑️ Starting complete chat deletion...');
+
+      // 1. Clear all database data (conversations and messages)
+      try {
+        await MessageStorageService.instance.deleteAllChats();
+        print('🗑️ SeSessionService: ✅ All chats deleted from database');
+      } catch (e) {
+        print('🗑️ SeSessionService: ❌ Error deleting chats from database: $e');
+        rethrow;
+      }
+
+      // 2. Clear chat-related shared preferences
+      try {
+        await _prefsService.remove('chats');
+        await _prefsService.remove('messages');
+        await _prefsService.remove('conversations');
+        print('🗑️ SeSessionService: ✅ Chat-related preferences cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - chat preferences cleanup failed: $e');
+      }
+
+      // 3. Clear chat indicators
+      try {
+        final indicatorService = IndicatorService();
+        indicatorService.clearChatIndicator();
+        print('🗑️ SeSessionService: ✅ Chat indicators cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - chat indicators cleanup failed: $e');
+      }
+
+      print('🗑️ SeSessionService: 🗑️ All chats permanently deleted');
+    } catch (e) {
+      print('🗑️ SeSessionService: ❌ Error during chat deletion: $e');
       rethrow;
     }
   }

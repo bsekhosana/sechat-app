@@ -28,7 +28,6 @@ import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_
 import 'package:sechat_app/features/chat/models/chat_conversation.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 import 'package:sechat_app/features/chat/services/message_status_tracking_service.dart';
-import 'package:sechat_app/features/chat/providers/chat_provider.dart';
 
 /// Unified secure notification service for encrypted messaging and local notifications
 class SecureNotificationService {
@@ -61,6 +60,8 @@ class SecureNotificationService {
   Function(String senderId, String senderName, String message,
       String conversationId, String? messageId)? _onMessageReceived;
   Function(String senderId, bool isTyping)? _onTypingIndicator;
+  Function(String senderId, bool isOnline, String? lastSeen)?
+      _onOnlineStatusUpdate;
   Function(String senderId, String messageId, String status)?
       _onMessageStatusUpdate;
   Function(Map<String, dynamic> data)? _onKeyExchangeRequestReceived;
@@ -69,6 +70,10 @@ class SecureNotificationService {
   Function(String title, String body, String type, Map<String, dynamic>? data)?
       _onNotificationReceived;
   Function(ChatConversation conversation)? _onConversationCreated;
+
+  // Chat provider callback for real-time message updates
+  Function(String senderId, String senderName, String message,
+      String conversationId, String messageId)? _onChatMessageReceived;
 
   // Prevent duplicate notification processing
   final Set<String> _processedNotifications = <String>{};
@@ -101,6 +106,9 @@ class SecureNotificationService {
 
       // Check for app reinstall and handle if needed
       await detectAndHandleAppReinstall();
+
+      // Update existing conversations to populate missing recipient fields
+      await _updateExistingConversations();
 
       // Log final permission status and device token state
       print(
@@ -1092,307 +1100,6 @@ class SecureNotificationService {
     }
   }
 
-  /// Handle message notification
-  Future<void> _handleMessageNotification(Map<String, dynamic> data) async {
-    print('🔒 SecureNotificationService: 🔍 Processing message data: $data');
-
-    // Handle both encrypted and unencrypted message formats
-    String? senderId, senderName, message, conversationId;
-
-    // IMPORTANT FIX: Handle iOS message notifications with different structures
-    // First check if this is an iOS notification with aps structure
-    if (data.containsKey('aps')) {
-      print(
-          '🔒 SecureNotificationService: 🔴 iOS notification detected with aps structure');
-    }
-
-    // Handle both boolean and string encrypted values
-    final encryptedValue = data['encrypted'];
-    final isEncrypted = encryptedValue == true ||
-        encryptedValue == 'true' ||
-        encryptedValue == '1' ||
-        encryptedValue == 1;
-
-    if (isEncrypted) {
-      // Encrypted message format - data is in the 'data' field
-      final encryptedData = data['data'] as String?;
-      if (encryptedData != null) {
-        // For now, assume the encrypted data contains the message directly
-        // In a real implementation, this would be decrypted
-        message = encryptedData;
-        senderId = data['senderId'] as String?;
-        senderName = data['senderName'] as String?;
-        conversationId = data['conversationId'] as String?;
-
-        print(
-            '🔒 SecureNotificationService: 🔴 Encrypted message parsed: $message from $senderName');
-      }
-    } else {
-      // Unencrypted message format
-      senderId = data['senderId'] as String?;
-      senderName = data['senderName'] as String?;
-      message = data['message'] as String?;
-      conversationId = data['conversationId'] as String?;
-
-      print(
-          '🔒 SecureNotificationService: 🔴 Unencrypted message parsed: $message from $senderName');
-    }
-
-    // Check for snake_case field names in the decrypted data
-    if (senderId == null && data.containsKey('sender_id')) {
-      senderId = data['sender_id'] as String?;
-      print(
-          '🔒 SecureNotificationService: 🔴 Using snake_case sender_id: $senderId');
-    }
-
-    if (senderName == null && data.containsKey('sender_name')) {
-      senderName = data['sender_name'] as String?;
-      print(
-          '🔒 SecureNotificationService: 🔴 Using snake_case sender_name: $senderName');
-    }
-
-    if (conversationId == null && data.containsKey('conversation_id')) {
-      conversationId = data['conversation_id'] as String?;
-      print(
-          '🔒 SecureNotificationService: 🔴 Using snake_case conversation_id: $conversationId');
-    }
-
-    // IMPORTANT FIX: Handle iOS notifications that might have a different structure
-    if (senderId == null || senderName == null || message == null) {
-      print(
-          '🔒 SecureNotificationService: ⚠️ Missing fields in message notification data');
-      print(
-          '🔒 SecureNotificationService: senderId: $senderId, senderName: $senderName, message: $message');
-
-      // Try to extract data from iOS notification structure
-      if (data.containsKey('aps')) {
-        print(
-            '🔒 SecureNotificationService: 🔴 Attempting to extract data from iOS notification structure');
-
-        // Try to get sender ID and name from other fields
-        if (senderId == null) {
-          senderId =
-              data['senderId'] as String? ?? data['sender_id'] as String?;
-          print(
-              '🔒 SecureNotificationService: 🔴 Extracted senderId: $senderId');
-        }
-
-        if (senderName == null) {
-          senderName =
-              data['senderName'] as String? ?? data['sender_name'] as String?;
-          print(
-              '🔒 SecureNotificationService: 🔴 Extracted senderName: $senderName');
-        }
-
-        if (message == null) {
-          // Try to get message from data field
-          if (data.containsKey('data')) {
-            final dataField = data['data'];
-            if (dataField is String) {
-              message = dataField;
-              print(
-                  '🔒 SecureNotificationService: 🔴 Extracted message from data field: $message');
-            } else if (dataField is Map) {
-              message = dataField['text'] as String? ??
-                  dataField['message'] as String?;
-              print(
-                  '🔒 SecureNotificationService: 🔴 Extracted message from data map: $message');
-            }
-          }
-        }
-      }
-
-      // If still missing required fields, return
-      if (senderId == null || senderName == null || message == null) {
-        print(
-            '🔒 SecureNotificationService: ❌ Invalid message notification data - missing required fields');
-        print(
-            '🔒 SecureNotificationService: senderId: $senderId, senderName: $senderName, message: $message');
-        return;
-      }
-    }
-
-    print(
-        '🔒 SecureNotificationService: Processing message from $senderName: $message');
-
-    // CRITICAL FIX: Don't show local notifications for messages from the current user
-    // This prevents the infinite notification loop
-    final currentUserId = SeSessionService().currentSessionId;
-    if (currentUserId != null && senderId == currentUserId) {
-      print(
-          '🔒 SecureNotificationService: ℹ️ Skipping local notification for message from self');
-      return;
-    }
-
-    // Check if sender is blocked
-    if (currentUserId != null) {
-      try {
-        // Check database first for blocking status
-        final messageStorageService = MessageStorageService.instance;
-        final conversations =
-            await messageStorageService.getUserConversations(currentUserId);
-
-        // Find conversation with this sender
-        final conversation = conversations.firstWhere(
-          (conv) => conv.getOtherParticipantId(currentUserId) == senderId,
-          orElse: () => throw Exception('Conversation not found'),
-        );
-
-        if (conversation.isBlocked == true) {
-          print(
-              '🔒 SecureNotificationService: Message from blocked user ignored: $senderName');
-          return; // Ignore message from blocked user
-        }
-      } catch (e) {
-        print(
-            '🔒 SecureNotificationService: Error checking database for blocking status: $e');
-        // Fallback to SharedPreferences if database fails
-        try {
-          final prefsService = SeSharedPreferenceService();
-          final chatsJson = await prefsService.getJsonList('chats') ?? [];
-
-          // Find chat with this sender
-          for (final chatJson in chatsJson) {
-            try {
-              final chat = Chat.fromJson(chatJson);
-              final otherUserId = chat.getOtherUserId(currentUserId);
-
-              if (otherUserId == senderId && chat.getBlockedStatus()) {
-                print(
-                    '🔒 SecureNotificationService: Message from blocked user ignored: $senderName');
-                return; // Ignore message from blocked user
-              }
-            } catch (e) {
-              print(
-                  '🔒 SecureNotificationService: Error parsing chat for blocking check: $e');
-            }
-          }
-        } catch (fallbackError) {
-          print(
-              '🔒 SecureNotificationService: Error in fallback blocking check: $fallbackError');
-        }
-      }
-    }
-
-    // Show local notification
-    await showLocalNotification(
-      title: 'New Message',
-      body: 'You have received a new message',
-      type: 'message',
-      data: data,
-    );
-
-    // Save notification to SharedPreferences
-    await _saveNotificationToSharedPrefs(
-      id: 'message_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'New Message',
-      body: 'You have received a new message',
-      type: 'message',
-      data: data,
-      timestamp: DateTime.now(),
-    );
-
-    // Trigger indicator for new chat message
-    IndicatorService().setNewChat();
-
-    // Send delivery receipt back to sender
-    try {
-      // Check if sender is not the current user
-      final currentUserId = SeSessionService().currentSessionId;
-      if (senderId == currentUserId) {
-        print(
-            '🔒 SecureNotificationService: ℹ️ Skipping delivery receipt to self');
-      } else {
-        final airNotifier = AirNotifierService.instance;
-
-        // Use the message_id as the messageId parameter, not the conversationId
-        final messageId = data['message_id'] as String? ??
-            'msg_${DateTime.now().millisecondsSinceEpoch}';
-
-        final success = await airNotifier.sendMessageDeliveryStatus(
-          recipientId: senderId,
-          messageId: messageId,
-          status: 'delivered',
-          conversationId: conversationId ??
-              'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
-        );
-
-        if (success) {
-          print(
-              '🔒 SecureNotificationService: ✅ Delivery receipt sent to sender: $senderId');
-        } else {
-          print(
-              '🔒 SecureNotificationService: ⚠️ Failed to send delivery receipt');
-        }
-      }
-    } catch (e) {
-      print(
-          '🔒 SecureNotificationService: ❌ Error sending delivery receipt: $e');
-    }
-
-    // Create a Message object and save it to the database
-    try {
-      final messageStorageService = MessageStorageService.instance;
-      final currentUserId = SeSessionService().currentSessionId ?? '';
-
-      // Generate a unique message ID
-      final messageId = data['messageId'] as String? ??
-          data['message_id'] as String? ??
-          'msg_${DateTime.now().millisecondsSinceEpoch}';
-      final messageText =
-          message; // Store the message text in a separate variable to avoid naming conflict
-
-      // Create Message object using the Message constructor
-      final messageObj = chat_message.Message(
-        id: messageId,
-        conversationId: conversationId ??
-            'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
-        senderId: senderId,
-        recipientId: currentUserId,
-        type: chat_message.MessageType.text,
-        content: {'text': messageText},
-        status: chat_message.MessageStatus.delivered,
-      );
-
-      // Save message to database
-      if (messageObj != null) {
-        await messageStorageService.saveMessage(messageObj);
-        print(
-            '🔒 SecureNotificationService: ✅ Message saved to database: $messageId');
-
-        // Try to route to active ChatProvider first (for chat screen updates)
-        try {
-          // Note: ChatProvider.handleIncomingMessage is not implemented yet
-          // For now, we'll just log that we would route to it
-          print(
-              '🔒 SecureNotificationService: ℹ️ Would route message to ChatProvider (method not implemented yet)');
-        } catch (e) {
-          print(
-              '🔒 SecureNotificationService: ⚠️ Failed to route to ChatProvider: $e');
-        }
-
-        // ALWAYS trigger callback for UI updates - this will route to ChatListProvider
-        // This ensures the chat list is updated regardless of whether the chat screen is active
-        print(
-            '🔒 SecureNotificationService: 🔄 Triggering message received callback for ChatListProvider');
-        // Pass the conversation ID and message ID to ensure correct routing
-        _onMessageReceived?.call(
-            senderId,
-            senderName,
-            message,
-            conversationId ??
-                'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
-            messageId);
-      }
-    } catch (e) {
-      print(
-          '🔒 SecureNotificationService: ❌ Error saving message to database: $e');
-    }
-
-    print(
-        '🔒 SecureNotificationService: ✅ Message notification handled successfully');
-  }
-
   /// Handle typing indicator notification
   Future<void> _handleTypingIndicatorNotification(
       Map<String, dynamic> data) async {
@@ -1975,7 +1682,7 @@ class SecureNotificationService {
         senderName,
         message,
         conversationId ??
-            'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+            'chat_${senderId}_${SeSessionService().currentSessionId ?? ''}',
         messageId,
       );
 
@@ -2179,6 +1886,14 @@ class SecureNotificationService {
     print('🔒 SecureNotificationService: ✅ Typing indicator callback set');
   }
 
+  /// Set online status update callback
+  void setOnOnlineStatusUpdate(
+    Function(String senderId, bool isOnline, String? lastSeen) callback,
+  ) {
+    _onOnlineStatusUpdate = callback;
+    print('🔒 SecureNotificationService: ✅ Online status update callback set');
+  }
+
   /// Set message status update callback
   void setOnMessageStatusUpdate(
     Function(String senderId, String messageId, String status) callback,
@@ -2193,6 +1908,16 @@ class SecureNotificationService {
   ) {
     _onConversationCreated = callback;
     print('🔒 SecureNotificationService: ✅ Conversation created callback set');
+  }
+
+  /// Set chat message received callback for real-time updates
+  void setOnChatMessageReceived(
+    Function(String senderId, String senderName, String message,
+            String conversationId, String messageId)
+        callback,
+  ) {
+    _onChatMessageReceived = callback;
+    print('🔒 SecureNotificationService: ✅ Chat message received callback set');
   }
 
   /// Set key exchange request received callback
@@ -2975,6 +2700,13 @@ class SecureNotificationService {
         return;
       }
 
+      // Check if this key exchange has already been processed
+      if (await _isKeyExchangeAlreadyProcessed(requestId)) {
+        print(
+            '🔒 SecureNotificationService: ℹ️ Key exchange $requestId already processed, skipping duplicate');
+        return;
+      }
+
       // Handle timestamp conversion safely
       DateTime timestamp;
       if (timestampRaw is int) {
@@ -3032,6 +2764,21 @@ class SecureNotificationService {
           '🔒 SecureNotificationService: ❌ Error processing key exchange accepted: $e');
       print(
           '🔒 SecureNotificationService: Error stack trace: ${StackTrace.current}');
+    }
+  }
+
+  /// Check if key exchange has already been processed
+  Future<bool> _isKeyExchangeAlreadyProcessed(String requestId) async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+      final acceptedExchanges =
+          await prefsService.getJson('accepted_key_exchanges') ?? {};
+
+      return acceptedExchanges.containsKey(requestId);
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error checking key exchange status: $e');
+      return false;
     }
   }
 
@@ -3164,8 +2911,52 @@ class SecureNotificationService {
   /// Handle typing indicator notification
   Future<void> handleTypingIndicatorNotification(
       Map<String, dynamic> data) async {
-    print('🔒 SecureNotificationService: Processing typing indicator: $data');
-    // TODO: Implement typing indicator handling
+    try {
+      print(
+          '🔒 SecureNotificationService: 🔔 Processing typing indicator: $data');
+
+      final senderId =
+          data['senderId'] as String? ?? data['sender_id'] as String?;
+      final isTypingRaw = data['isTyping'];
+      final isTyping = isTypingRaw is bool
+          ? isTypingRaw
+          : isTypingRaw == 1 || isTypingRaw == '1' || isTypingRaw == true;
+
+      if (senderId == null) {
+        print(
+            '🔒 SecureNotificationService: ❌ Invalid typing indicator data - missing senderId');
+        return;
+      }
+
+      // CRITICAL: Prevent sender from processing their own typing indicator
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId != null && senderId == currentUserId) {
+        print(
+            '🔒 SecureNotificationService: ⚠️ Ignoring own typing indicator from: $senderId');
+        return; // Don't process own typing indicator
+      }
+
+      print(
+          '🔒 SecureNotificationService: 🔍 Typing indicator - senderId: $senderId, isTyping: $isTyping');
+
+      // Trigger callback for external listeners (this will update the UI)
+      if (_onTypingIndicator != null) {
+        _onTypingIndicator!(senderId, isTyping);
+        print(
+            '🔒 SecureNotificationService: ✅ Typing indicator callback triggered');
+      } else {
+        print(
+            '🔒 SecureNotificationService: ⚠️ No typing indicator callback set');
+      }
+
+      // IMPORTANT: Typing indicators are completely silent - no local notifications, no vibration
+      // They are handled exclusively through the callback system for UI updates
+      print(
+          '🔒 SecureNotificationService: ✅ Typing indicator processed silently (no vibration/sound)');
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error processing typing indicator: $e');
+    }
   }
 
   /// Handle message delivery status notification
@@ -3184,58 +2975,273 @@ class SecureNotificationService {
 
   /// Handle online status update notification
   Future<void> handleOnlineStatusUpdate(Map<String, dynamic> data) async {
-    print(
-        '🔒 SecureNotificationService: Processing online status update: $data');
-    // TODO: Implement online status update handling
+    try {
+      print(
+          '🔒 SecureNotificationService: 🔔 Processing online status update: $data');
+
+      final senderId =
+          data['senderId'] as String? ?? data['sender_id'] as String?;
+      final isOnlineRaw = data['isOnline'];
+      final isOnline = isOnlineRaw is bool
+          ? isOnlineRaw
+          : isOnlineRaw == 1 || isOnlineRaw == '1' || isOnlineRaw == true;
+      final lastSeen =
+          data['lastSeen'] as String? ?? data['last_seen'] as String?;
+
+      if (senderId == null || isOnline == null) {
+        print(
+            '🔒 SecureNotificationService: ❌ Invalid online status update data - missing required fields');
+        return;
+      }
+
+      // CRITICAL: Prevent sender from processing their own online status update
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId != null && senderId == currentUserId) {
+        print(
+            '🔒 SecureNotificationService: ⚠️ Ignoring own online status update from: $senderId');
+        return; // Don't process own online status update
+      }
+
+      print(
+          '🔒 SecureNotificationService: 🔍 Online status update - senderId: $senderId, isOnline: $isOnline, lastSeen: $lastSeen');
+
+      // Trigger callback for external listeners
+      if (_onOnlineStatusUpdate != null) {
+        _onOnlineStatusUpdate!(senderId, isOnline, lastSeen);
+        print(
+            '🔒 SecureNotificationService: ✅ Online status update callback triggered');
+      } else {
+        print(
+            '🔒 SecureNotificationService: ⚠️ No online status update callback set');
+      }
+
+      print(
+          '🔒 SecureNotificationService: ✅ Online status update processed successfully');
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error processing online status update: $e');
+    }
   }
 
   /// Handle message notification
   Future<void> handleMessageNotification(Map<String, dynamic> data) async {
     print('🔒 SecureNotificationService: 🔍 Processing message data: $data');
 
-    // Extract message data
-    final senderId =
-        data['sender_id'] as String? ?? data['senderId'] as String? ?? '';
-    final senderName = data['sender_name'] as String? ??
-        data['senderName'] as String? ??
-        'Unknown';
-    final message = data['message'] as String? ?? '';
-    final conversationId =
-        data['conversation_id'] as String? ?? data['conversationId'] as String?;
-    final messageId =
-        data['message_id'] as String? ?? data['messageId'] as String?;
+    // Handle both encrypted and unencrypted message formats
+    String? senderId, senderName, message, conversationId;
 
-    if (senderId.isEmpty || message.isEmpty) {
+    // Handle both boolean and string encrypted values
+    final encryptedValue = data['encrypted'];
+    final isEncrypted = encryptedValue == true ||
+        encryptedValue == 'true' ||
+        encryptedValue == '1' ||
+        encryptedValue == 1;
+
+    if (isEncrypted) {
+      // Encrypted message format - data is in the 'data' field
+      final encryptedData = data['data'] as String?;
+      if (encryptedData != null) {
+        // For encrypted messages, we need to decrypt the data first
+        try {
+          final decryptedData =
+              await EncryptionService.decryptAesCbcPkcs7(encryptedData);
+          if (decryptedData != null && decryptedData is Map<String, dynamic>) {
+            // Extract message from decrypted data
+            message = decryptedData['text'] as String? ??
+                decryptedData['message'] as String? ??
+                encryptedData;
+            senderId =
+                data['senderId'] as String? ?? data['sender_id'] as String?;
+            senderName =
+                data['senderName'] as String? ?? data['sender_name'] as String?;
+            conversationId = data['conversationId'] as String? ??
+                data['conversation_id'] as String?;
+
+            print(
+                '🔒 SecureNotificationService: 🔐 Decrypted message: $message from $senderName');
+          } else {
+            print(
+                '🔒 SecureNotificationService: ❌ Failed to decrypt message data');
+            return;
+          }
+        } catch (e) {
+          print('🔒 SecureNotificationService: ❌ Error decrypting message: $e');
+          return;
+        }
+      }
+    } else {
+      // Unencrypted message format
+      senderId = data['senderId'] as String? ?? data['sender_id'] as String?;
+      senderName =
+          data['senderName'] as String? ?? data['sender_name'] as String?;
+      message = data['message'] as String? ?? data['text'] as String?;
+      conversationId = data['conversationId'] as String? ??
+          data['conversation_id'] as String?;
+    }
+
+    // Check for snake_case field names in the decrypted data
+    if (senderId == null && data.containsKey('sender_id')) {
+      senderId = data['sender_id'] as String?;
+    }
+
+    if (senderName == null && data.containsKey('sender_name')) {
+      senderName = data['sender_name'] as String?;
+    }
+
+    if (conversationId == null && data.containsKey('conversation_id')) {
+      conversationId = data['conversation_id'] as String?;
+    }
+
+    // Validate required fields
+    if (senderId == null || senderName == null || message == null) {
       print(
           '🔒 SecureNotificationService: ❌ Invalid message notification data - missing required fields');
+      print(
+          '🔒 SecureNotificationService: senderId: $senderId, senderName: $senderName, message: $message');
       return;
     }
 
     print(
         '🔒 SecureNotificationService: Processing message from $senderName: $message');
 
-    // Show local notification
-    await showLocalNotification(
-      title: 'New Message',
-      body: 'You have received a new message',
-      type: 'message',
-      data: data,
-    );
+    // Create a Message object and save it to the database
+    try {
+      final messageStorageService = MessageStorageService.instance;
+      final currentUserId = SeSessionService().currentSessionId ?? '';
 
-    // Trigger message received callback
-    if (_onMessageReceived != null) {
-      _onMessageReceived!(
-        senderId,
-        senderName,
-        message,
-        conversationId ??
-            'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
-        messageId,
+      // Generate a unique message ID
+      final messageId = data['messageId'] as String? ??
+          data['message_id'] as String? ??
+          'msg_${DateTime.now().millisecondsSinceEpoch}';
+
+      // CRITICAL: Conversations must exist before messages can be processed
+      // This ensures data integrity and prevents orphaned messages
+      String finalConversationId = conversationId ?? '';
+
+      if (finalConversationId.isEmpty) {
+        // Try to find existing conversation between these users
+        try {
+          final messageStorageService = MessageStorageService.instance;
+          final existingConversations =
+              await messageStorageService.getUserConversations(currentUserId);
+
+          // Look for conversation with this sender
+          final existingConversation = existingConversations.firstWhere(
+            (conv) =>
+                conv.participant1Id == senderId ||
+                conv.participant2Id == senderId,
+            orElse: () => throw Exception('No existing conversation found'),
+          );
+
+          finalConversationId = existingConversation.id;
+          print(
+              '🔒 SecureNotificationService: ✅ Found existing conversation: $finalConversationId');
+        } catch (e) {
+          // CRITICAL: If no conversation exists, we cannot process the message
+          // This indicates a system integrity issue that must be resolved
+          print(
+              '🔒 SecureNotificationService: ❌ CRITICAL: No existing conversation found for sender: $senderId');
+          print(
+              '🔒 SecureNotificationService: ❌ This message cannot be processed - conversation must exist first');
+          print(
+              '🔒 SecureNotificationService: ❌ Message processing aborted to maintain data integrity');
+          return; // Abort message processing
+        }
+      } else {
+        // Verify that the provided conversation ID matches an existing conversation
+        try {
+          final messageStorageService = MessageStorageService.instance;
+          final existingConversations =
+              await messageStorageService.getUserConversations(currentUserId);
+
+          final conversationExists = existingConversations.any((conv) =>
+              conv.id == finalConversationId &&
+              (conv.participant1Id == senderId ||
+                  conv.participant2Id == senderId));
+
+          if (!conversationExists) {
+            print(
+                '🔒 SecureNotificationService: ❌ CRITICAL: Provided conversation ID does not match any existing conversation');
+            print(
+                '🔒 SecureNotificationService: ❌ Provided ID: $finalConversationId, Sender: $senderId');
+            print(
+                '🔒 SecureNotificationService: ❌ Message processing aborted to maintain data integrity');
+            return; // Abort message processing
+          }
+
+          print(
+              '🔒 SecureNotificationService: ✅ Conversation ID verified: $finalConversationId');
+        } catch (e) {
+          print(
+              '🔒 SecureNotificationService: ❌ Error verifying conversation ID: $e');
+          print('🔒 SecureNotificationService: ❌ Message processing aborted');
+          return; // Abort message processing
+        }
+      }
+
+      // Create the message object with clear ownership tracking
+      final messageObj = chat_message.Message(
+        id: messageId,
+        conversationId: finalConversationId,
+        senderId: senderId, // Who sent the message
+        recipientId: currentUserId, // Who received the message
+        type: chat_message.MessageType.text,
+        content: {'text': message},
+        status: chat_message.MessageStatus.delivered,
+        timestamp: DateTime.now(),
+        // Add metadata to distinguish message ownership
+        metadata: {
+          'isFromCurrentUser': false, // This is a received message
+          'messageDirection': 'incoming',
+          'processedAt': DateTime.now().toIso8601String(),
+        },
       );
-    }
 
-    print(
-        '🔒 SecureNotificationService: ✅ Message notification handled successfully');
+      // Save message to database
+      await messageStorageService.saveMessage(messageObj);
+      print(
+          '🔒 SecureNotificationService: ✅ Message saved to database: $messageId');
+
+      // Show local notification
+      await showLocalNotification(
+        title: 'New Message',
+        body: 'You have received a new message',
+        type: 'message',
+        data: data,
+      );
+
+      // Route message to ChatListProvider for UI updates (single path to avoid duplication)
+      if (_onMessageReceived != null) {
+        _onMessageReceived!(
+          senderId,
+          senderName,
+          message,
+          finalConversationId,
+          messageId,
+        );
+        print(
+            '🔒 SecureNotificationService: ✅ Message routed to ChatListProvider for UI updates');
+      }
+
+      // Route message to SessionChatProvider for real-time chat screen updates
+      if (_onChatMessageReceived != null) {
+        _onChatMessageReceived!(
+          senderId,
+          senderName,
+          message,
+          finalConversationId,
+          messageId,
+        );
+        print(
+            '🔒 SecureNotificationService: ✅ Message routed to SessionChatProvider for chat screen updates');
+      }
+
+      print(
+          '🔒 SecureNotificationService: ✅ Message notification handled successfully');
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error saving message to database: $e');
+    }
   }
 
   /// Handle key exchange declined notification
@@ -3453,6 +3459,32 @@ class SecureNotificationService {
         return;
       }
 
+      // Check if conversation already exists in database to prevent duplicates
+      try {
+        final messageStorageService = MessageStorageService.instance;
+        final existingConversations =
+            await messageStorageService.getUserConversations(currentUserId);
+
+        // Check if we already have a conversation with this contact
+        final existingConversation = existingConversations.firstWhere(
+          (conv) =>
+              conv.participant2Id == contactId || conv.recipientId == contactId,
+          orElse: () => throw Exception('No existing conversation found'),
+        );
+
+        if (existingConversation != null) {
+          print(
+              '🔒 SecureNotificationService: ℹ️ Conversation already exists for contact: $displayName (${existingConversation.id})');
+          print(
+              '🔒 SecureNotificationService: Skipping duplicate conversation creation');
+          return;
+        }
+      } catch (e) {
+        // No existing conversation found, proceed with creation
+        print(
+            '🔒 SecureNotificationService: No existing conversation found, proceeding with creation');
+      }
+
       // Create contact
       final contact = {
         'id': contactId,
@@ -3477,9 +3509,8 @@ class SecureNotificationService {
             '🔒 SecureNotificationService: Contact already exists: $displayName');
       }
 
-      // Create chat conversation in the database
-      final chatId =
-          'chat_${DateTime.now().millisecondsSinceEpoch}_${contactId.substring(0, 8)}';
+      // Create chat conversation in the database with consistent ID format
+      final chatId = 'chat_${contactId}_${currentUserId}';
 
       // Get current user info for chat
       final currentSession = SeSessionService().currentSession;
@@ -3836,6 +3867,32 @@ class SecureNotificationService {
       if (currentUserId == null) {
         print('🔒 SecureNotificationService: User not logged in');
         return;
+      }
+
+      // Check if conversation already exists in database to prevent duplicates
+      try {
+        final messageStorageService = MessageStorageService.instance;
+        final existingConversations =
+            await messageStorageService.getUserConversations(currentUserId);
+
+        // Check if we already have a conversation with this contact
+        final existingConversation = existingConversations.firstWhere(
+          (conv) =>
+              conv.participant2Id == contactId || conv.recipientId == contactId,
+          orElse: () => throw Exception('No existing conversation found'),
+        );
+
+        if (existingConversation != null) {
+          print(
+              '🔒 SecureNotificationService: ℹ️ Conversation already exists for contact: $displayName (${existingConversation.id})');
+          print(
+              '🔒 SecureNotificationService: Skipping duplicate conversation creation');
+          return;
+        }
+      } catch (e) {
+        // No existing conversation found, proceed with creation
+        print(
+            '🔒 SecureNotificationService: No existing conversation found, proceeding with creation');
       }
 
       // Create contact
@@ -4310,6 +4367,95 @@ class SecureNotificationService {
     } catch (e) {
       print(
           '🔄 SecureNotificationService: ❌ Error during force re-registration: $e');
+    }
+  }
+
+  /// Update existing conversations to populate missing recipient fields and fix conversation IDs
+  Future<void> _updateExistingConversations() async {
+    try {
+      print(
+          '🔒 SecureNotificationService: Updating existing conversations with missing recipient fields and fixing conversation IDs...');
+
+      final messageStorageService = MessageStorageService.instance;
+      final currentUserId = _sessionId;
+
+      if (currentUserId == null) {
+        print(
+            '🔒 SecureNotificationService: ❌ No session ID available for updating conversations');
+        return;
+      }
+
+      final conversations =
+          await messageStorageService.getUserConversations(currentUserId);
+      int updatedCount = 0;
+      int conversationIdFixedCount = 0;
+
+      for (final conversation in conversations) {
+        bool needsUpdate = false;
+        ChatConversation updatedConversation = conversation;
+
+        // Check if recipient fields are missing
+        if (conversation.recipientId == null ||
+            conversation.recipientName == null) {
+          // Determine the recipient ID (should be the other participant)
+          final recipientId = conversation.participant1Id == currentUserId
+              ? conversation.participant2Id
+              : conversation.participant1Id;
+
+          // Use displayName as fallback for recipientName
+          final recipientName = conversation.displayName ?? 'Unknown User';
+
+          // Create updated conversation
+          updatedConversation = updatedConversation.copyWith(
+            recipientId: recipientId,
+            recipientName: recipientName,
+          );
+
+          needsUpdate = true;
+          print(
+              '🔒 SecureNotificationService: ✅ Updated conversation ${conversation.id} with recipient fields');
+        }
+
+        // Check if conversation ID needs to be fixed (should follow chat_${senderId}_${currentUserId} format)
+        if (!conversation.id.startsWith('chat_')) {
+          // Determine the other participant ID
+          final otherParticipantId =
+              conversation.participant1Id == currentUserId
+                  ? conversation.participant2Id
+                  : conversation.participant1Id;
+
+          // Create the correct conversation ID format
+          final correctConversationId =
+              'chat_${otherParticipantId}_$currentUserId';
+
+          // Update the conversation ID
+          updatedConversation = updatedConversation.copyWith(
+            id: correctConversationId,
+          );
+
+          needsUpdate = true;
+          conversationIdFixedCount++;
+          print(
+              '🔒 SecureNotificationService: ✅ Fixed conversation ID from ${conversation.id} to $correctConversationId');
+        }
+
+        // Save updated conversation if any changes were made
+        if (needsUpdate) {
+          await messageStorageService.saveConversation(updatedConversation);
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        print(
+            '🔒 SecureNotificationService: ✅ Updated $updatedCount conversations (${conversationIdFixedCount} conversation IDs fixed)');
+      } else {
+        print(
+            '🔒 SecureNotificationService: ℹ️ All conversations already have correct format and recipient fields');
+      }
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error updating existing conversations: $e');
     }
   }
 }

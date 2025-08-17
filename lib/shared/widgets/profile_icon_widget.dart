@@ -398,23 +398,30 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
   Future<void> _clearAllChats() async {
     try {
-      // Show loading
+      // Show loading with informative message
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 20),
+              const Expanded(
+                child: Text(
+                  'Deleting all chats and messages...',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ],
+          ),
         ),
       );
 
-      // Clear all conversations in Session Protocol
-      // Clear conversations using SeSessionService
+      // Use the comprehensive chat deletion method from SeSessionService
       final seSessionService = SeSessionService();
-      await seSessionService.clearSessionMessages(
-          seSessionService.currentSession?.sessionId ?? '');
-
-      // Clear local storage
-      await LocalStorageService.instance.clearAllData();
+      await seSessionService.deleteAllChats();
 
       Navigator.pop(context); // Close loading dialog
 
@@ -428,7 +435,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       Navigator.pop(context); // Close loading dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Error clearing chats: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -437,22 +444,30 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
   Future<void> _deleteAccount() async {
     try {
-      // Show loading
+      // Show loading with informative message
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
+        builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
+          content: Row(
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 20),
+              const Expanded(
+                child: Text(
+                  'Deleting account and all data...',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ],
+          ),
         ),
       );
 
-      // Clear all data in Session Protocol
-      // Clear all data using SeSessionService
+      // Use the comprehensive account deletion method from SeSessionService
       final seSessionService = SeSessionService();
-      await seSessionService.deleteSession();
-
-      // Clear local storage
-      await LocalStorageService.instance.clearAllData();
+      await seSessionService.deleteAccount();
 
       Navigator.pop(context); // Close loading dialog
 
@@ -465,7 +480,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       Navigator.pop(context); // Close loading dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: $e'),
+          content: Text('Error deleting account: $e'),
           backgroundColor: Colors.red,
         ),
       );

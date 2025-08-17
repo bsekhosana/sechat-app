@@ -342,6 +342,31 @@ class MessageStorageService {
     }
   }
 
+  /// Delete ALL chat conversations and messages permanently
+  Future<void> deleteAllChats() async {
+    if (_database == null) {
+      throw Exception('Database not initialized');
+    }
+
+    try {
+      print('💾 MessageStorageService: 🗑️ Starting complete chat deletion...');
+
+      // Delete all messages first
+      final messagesDeleted = await _database!.delete('messages');
+      print('💾 MessageStorageService: ✅ Deleted $messagesDeleted messages');
+
+      // Delete all conversations
+      final conversationsDeleted = await _database!.delete('conversations');
+      print(
+          '💾 MessageStorageService: ✅ Deleted $conversationsDeleted conversations');
+
+      print('💾 MessageStorageService: 🗑️ All chats permanently deleted');
+    } catch (e) {
+      print('💾 MessageStorageService: ❌ Failed to delete all chats: $e');
+      rethrow;
+    }
+  }
+
   /// Force recreate database (for testing/debugging)
   Future<void> forceRecreateDatabase() async {
     try {

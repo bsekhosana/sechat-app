@@ -9,8 +9,8 @@ import 'dart:io' show Platform;
 // import feature providers
 import 'features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
-import 'features/chat/providers/chat_list_provider.dart';
-import 'features/chat/providers/chat_provider.dart';
+import 'features/chat/providers/optimized_chat_list_provider.dart';
+import 'features/chat/providers/optimized_session_chat_provider.dart';
 
 // import screens
 import 'features/auth/screens/welcome_screen.dart';
@@ -23,6 +23,8 @@ import 'shared/widgets/notification_permission_dialog.dart';
 
 // import services
 import 'core/services/secure_notification_service.dart';
+import 'core/services/optimized_notification_service.dart';
+import 'core/services/airnotifier_service.dart';
 import 'core/services/se_session_service.dart';
 import 'core/services/se_shared_preference_service.dart';
 import 'core/services/network_service.dart';
@@ -57,12 +59,16 @@ Future<void> main() async {
   final seSessionService = SeSessionService();
   await seSessionService.loadSession();
 
+  // Initialize optimized notification service
+  final optimizedNotificationService = OptimizedNotificationService();
+
   // Initialize notification services
   if (seSessionService.currentSession != null) {
     await seSessionService.initializeNotificationServices();
-  } else {
-    await SecureNotificationService.instance.initialize();
   }
+
+  // Set up notification callbacks for the optimized service
+  _setupOptimizedNotificationCallbacks(optimizedNotificationService);
 
   // Set up notification callbacks
   _setupSimpleNotifications();
@@ -76,11 +82,21 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         // ChangeNotifierProvider(create: (_) => SearchProvider()), // Removed search functionality
-        ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ChangeNotifierProvider(
-            create: (_) => KeyExchangeRequestProvider()..initialize()),
+        ChangeNotifierProvider(create: (_) => OptimizedSessionChatProvider()),
+        ChangeNotifierProvider(create: (_) => KeyExchangeRequestProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
-        ChangeNotifierProvider(create: (_) => ChatListProvider()..initialize()),
+        ChangeNotifierProvider(create: (_) {
+          final provider = OptimizedChatListProvider();
+          // Initialize in the next frame to avoid blocking the UI
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            provider.initialize();
+            // Set up the conversation created callback
+            OptimizedChatListProvider.setConversationCreatedCallback(() {
+              provider.refresh();
+            });
+          });
+          return provider;
+        }),
         // ChangeNotifierProvider(create: (_) => AuthProvider()), // Temporarily disabled
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
         ChangeNotifierProvider(create: (_) => LocalStorageService.instance),
@@ -90,35 +106,70 @@ Future<void> main() async {
   );
 }
 
+// Set up optimized notification callbacks
+void _setupOptimizedNotificationCallbacks(
+    OptimizedNotificationService service) {
+  // Set up callbacks for the optimized notification service
+  service.setOnMessageReceived(
+      (senderId, senderName, message, conversationId, messageId) {
+    print(
+        '🔔 Main: Message received callback from optimized service: $senderName: $message');
+  });
+
+  service.setOnTypingIndicator((senderId, isTyping) {
+    print(
+        '🔔 Main: Typing indicator from optimized service: $senderId: $isTyping');
+  });
+
+  service.setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
+    print(
+        '🔔 Main: Online status update from optimized service: $senderId: $isOnline');
+  });
+
+  service.setOnMessageStatusUpdate((senderId, messageId, status) {
+    print(
+        '🔔 Main: Message status update from optimized service: $messageId -> $status');
+  });
+
+  // Set up key exchange callbacks
+  service.setOnKeyExchangeRequestReceived((data) {
+    print(
+        '🔔 Main: Key exchange request received from optimized service: $data');
+    // This will be connected to the KeyExchangeRequestProvider in main_nav_screen
+  });
+
+  service.setOnKeyExchangeAccepted((data) {
+    print('🔔 Main: Key exchange accepted from optimized service: $data');
+  });
+
+  service.setOnKeyExchangeDeclined((data) {
+    print('🔔 Main: Key exchange declined from optimized service: $data');
+  });
+
+  service.setOnConversationCreated((conversation) {
+    print(
+        '🔔 Main: Conversation created from optimized service: ${conversation.id}');
+
+    // Notify the OptimizedChatListProvider to refresh its data
+    OptimizedChatListProvider.notifyConversationCreated();
+    print(
+        '🔔 Main: ✅ Notified OptimizedChatListProvider to refresh conversations');
+  });
+}
+
 // Simple notification setup
 void _setupSimpleNotifications() {
-  final notificationService = SecureNotificationService.instance;
+  final notificationService = OptimizedNotificationService();
 
   // Set up notification callbacks
+  // NOTE: Message handling is now done directly in SecureNotificationService
+  // to avoid duplicate processing. This callback is kept for future use if needed.
   notificationService.setOnMessageReceived(
       (senderId, senderName, message, conversationId, messageId) {
     print(
-        '🔔 Main: Message received from $senderName: $message (ID: $messageId)');
-
-    // Route message to ChatListProvider to update UI
-    try {
-      // Get the ChatListProvider instance and call handleIncomingMessage
-      final chatListProvider = Provider.of<ChatListProvider>(
-          navigatorKey.currentContext!,
-          listen: false);
-      chatListProvider.handleIncomingMessage(
-        senderId: senderId,
-        senderName: senderName,
-        message: message,
-        // Use the provided conversationId instead of generating a new one
-        conversationId: conversationId,
-        messageId: messageId,
-      );
-      print(
-          '🔔 Main: ✅ Message routed to ChatListProvider with conversationId: $conversationId, messageId: $messageId');
-    } catch (e) {
-      print('🔔 Main: ❌ Failed to handle message received: $e');
-    }
+        '🔔 Main: Message received callback (handled by SecureNotificationService)');
+    // Message is already handled by SecureNotificationService
+    // No need to route again to avoid duplication
   });
 
   notificationService.setOnTypingIndicator((senderId, isTyping) {
@@ -160,6 +211,8 @@ void _setupMethodChannels() {
 
         // Handle device token received from native platform
         try {
+          // For now, we'll use the secure notification service for device token handling
+          // as the optimized service doesn't have this method yet
           await SecureNotificationService.instance
               .handleDeviceTokenReceived(deviceToken);
           print('🔔 Main: ✅ Device token handled successfully');
@@ -192,8 +245,8 @@ void _setupMethodChannels() {
 
           print('🔔 Main: Processed notification data: $notificationData');
 
-          // Handle the notification
-          await SecureNotificationService.instance
+          // Handle the notification using optimized service
+          await OptimizedNotificationService()
               .handleNotification(notificationData);
         } catch (e) {
           print('🔔 Main: Error handling remote notification: $e');
@@ -235,13 +288,14 @@ Future<void> _sendOnlineStatusUpdate(bool isOnline) async {
         await messageStorageService.getUserConversations(currentUserId);
 
     // Send online status update to all participants
-    final notificationService = SecureNotificationService.instance;
     for (final conversation in conversations) {
       final otherParticipantId =
           conversation.getOtherParticipantId(currentUserId);
       if (otherParticipantId != null) {
-        await notificationService.sendOnlineStatusUpdate(
-            otherParticipantId, isOnline);
+        // Use AirNotifierService directly for online status updates
+        // as the optimized service doesn't have this method yet
+        await AirNotifierService.instance.sendOnlineStatusUpdate(
+            recipientId: otherParticipantId, isOnline: isOnline);
       }
     }
 
@@ -256,6 +310,8 @@ Future<void> _sendOnlineStatusUpdate(bool isOnline) async {
 void _handleNotificationEvent(dynamic event) async {
   try {
     print('🔔 Main: Processing notification event: $event');
+    print('🔔 Main: Event type: ${event.runtimeType}');
+    print('🔔 Main: Event keys: ${event is Map ? event.keys : 'Not a Map'}');
 
     // Handle different argument types safely
     Map<String, dynamic> notificationData;
@@ -267,6 +323,14 @@ void _handleNotificationEvent(dynamic event) async {
           notificationData[key] = value;
         }
       });
+
+      // Add debug logging for nested data structures
+      if (notificationData.containsKey('data') &&
+          notificationData['data'] is Map) {
+        final nestedData = notificationData['data'] as Map;
+        print('🔔 Main: 🔍 Nested data found: ${nestedData.keys}');
+        print('🔔 Main: 🔍 Nested data type: ${nestedData['type']}');
+      }
     } else {
       print('🔔 Main: Event is not a Map: ${event.runtimeType}');
       return;
@@ -274,13 +338,83 @@ void _handleNotificationEvent(dynamic event) async {
 
     print('🔔 Main: Processed notification event data: $notificationData');
 
-    // Handle the notification
-    await SecureNotificationService.instance
-        .handleNotification(notificationData);
+    // CRITICAL: Add duplicate prevention for EventChannel notifications
+    // This prevents the same notification from being processed multiple times
+    print(
+        '🔔 Main: 🔍 About to generate notification ID for duplicate prevention');
+    final notificationId = _generateNotificationId(notificationData);
+    print('🔔 Main: 🔍 Generated notification ID: $notificationId');
+
+    if (_processedEventNotifications.contains(notificationId)) {
+      print(
+          '🔔 Main: ⚠️ Duplicate EventChannel notification detected, skipping: $notificationId');
+      return;
+    }
+    _processedEventNotifications.add(notificationId);
+    print(
+        '🔔 Main: 🔍 Added notification ID to processed set: $notificationId');
+
+    // Handle the notification using optimized service
+    print(
+        '🔔 Main: 🔍 About to call OptimizedNotificationService.handleNotification');
+    print(
+        '🔔 Main: 🔍 Final notification data being passed: $notificationData');
+    await OptimizedNotificationService().handleNotification(notificationData);
+    print(
+        '🔔 Main: 🔍 OptimizedNotificationService.handleNotification completed');
   } catch (e) {
     print('🔔 Main: Error handling notification event: $e');
     print('🔔 Main: Error stack trace: ${StackTrace.current}');
   }
+}
+
+// Track processed EventChannel notifications to prevent duplicates
+final Set<String> _processedEventNotifications = <String>{};
+
+// Generate unique notification ID for duplicate prevention
+String _generateNotificationId(Map<String, dynamic> notificationData) {
+  print(
+      '🔔 Main: 🔍 _generateNotificationId called with: ${notificationData.keys}');
+
+  // Handle both direct and nested data structures
+  String type = 'unknown';
+  String messageId = DateTime.now().millisecondsSinceEpoch.toString();
+  String senderId = 'unknown';
+
+  if (notificationData['type'] != null) {
+    // Direct structure
+    type = notificationData['type'] as String? ?? 'unknown';
+    messageId = notificationData['messageId'] as String? ??
+        notificationData['message_id'] as String? ??
+        DateTime.now().millisecondsSinceEpoch.toString();
+    senderId = notificationData['senderId'] as String? ??
+        notificationData['sender_id'] as String? ??
+        'unknown';
+    print(
+        '🔔 Main: 🔍 Using direct structure - type: $type, messageId: $messageId, senderId: $senderId');
+  } else if (notificationData['data'] != null &&
+      notificationData['data'] is Map) {
+    // Nested structure - handle Map<Object?, Object?> from native platform
+    final nestedData = notificationData['data'] as Map;
+    print('🔔 Main: 🔍 Found nested data with keys: ${nestedData.keys}');
+    type = nestedData['type'] as String? ?? 'unknown';
+    messageId = nestedData['messageId'] as String? ??
+        nestedData['message_id'] as String? ??
+        nestedData['request_id'] as String? ?? // For key exchange notifications
+        DateTime.now().millisecondsSinceEpoch.toString();
+    senderId = nestedData['senderId'] as String? ??
+        nestedData['sender_id'] as String? ??
+        nestedData['recipient_id'] as String? ?? // For key exchange accepted
+        'unknown';
+    print(
+        '🔔 Main: 🔍 Using nested structure - type: $type, messageId: $messageId, senderId: $senderId');
+  } else {
+    print('🔔 Main: 🔍 No type or nested data found, using defaults');
+  }
+
+  final result = '${type}_${senderId}_$messageId';
+  print('🔔 Main: 🔍 Generated notification ID: $result');
+  return result;
 }
 
 class SeChatApp extends StatelessWidget {

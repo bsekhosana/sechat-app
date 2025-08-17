@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/chat_provider.dart';
+
 import '../models/message.dart';
 import '../models/chat_conversation.dart';
 

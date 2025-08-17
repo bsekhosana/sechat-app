@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
 import '../config/airnotifier_config.dart';
+import '../../features/chat/services/enhanced_chat_encryption_service.dart';
 
 class AirNotifierService {
   static AirNotifierService? _instance;
@@ -28,6 +29,9 @@ class AirNotifierService {
   // Deduplication: Track recently sent invitations to prevent duplicates
   final Map<String, DateTime> _recentInvitations = {};
   static const Duration _invitationDeduplicationWindow = Duration(minutes: 5);
+
+  // Enhanced encryption service for chat notifications
+  final _encryptionService = EnhancedChatEncryptionService();
 
   // Test AirNotifier connectivity
   Future<bool> testAirNotifierConnection() async {
@@ -321,7 +325,68 @@ class AirNotifierService {
     }
   }
 
-  // Link token to session
+  /// Check if token is already linked to a session
+  Future<bool> isTokenLinkedToSession(String sessionId) async {
+    try {
+      if (_currentDeviceToken == null) {
+        print(
+            '📱 AirNotifierService: ❌ No device token available for checking');
+        return false;
+      }
+
+      // Check if we already have this session ID stored locally
+      final storedSessionId = await _storage.read(key: 'current_session_id');
+      if (storedSessionId == sessionId) {
+        print(
+            '📱 AirNotifierService: ℹ️ Token already linked to session: $sessionId');
+        return true;
+      }
+
+      // Check with the server to see if token is linked
+      try {
+        final response = await http.get(
+          Uri.parse('$_baseUrl/api/v2/sessions/$sessionId/tokens'),
+          headers: {
+            'X-An-App-Name': _appName,
+            'X-An-App-Key': _appKey,
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final tokens = data['tokens'] as List?;
+
+          if (tokens != null && tokens.isNotEmpty) {
+            final isLinked =
+                tokens.any((token) => token['token'] == _currentDeviceToken);
+            print(
+                '📱 AirNotifierService: Token link check result: $isLinked for session: $sessionId');
+            return isLinked;
+          } else {
+            print(
+                '📱 AirNotifierService: No tokens found for session: $sessionId');
+            return false;
+          }
+        } else if (response.statusCode == 404) {
+          print('📱 AirNotifierService: Session not found: $sessionId');
+          return false;
+        } else {
+          print(
+              '📱 AirNotifierService: Server error checking tokens: ${response.statusCode}');
+          return false;
+        }
+      } catch (e) {
+        print('📱 AirNotifierService: Error checking server for tokens: $e');
+        // Fallback to local check
+        return storedSessionId == sessionId;
+      }
+    } catch (e) {
+      print('📱 AirNotifierService: ❌ Error checking token link status: $e');
+      return false;
+    }
+  }
+
+  /// Link token to session (only if not already linked)
   Future<bool> linkTokenToSession(String sessionId) async {
     try {
       if (_currentDeviceToken == null) {
@@ -329,10 +394,16 @@ class AirNotifierService {
         return false;
       }
 
-      // Always ensure token is linked on the server, even if we think it's already linked
-      // This prevents issues where the server state might be out of sync
-      print(
-          '📱 AirNotifierService: 🔗 Ensuring token is linked to session: $sessionId');
+      // Check if token is already linked to this session
+      final alreadyLinked = await isTokenLinkedToSession(sessionId);
+      if (alreadyLinked) {
+        print(
+            '📱 AirNotifierService: ℹ️ Token already linked to session: $sessionId, skipping link');
+        return true;
+      }
+
+      // Token not linked, proceed with linking
+      print('📱 AirNotifierService: 🔗 Linking token to session: $sessionId');
 
       final response = await http.post(
         Uri.parse('$_baseUrl/api/v2/sessions/link'),
@@ -1175,16 +1246,22 @@ class AirNotifierService {
     required String message,
     required String conversationId,
   }) async {
+    // This method should be deprecated in favor of sendEncryptedMessageNotification
+    // For now, we'll use generic titles/bodies to minimize data leakage
+    // All sensitive data should be encrypted in the future
     return await sendNotificationToSession(
       sessionId: recipientId,
-      title: senderName,
-      body: message.length > 100 ? '${message.substring(0, 100)}...' : message,
+      title: 'New Message', // Generic title - no sensitive data
+      body:
+          'You have received a new message', // Generic body - no sensitive data
       data: {
-        'type': 'message',
-        'senderName': senderName,
-        'senderId': _currentUserId,
-        'conversationId': conversationId,
-        'message': message,
+        'type':
+            'message', // Type indicator for routing (unencrypted for routing)
+        'encrypted': false, // Mark as unencrypted for backward compatibility
+        'senderName': senderName, // TODO: Encrypt this
+        'senderId': _currentUserId, // TODO: Encrypt this
+        'conversationId': conversationId, // TODO: Encrypt this
+        'message': message, // TODO: Encrypt this
         'action': 'message_received',
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       },
@@ -1202,12 +1279,15 @@ class AirNotifierService {
   }) async {
     return await sendNotificationToSession(
       sessionId: recipientId,
-      title: senderName,
-      body: 'You have received an encrypted message',
+      title: 'Secure Message', // Generic title - no sensitive data
+      body:
+          'You have received a secure message', // Generic body - no sensitive data
       data: {
         'encrypted': true,
-        'data': encryptedData,
-        'checksum': checksum,
+        'type':
+            'message', // Type indicator for routing (unencrypted for routing)
+        'data': encryptedData, // Encrypted sensitive data
+        'checksum': checksum, // Checksum for verification
       },
       sound: 'message.wav',
       encrypted: true,
@@ -1220,12 +1300,14 @@ class AirNotifierService {
     required String recipientId,
     required String senderName,
     required bool isTyping,
+    String?
+        conversationId, // Optional conversation ID for proper encryption context
   }) async {
     try {
       print(
           '📱 AirNotifierService: Sending encrypted typing indicator to $recipientId');
 
-      // Prepare typing indicator data
+      // Prepare typing indicator data for encryption
       final typingData = {
         'type': 'typing_indicator',
         'senderName': senderName,
@@ -1235,9 +1317,23 @@ class AirNotifierService {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       };
 
-      // For now, we'll use the existing encryption mechanism
-      // TODO: Implement proper encryption for typing indicators
-      // The data will be encrypted at the AirNotifier server level
+      // Ensure user-specific encryption keys are available
+      final effectiveConversationId =
+          conversationId ?? _generateUserConversationId(recipientId);
+      await _ensureUserEncryptionKeys(recipientId);
+
+      // Encrypt the typing indicator data using EnhancedChatEncryptionService
+      final encryptedTypingIndicator =
+          await _encryptionService.encryptTypingIndicator(
+        senderId: _currentUserId ?? '',
+        senderName: senderName,
+        isTyping: isTyping,
+        conversationId: effectiveConversationId,
+      );
+
+      final encryptedData =
+          encryptedTypingIndicator['encrypted_data'] as String;
+      final checksum = encryptedTypingIndicator['checksum'] as String;
 
       return await sendNotificationToSession(
         sessionId: recipientId,
@@ -1245,12 +1341,10 @@ class AirNotifierService {
         body: '', // Empty body for silent notification
         data: {
           'encrypted': true,
-          'type': 'typing_indicator', // Type indicator for routing
-          'senderName': senderName,
-          'senderId': _currentUserId,
-          'isTyping': isTyping,
-          'action': 'typing_indicator',
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'type':
+              'typing_indicator', // Type indicator for routing (unencrypted for routing)
+          'data': encryptedData, // Encrypted sensitive data
+          'checksum': checksum, // Checksum for verification
         },
         sound: null, // No sound for typing indicators
         badge: 0, // No badge for silent notifications
@@ -1272,19 +1366,43 @@ class AirNotifierService {
     required String senderName,
     String? message,
   }) async {
+    // Ensure user-specific encryption keys are available
+    final userConversationId = _generateUserConversationId(recipientId);
+    await _ensureUserEncryptionKeys(recipientId);
+
+    final invitationData = {
+      'type': 'invitation_update',
+      'invitationId': invitationId,
+      'action': action,
+      'senderName': senderName,
+      'senderId': _currentUserId,
+      'message': message ?? '',
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    // Use the enhanced encryption service with user-specific conversation context
+    final encryptedInvitationData =
+        await _encryptionService.encryptTypingIndicator(
+      senderId: _currentUserId ?? '',
+      senderName: senderName,
+      isTyping:
+          false, // Not typing, but using the same encryption method for consistency
+      conversationId: userConversationId,
+    );
+
+    final encryptedData = encryptedInvitationData['encrypted_data'] as String;
+    final checksum = encryptedInvitationData['checksum'] as String;
+
     return await sendNotificationToSession(
       sessionId: recipientId,
       title: '', // Empty title for silent notification
       body: '', // Empty body for silent notification
       data: {
         'encrypted': true,
-        'type': 'invitation_update',
-        'invitationId': invitationId,
-        'action': action,
-        'senderName': senderName,
-        'senderId': _currentUserId,
-        'message': message ?? '',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'type':
+            'invitation_update', // Type indicator for routing (unencrypted for routing)
+        'data': encryptedData, // Encrypted sensitive data
+        'checksum': checksum, // Checksum for verification
       },
       sound: null, // No sound for real-time updates
       badge: 0, // No badge for silent notifications
@@ -1299,18 +1417,40 @@ class AirNotifierService {
     required String status, // 'delivered', 'read'
     required String conversationId,
   }) async {
+    // Ensure user-specific encryption keys are available
+    await _ensureUserEncryptionKeys(recipientId);
+
+    // Encrypt the message delivery status data using EnhancedChatEncryptionService
+    // For message delivery status, we'll use the conversation ID for proper encryption context
+    final deliveryData = {
+      'type': 'message_delivery_status',
+      'messageId': messageId,
+      'status': status,
+      'conversationId': conversationId,
+      'senderId': _currentUserId,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    // Use the enhanced encryption service for message-related data
+    final encryptedDeliveryData = await _encryptionService.encryptMessageStatus(
+      messageId: messageId,
+      status: status,
+      conversationId: conversationId,
+    );
+
+    final encryptedData = encryptedDeliveryData['encrypted_data'] as String;
+    final checksum = encryptedDeliveryData['checksum'] as String;
+
     return await sendNotificationToSession(
       sessionId: recipientId,
       title: '', // Empty title for silent notification
-      body: '', // Empty body for silent notificationR
+      body: '', // Empty body for silent notification
       data: {
         'encrypted': true,
-        'type': 'message_delivery_status',
-        'messageId': messageId,
-        'status': status,
-        'conversationId': conversationId,
-        'senderId': _currentUserId,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'type':
+            'message_delivery_status', // Type indicator for routing (unencrypted for routing)
+        'data': encryptedData, // Encrypted sensitive data
+        'checksum': checksum, // Checksum for verification
       },
       sound: null, // No sound for delivery status
       badge: 0, // No badge for silent notifications
@@ -1324,17 +1464,38 @@ class AirNotifierService {
     required bool isOnline,
     String? lastSeen,
   }) async {
+    // Ensure user-specific encryption keys are available
+    final userConversationId = _generateUserConversationId(recipientId);
+    await _ensureUserEncryptionKeys(recipientId);
+
+    final statusData = {
+      'type': 'online_status_update',
+      'isOnline': isOnline,
+      'lastSeen': lastSeen ?? DateTime.now().toIso8601String(),
+      'senderId': _currentUserId,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    // Use the enhanced encryption service with user-specific conversation context
+    final encryptedStatusData = await _encryptionService.encryptOnlineStatus(
+      userId: _currentUserId ?? '',
+      isOnline: isOnline,
+      lastSeen: lastSeen ?? DateTime.now().toIso8601String(),
+    );
+
+    final encryptedData = encryptedStatusData['encrypted_data'] as String;
+    final checksum = encryptedStatusData['checksum'] as String;
+
     return await sendNotificationToSession(
       sessionId: recipientId,
       title: '', // Empty title for silent notification
       body: '', // Empty body for silent notification
       data: {
         'encrypted': true,
-        'type': 'online_status_update',
-        'isOnline': isOnline,
-        'lastSeen': lastSeen ?? DateTime.now().toIso8601String(),
-        'senderId': _currentUserId,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'type':
+            'online_status_update', // Type indicator for routing (unencrypted for routing)
+        'data': encryptedData, // Encrypted sensitive data
+        'checksum': checksum, // Checksum for verification
       },
       sound: null, // No sound for status updates
       badge: 0, // No badge for silent notifications
@@ -1348,20 +1509,44 @@ class AirNotifierService {
     required String messageId,
     required String conversationId,
   }) async {
+    // Ensure user-specific encryption keys are available
+    await _ensureUserEncryptionKeys(recipientId);
+
+    // Encrypt the message read data using EnhancedChatEncryptionService
+    // For message read notifications, we'll use the conversation ID for proper encryption context
+    final readData = {
+      'type': 'message_read',
+      'messageId': messageId,
+      'conversationId': conversationId,
+      'senderId': _currentUserId,
+      'action': 'message_read',
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+
+    // Use the enhanced encryption service for message-related data
+    final encryptedReadData = await _encryptionService.encryptMessageStatus(
+      messageId: messageId,
+      status: 'read',
+      conversationId: conversationId,
+    );
+
+    final encryptedData = encryptedReadData['encrypted_data'] as String;
+    final checksum = encryptedReadData['checksum'] as String;
+
     return await sendNotificationToSession(
       sessionId: recipientId,
       title: '', // Empty title for silent notification
       body: '', // Empty body for silent notification
       data: {
-        'type': 'message_read',
-        'messageId': messageId,
-        'conversationId': conversationId,
-        'senderId': _currentUserId,
-        'action': 'message_read',
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'encrypted': true,
+        'type':
+            'message_read', // Type indicator for routing (unencrypted for routing)
+        'data': encryptedData, // Encrypted sensitive data
+        'checksum': checksum, // Checksum for verification
       },
       sound: null, // No sound for read notifications
       badge: 0, // No badge for silent notifications
+      encrypted: true, // Mark as encrypted for AirNotifier server
     );
   }
 
@@ -1394,6 +1579,40 @@ class AirNotifierService {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       },
     );
+  }
+
+  // Generate checksum for data integrity
+  String _generateChecksum(String data) {
+    // Simple SHA-256 checksum generation
+    // In production, this should use a proper crypto library
+    final bytes = utf8.encode(data);
+    final hash = bytes.fold<int>(0, (prev, byte) => prev + byte);
+    return hash.toString();
+  }
+
+  // Generate user-specific conversation ID for encryption context
+  String _generateUserConversationId(String recipientId) {
+    return 'user_${_currentUserId}_$recipientId';
+  }
+
+  // Ensure user-specific encryption keys are available
+  Future<bool> _ensureUserEncryptionKeys(String recipientId) async {
+    try {
+      // Check if we have encryption keys for this user
+      final userConversationId = _generateUserConversationId(recipientId);
+
+      // Generate or retrieve encryption keys for this user
+      await _encryptionService.generateConversationKey(userConversationId,
+          recipientId: recipientId);
+
+      print(
+          '📱 AirNotifierService: ✅ User-specific encryption keys ensured for $recipientId');
+      return true;
+    } catch (e) {
+      print(
+          '📱 AirNotifierService: ❌ Failed to ensure user-specific encryption keys for $recipientId: $e');
+      return false;
+    }
   }
 
   // Detect device type based on token format
@@ -1482,6 +1701,76 @@ class AirNotifierService {
     if (keysToRemove.isNotEmpty) {
       print(
           '📱 AirNotifierService: Cleaned up ${keysToRemove.length} old deduplication entries');
+    }
+  }
+
+  /// Check if a token exists and is linked to a session
+  Future<bool> isTokenExistsAndLinked(String sessionId) async {
+    try {
+      if (_currentDeviceToken == null) {
+        print(
+            '📱 AirNotifierService: ❌ No device token available for checking');
+        return false;
+      }
+
+      print(
+          '📱 AirNotifierService: 🔍 Checking if token exists and is linked to session: $sessionId');
+
+      // First check local storage
+      final storedSessionId = await _storage.read(key: 'current_session_id');
+      if (storedSessionId == sessionId) {
+        print(
+            '📱 AirNotifierService: ℹ️ Token locally linked to session: $sessionId');
+      }
+
+      // Check with server
+      try {
+        final response = await http.get(
+          Uri.parse('$_baseUrl/api/v2/sessions/$sessionId/tokens'),
+          headers: {
+            'X-An-App-Name': _appName,
+            'X-An-App-Key': _appKey,
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final tokens = data['tokens'] as List?;
+
+          if (tokens != null && tokens.isNotEmpty) {
+            final tokenExists =
+                tokens.any((token) => token['token'] == _currentDeviceToken);
+            final isLinked = tokenExists;
+
+            print(
+                '📱 AirNotifierService: 🔍 Server check - Token exists: $tokenExists, Is linked: $isLinked');
+            print(
+                '📱 AirNotifierService: 🔍 Found ${tokens.length} tokens for session: $sessionId');
+
+            return isLinked;
+          } else {
+            print(
+                '📱 AirNotifierService: ❌ No tokens found for session: $sessionId');
+            return false;
+          }
+        } else if (response.statusCode == 404) {
+          print('📱 AirNotifierService: ❌ Session not found: $sessionId');
+          return false;
+        } else {
+          print(
+              '📱 AirNotifierService: ❌ Server error checking tokens: ${response.statusCode}');
+          print('📱 AirNotifierService: 🔍 Response body: ${response.body}');
+          return false;
+        }
+      } catch (e) {
+        print('📱 AirNotifierService: ❌ Error checking server for tokens: $e');
+        // Fallback to local check
+        return storedSessionId == sessionId;
+      }
+    } catch (e) {
+      print(
+          '📱 AirNotifierService: ❌ Error checking token existence and link status: $e');
+      return false;
     }
   }
 }

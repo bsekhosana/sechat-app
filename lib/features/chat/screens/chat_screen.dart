@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/message.dart';
-import '../providers/chat_provider.dart';
+import '../providers/session_chat_provider.dart';
 import '../providers/chat_list_provider.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input_area.dart';
@@ -75,7 +75,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _initializeChat() {
     // Initialize the chat provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final chatProvider = context.read<ChatProvider>();
+      final chatProvider = context.read<SessionChatProvider>();
 
       // Initialize the chat provider
       chatProvider
@@ -136,10 +136,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   /// Build the header section
   Widget _buildHeader() {
-    return Consumer<ChatProvider>(
+    return Consumer<SessionChatProvider>(
       builder: (context, provider, child) {
         return ChatHeader(
-          recipientName: widget.recipientName,
+          recipientName: provider.currentRecipientName ?? widget.recipientName,
           isOnline: provider.isRecipientOnline,
           lastSeen: provider.recipientLastSeen,
           onBackPressed: () => Navigator.pop(context),
@@ -151,7 +151,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   /// Build the messages list
   Widget _buildMessagesList() {
-    return Consumer<ChatProvider>(
+    return Consumer<SessionChatProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading) {
           return _buildLoadingState();
@@ -224,7 +224,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   /// Build messages list content
-  Widget _buildMessagesListContent(ChatProvider provider) {
+  Widget _buildMessagesListContent(SessionChatProvider provider) {
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SlideTransition(
@@ -262,7 +262,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             // Typing indicator
             if (provider.isRecipientTyping)
               TypingIndicator(
-                typingUserName: 'Bruno', // TODO: Get from typing indicator data
+                typingUserName:
+                    provider.currentRecipientName ?? widget.recipientName,
               ),
           ],
         ),
@@ -272,7 +273,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   /// Build input area
   Widget _buildInputArea() {
-    return Consumer<ChatProvider>(
+    return Consumer<SessionChatProvider>(
       builder: (context, provider, child) {
         return ChatInputArea(
           onTextMessageSent: (text) => _sendTextMessage(text, provider),
@@ -283,7 +284,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   /// Send text message
-  Future<void> _sendTextMessage(String text, ChatProvider provider) async {
+  Future<void> _sendTextMessage(
+      String text, SessionChatProvider provider) async {
     if (text.trim().isEmpty) return;
 
     try {
@@ -296,7 +298,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   /// Update typing indicator
-  void _updateTypingIndicator(bool isTyping, ChatProvider provider) {
+  void _updateTypingIndicator(bool isTyping, SessionChatProvider provider) {
     provider.updateTypingIndicator(isTyping);
   }
 
@@ -312,7 +314,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   /// Show chat options
-  void _showChatOptions(ChatProvider provider) {
+  void _showChatOptions(SessionChatProvider provider) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -394,7 +396,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   /// Show delete confirmation
-  void _showDeleteConfirmation(ChatProvider provider) {
+  void _showDeleteConfirmation(SessionChatProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -441,7 +443,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   /// Show message options
-  void _showMessageOptions(Message message, ChatProvider provider) {
+  void _showMessageOptions(Message message, SessionChatProvider provider) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -529,7 +531,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   /// Show delete message confirmation
-  void _showDeleteMessageConfirmation(Message message, ChatProvider provider) {
+  void _showDeleteMessageConfirmation(
+      Message message, SessionChatProvider provider) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -590,7 +593,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   /// Get current user ID
   String _getCurrentUserId() {
-    // TODO: Get from authentication service
-    return 'current_user_id';
+    // Get from the chat provider
+    final provider = context.read<SessionChatProvider>();
+    return provider.currentUserId ?? 'unknown';
   }
 }
