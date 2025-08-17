@@ -134,7 +134,8 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
         final otherParticipantId =
             conversation.getOtherParticipantId(currentUserId);
         if (otherParticipantId != null) {
-          await notificationService.sendOnlineStatusUpdate(isOnline);
+          await notificationService.sendOnlineStatusUpdate(
+              otherParticipantId, isOnline);
         }
       }
 

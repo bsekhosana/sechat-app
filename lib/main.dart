@@ -239,7 +239,10 @@ Future<void> _sendOnlineStatusUpdate(bool isOnline) async {
     for (final conversation in conversations) {
       final otherParticipantId =
           conversation.getOtherParticipantId(currentUserId);
-      await notificationService.sendOnlineStatusUpdate(isOnline);
+      if (otherParticipantId != null) {
+        await notificationService.sendOnlineStatusUpdate(
+            otherParticipantId, isOnline);
+      }
     }
 
     print(

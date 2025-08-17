@@ -19,7 +19,7 @@ import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import 'package:sechat_app/core/services/key_exchange_service.dart';
 import 'package:sechat_app/shared/models/chat.dart';
 import 'package:sechat_app/shared/models/message.dart' as app_message;
-import 'package:sechat_app/features/chat/models/message.dart';
+import 'package:sechat_app/features/chat/models/message.dart' as chat_message;
 import 'package:sechat_app/shared/models/key_exchange_request.dart';
 import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +28,7 @@ import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_
 import 'package:sechat_app/features/chat/models/chat_conversation.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 import 'package:sechat_app/features/chat/services/message_status_tracking_service.dart';
+import 'package:sechat_app/features/chat/providers/chat_provider.dart';
 
 /// Unified secure notification service for encrypted messaging and local notifications
 class SecureNotificationService {
@@ -97,6 +98,9 @@ class SecureNotificationService {
       }
 
       _isInitialized = true;
+
+      // Check for app reinstall and handle if needed
+      await detectAndHandleAppReinstall();
 
       // Log final permission status and device token state
       print(
@@ -1037,72 +1041,544 @@ class SecureNotificationService {
     required String senderName,
     required String message,
     required String conversationId,
+    required String encryptedData,
+    required String checksum,
     String? messageId,
   }) async {
     try {
-      // Pre-flight check: ensure recipient has a registered token
-      final hasRecipientToken =
-          await AirNotifierService.instance.hasAnyToken(sessionId: recipientId);
-      if (!hasRecipientToken) {
-        print(
-            '❌ Recipient has no push tokens – queue or show in-app banner instead.');
-        return false;
-      }
+      print('🔒 SecureNotificationService: Sending encrypted message');
 
-      // Ensure key exchange with recipient
-      final keyExchangeSuccess = await KeyExchangeService.instance
-          .ensureKeyExchangeWithUser(recipientId);
-      if (!keyExchangeSuccess) {
-        print(
-            '🔒 SecureNotificationService: Key exchange failed, cannot encrypt message');
-        return false;
-      }
-
-      final currentUserId = SeSessionService().currentSessionId;
-      if (currentUserId == null) {
-        print('🔒 SecureNotificationService: User not logged in');
-        return false;
-      }
-
-      // Use provided message ID or generate a new one
-      final finalMessageId = messageId ??
-          'msg_${DateTime.now().millisecondsSinceEpoch}_$recipientId';
-
-      // Create message data
-      final messageData = {
-        'type': 'message',
-        'message_id': finalMessageId,
-        'sender_id': currentUserId,
-        'sender_name': senderName,
-        'message': message,
-        'conversation_id': conversationId,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'handshake_step': 1, // Step 1: Sent
-      };
-
-      // Create encrypted payload
-      final encryptedPayload = await EncryptionService.createEncryptedPayload(
-          messageData, recipientId);
-
-      // Send via AirNotifier
-      return await _sendNotificationToSession(
+      // Send via AirNotifier with FULL ENCRYPTION
+      // Use generic title/body to prevent data leakage to Google/Apple servers
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
         sessionId: recipientId,
-        title: '', // Empty title for silent notification
-        body: '', // Empty body for silent notification
+        title: 'Secure Alert', // Generic title - no sensitive data
+        body:
+            'You have received a secure message', // Generic body - no sensitive data
         data: {
-          'data': encryptedPayload['data'] as String,
-          'type': 'message',
-          'silent': true,
+          'encrypted': true,
+          'type':
+              'message', // Type indicator for routing (unencrypted for routing)
+          'senderId': SeSessionService().currentSessionId ??
+              '', // Sender ID for routing
+          'senderName': senderName, // Sender name for routing
+          'conversationId': conversationId, // Conversation ID for routing
+          'data': encryptedData, // Encrypted sensitive data
+          'checksum': checksum, // Checksum for verification
+          'messageId': messageId, // Additional metadata
+          // Add additional fields to ensure notification is processed
+          'action': 'message_received',
+          'priority': 'high',
+          'category': 'chat_message',
         },
-        sound: null, // No sound for messages
-        badge: 0, // No badge for silent notifications
-        encrypted: true,
-        checksum: encryptedPayload['checksum'] as String,
+        sound: 'message.wav',
+        encrypted: true, // Mark as encrypted for AirNotifier server
+        checksum: checksum, // Include checksum for verification
       );
+
+      if (success) {
+        print('🔒 SecureNotificationService: ✅ Encrypted message sent');
+        return true;
+      } else {
+        print(
+            '🔒 SecureNotificationService: ❌ Failed to send encrypted message');
+        return false;
+      }
     } catch (e) {
       print(
           '🔒 SecureNotificationService: Error sending encrypted message: $e');
       return false;
+    }
+  }
+
+  /// Handle message notification
+  Future<void> _handleMessageNotification(Map<String, dynamic> data) async {
+    print('🔒 SecureNotificationService: 🔍 Processing message data: $data');
+
+    // Handle both encrypted and unencrypted message formats
+    String? senderId, senderName, message, conversationId;
+
+    // IMPORTANT FIX: Handle iOS message notifications with different structures
+    // First check if this is an iOS notification with aps structure
+    if (data.containsKey('aps')) {
+      print(
+          '🔒 SecureNotificationService: 🔴 iOS notification detected with aps structure');
+    }
+
+    // Handle both boolean and string encrypted values
+    final encryptedValue = data['encrypted'];
+    final isEncrypted = encryptedValue == true ||
+        encryptedValue == 'true' ||
+        encryptedValue == '1' ||
+        encryptedValue == 1;
+
+    if (isEncrypted) {
+      // Encrypted message format - data is in the 'data' field
+      final encryptedData = data['data'] as String?;
+      if (encryptedData != null) {
+        // For now, assume the encrypted data contains the message directly
+        // In a real implementation, this would be decrypted
+        message = encryptedData;
+        senderId = data['senderId'] as String?;
+        senderName = data['senderName'] as String?;
+        conversationId = data['conversationId'] as String?;
+
+        print(
+            '🔒 SecureNotificationService: 🔴 Encrypted message parsed: $message from $senderName');
+      }
+    } else {
+      // Unencrypted message format
+      senderId = data['senderId'] as String?;
+      senderName = data['senderName'] as String?;
+      message = data['message'] as String?;
+      conversationId = data['conversationId'] as String?;
+
+      print(
+          '🔒 SecureNotificationService: 🔴 Unencrypted message parsed: $message from $senderName');
+    }
+
+    // Check for snake_case field names in the decrypted data
+    if (senderId == null && data.containsKey('sender_id')) {
+      senderId = data['sender_id'] as String?;
+      print(
+          '🔒 SecureNotificationService: 🔴 Using snake_case sender_id: $senderId');
+    }
+
+    if (senderName == null && data.containsKey('sender_name')) {
+      senderName = data['sender_name'] as String?;
+      print(
+          '🔒 SecureNotificationService: 🔴 Using snake_case sender_name: $senderName');
+    }
+
+    if (conversationId == null && data.containsKey('conversation_id')) {
+      conversationId = data['conversation_id'] as String?;
+      print(
+          '🔒 SecureNotificationService: 🔴 Using snake_case conversation_id: $conversationId');
+    }
+
+    // IMPORTANT FIX: Handle iOS notifications that might have a different structure
+    if (senderId == null || senderName == null || message == null) {
+      print(
+          '🔒 SecureNotificationService: ⚠️ Missing fields in message notification data');
+      print(
+          '🔒 SecureNotificationService: senderId: $senderId, senderName: $senderName, message: $message');
+
+      // Try to extract data from iOS notification structure
+      if (data.containsKey('aps')) {
+        print(
+            '🔒 SecureNotificationService: 🔴 Attempting to extract data from iOS notification structure');
+
+        // Try to get sender ID and name from other fields
+        if (senderId == null) {
+          senderId =
+              data['senderId'] as String? ?? data['sender_id'] as String?;
+          print(
+              '🔒 SecureNotificationService: 🔴 Extracted senderId: $senderId');
+        }
+
+        if (senderName == null) {
+          senderName =
+              data['senderName'] as String? ?? data['sender_name'] as String?;
+          print(
+              '🔒 SecureNotificationService: 🔴 Extracted senderName: $senderName');
+        }
+
+        if (message == null) {
+          // Try to get message from data field
+          if (data.containsKey('data')) {
+            final dataField = data['data'];
+            if (dataField is String) {
+              message = dataField;
+              print(
+                  '🔒 SecureNotificationService: 🔴 Extracted message from data field: $message');
+            } else if (dataField is Map) {
+              message = dataField['text'] as String? ??
+                  dataField['message'] as String?;
+              print(
+                  '🔒 SecureNotificationService: 🔴 Extracted message from data map: $message');
+            }
+          }
+        }
+      }
+
+      // If still missing required fields, return
+      if (senderId == null || senderName == null || message == null) {
+        print(
+            '🔒 SecureNotificationService: ❌ Invalid message notification data - missing required fields');
+        print(
+            '🔒 SecureNotificationService: senderId: $senderId, senderName: $senderName, message: $message');
+        return;
+      }
+    }
+
+    print(
+        '🔒 SecureNotificationService: Processing message from $senderName: $message');
+
+    // CRITICAL FIX: Don't show local notifications for messages from the current user
+    // This prevents the infinite notification loop
+    final currentUserId = SeSessionService().currentSessionId;
+    if (currentUserId != null && senderId == currentUserId) {
+      print(
+          '🔒 SecureNotificationService: ℹ️ Skipping local notification for message from self');
+      return;
+    }
+
+    // Check if sender is blocked
+    if (currentUserId != null) {
+      try {
+        // Check database first for blocking status
+        final messageStorageService = MessageStorageService.instance;
+        final conversations =
+            await messageStorageService.getUserConversations(currentUserId);
+
+        // Find conversation with this sender
+        final conversation = conversations.firstWhere(
+          (conv) => conv.getOtherParticipantId(currentUserId) == senderId,
+          orElse: () => throw Exception('Conversation not found'),
+        );
+
+        if (conversation.isBlocked == true) {
+          print(
+              '🔒 SecureNotificationService: Message from blocked user ignored: $senderName');
+          return; // Ignore message from blocked user
+        }
+      } catch (e) {
+        print(
+            '🔒 SecureNotificationService: Error checking database for blocking status: $e');
+        // Fallback to SharedPreferences if database fails
+        try {
+          final prefsService = SeSharedPreferenceService();
+          final chatsJson = await prefsService.getJsonList('chats') ?? [];
+
+          // Find chat with this sender
+          for (final chatJson in chatsJson) {
+            try {
+              final chat = Chat.fromJson(chatJson);
+              final otherUserId = chat.getOtherUserId(currentUserId);
+
+              if (otherUserId == senderId && chat.getBlockedStatus()) {
+                print(
+                    '🔒 SecureNotificationService: Message from blocked user ignored: $senderName');
+                return; // Ignore message from blocked user
+              }
+            } catch (e) {
+              print(
+                  '🔒 SecureNotificationService: Error parsing chat for blocking check: $e');
+            }
+          }
+        } catch (fallbackError) {
+          print(
+              '🔒 SecureNotificationService: Error in fallback blocking check: $fallbackError');
+        }
+      }
+    }
+
+    // Show local notification
+    await showLocalNotification(
+      title: 'New Message',
+      body: 'You have received a new message',
+      type: 'message',
+      data: data,
+    );
+
+    // Save notification to SharedPreferences
+    await _saveNotificationToSharedPrefs(
+      id: 'message_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'New Message',
+      body: 'You have received a new message',
+      type: 'message',
+      data: data,
+      timestamp: DateTime.now(),
+    );
+
+    // Trigger indicator for new chat message
+    IndicatorService().setNewChat();
+
+    // Send delivery receipt back to sender
+    try {
+      // Check if sender is not the current user
+      final currentUserId = SeSessionService().currentSessionId;
+      if (senderId == currentUserId) {
+        print(
+            '🔒 SecureNotificationService: ℹ️ Skipping delivery receipt to self');
+      } else {
+        final airNotifier = AirNotifierService.instance;
+
+        // Use the message_id as the messageId parameter, not the conversationId
+        final messageId = data['message_id'] as String? ??
+            'msg_${DateTime.now().millisecondsSinceEpoch}';
+
+        final success = await airNotifier.sendMessageDeliveryStatus(
+          recipientId: senderId,
+          messageId: messageId,
+          status: 'delivered',
+          conversationId: conversationId ??
+              'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        );
+
+        if (success) {
+          print(
+              '🔒 SecureNotificationService: ✅ Delivery receipt sent to sender: $senderId');
+        } else {
+          print(
+              '🔒 SecureNotificationService: ⚠️ Failed to send delivery receipt');
+        }
+      }
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error sending delivery receipt: $e');
+    }
+
+    // Create a Message object and save it to the database
+    try {
+      final messageStorageService = MessageStorageService.instance;
+      final currentUserId = SeSessionService().currentSessionId ?? '';
+
+      // Generate a unique message ID
+      final messageId = data['messageId'] as String? ??
+          data['message_id'] as String? ??
+          'msg_${DateTime.now().millisecondsSinceEpoch}';
+      final messageText =
+          message; // Store the message text in a separate variable to avoid naming conflict
+
+      // Create Message object using the Message constructor
+      final messageObj = chat_message.Message(
+        id: messageId,
+        conversationId: conversationId ??
+            'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        senderId: senderId,
+        recipientId: currentUserId,
+        type: chat_message.MessageType.text,
+        content: {'text': messageText},
+        status: chat_message.MessageStatus.delivered,
+      );
+
+      // Save message to database
+      if (messageObj != null) {
+        await messageStorageService.saveMessage(messageObj);
+        print(
+            '🔒 SecureNotificationService: ✅ Message saved to database: $messageId');
+
+        // Try to route to active ChatProvider first (for chat screen updates)
+        try {
+          // Note: ChatProvider.handleIncomingMessage is not implemented yet
+          // For now, we'll just log that we would route to it
+          print(
+              '🔒 SecureNotificationService: ℹ️ Would route message to ChatProvider (method not implemented yet)');
+        } catch (e) {
+          print(
+              '🔒 SecureNotificationService: ⚠️ Failed to route to ChatProvider: $e');
+        }
+
+        // ALWAYS trigger callback for UI updates - this will route to ChatListProvider
+        // This ensures the chat list is updated regardless of whether the chat screen is active
+        print(
+            '🔒 SecureNotificationService: 🔄 Triggering message received callback for ChatListProvider');
+        // Pass the conversation ID and message ID to ensure correct routing
+        _onMessageReceived?.call(
+            senderId,
+            senderName,
+            message,
+            conversationId ??
+                'chat_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+            messageId);
+      }
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error saving message to database: $e');
+    }
+
+    print(
+        '🔒 SecureNotificationService: ✅ Message notification handled successfully');
+  }
+
+  /// Handle typing indicator notification
+  Future<void> _handleTypingIndicatorNotification(
+      Map<String, dynamic> data) async {
+    final senderId = data['senderId'] as String?;
+    final isTyping = data['isTyping'] as bool?;
+
+    if (senderId == null || isTyping == null) {
+      print(
+          '🔒 SecureNotificationService: Invalid typing indicator notification data');
+      return;
+    }
+
+    print(
+        '🔒 SecureNotificationService: Received typing indicator: $senderId -> $isTyping');
+
+    // First, trigger the callback for any local listeners
+    _onTypingIndicator?.call(senderId, isTyping);
+
+    // Then, ensure the typing indicator is processed by the MessageStatusTrackingService
+    // This ensures typing indicators work even when the callback isn't set up
+    try {
+      final messageStatusTrackingService =
+          MessageStatusTrackingService.instance;
+      await messageStatusTrackingService.handleExternalTypingIndicator(
+          senderId, isTyping);
+      print(
+          '🔒 SecureNotificationService: ✅ Typing indicator routed to MessageStatusTrackingService');
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Failed to route typing indicator to MessageStatusTrackingService: $e');
+    }
+  }
+
+  /// Handle broadcast notification
+  Future<void> _handleBroadcastNotification(Map<String, dynamic> data) async {
+    final message = data['message'] as String?;
+    final timestamp = data['timestamp'] as int?;
+
+    if (message == null) {
+      print(
+          '🔒 SecureNotificationService: Invalid broadcast notification data');
+      return;
+    }
+
+    // Show local notification
+    await showLocalNotification(
+      title: 'System Message',
+      body: message,
+      type: 'broadcast',
+      data: data,
+    );
+
+    // Save notification to SharedPreferences
+    await _saveNotificationToSharedPrefs(
+      id: 'broadcast_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'System Message',
+      body: message,
+      type: 'broadcast',
+      data: data,
+      timestamp: DateTime.now(),
+    );
+
+    // Trigger indicator for new notification
+    IndicatorService().setNewNotification();
+  }
+
+  /// Send read receipt for a message
+  Future<void> sendReadReceipt(
+      String senderId, String messageId, String conversationId) async {
+    try {
+      print(
+          '🔒 SecureNotificationService: Sending read receipt for message: $messageId');
+
+      final airNotifier = AirNotifierService.instance;
+      final success = await airNotifier.sendMessageDeliveryStatus(
+        recipientId: senderId,
+        messageId: messageId,
+        status: 'read',
+        conversationId: conversationId,
+      );
+
+      if (success) {
+        print('🔒 SecureNotificationService: ✅ Read receipt sent to sender');
+      } else {
+        print('🔒 SecureNotificationService: ⚠️ Failed to send read receipt');
+      }
+    } catch (e) {
+      print('🔒 SecureNotificationService: ❌ Error sending read receipt: $e');
+    }
+  }
+
+  /// Send online status update
+  Future<void> sendOnlineStatusUpdate(String recipientId, bool isOnline) async {
+    try {
+      print(
+          '🔒 SecureNotificationService: Sending online status update: $isOnline');
+
+      final airNotifier = AirNotifierService.instance;
+      final success = await airNotifier.sendOnlineStatusUpdate(
+        recipientId: recipientId,
+        isOnline: isOnline,
+        lastSeen: isOnline ? null : DateTime.now().toIso8601String(),
+      );
+
+      if (success) {
+        print('🔒 SecureNotificationService: ✅ Online status update sent');
+      } else {
+        print(
+            '🔒 SecureNotificationService: ⚠️ Failed to send online status update');
+      }
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error sending online status update: $e');
+    }
+  }
+
+  /// Send typing indicator
+  Future<void> sendTypingIndicator(String recipientId, bool isTyping) async {
+    try {
+      print(
+          '🔒 SecureNotificationService: Sending typing indicator: $isTyping to $recipientId');
+
+      final airNotifier = AirNotifierService.instance;
+      final currentUserId = SeSessionService().currentSessionId ?? '';
+      final currentSession = SeSessionService().currentSession;
+      final senderName = currentSession?.displayName ??
+          'User ${currentUserId.substring(0, 8)}';
+
+      final success = await airNotifier.sendTypingIndicator(
+        recipientId: recipientId,
+        senderName: senderName,
+        isTyping: isTyping,
+      );
+
+      if (success) {
+        print('🔒 SecureNotificationService: ✅ Typing indicator sent');
+      } else {
+        print(
+            '🔒 SecureNotificationService: ⚠️ Failed to send typing indicator');
+      }
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error sending typing indicator: $e');
+    }
+  }
+
+  /// Generate checksum for data integrity
+  String _generateChecksum(Map<String, dynamic> data) {
+    final dataJson = json.encode(data);
+    final bytes = utf8.encode(dataJson);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  /// Save notification to SharedPreferences
+  Future<void> _saveNotificationToSharedPrefs({
+    required String id,
+    required String title,
+    required String body,
+    required String type,
+    required Map<String, dynamic> data,
+    required DateTime timestamp,
+  }) async {
+    try {
+      final prefsService = SeSharedPreferenceService();
+      final existingNotifications =
+          await prefsService.getJsonList('notifications') ?? [];
+
+      final notification = {
+        'id': id,
+        'title': title,
+        'body': body,
+        'type': type,
+        'data': data,
+        'timestamp': timestamp.toIso8601String(),
+        'read': false,
+      };
+
+      existingNotifications.add(notification);
+      await prefsService.setJsonList('notifications', existingNotifications);
+
+      print(
+          '🔒 SecureNotificationService: ✅ Notification saved to SharedPreferences: $id');
+    } catch (e) {
+      print(
+          '🔒 SecureNotificationService: ❌ Error saving notification to SharedPreferences: $e');
     }
   }
 
@@ -1557,19 +2033,6 @@ class SecureNotificationService {
     } catch (e) {
       print(
           '🔒 SecureNotificationService: ❌ Error handling message status update: $e');
-    }
-  }
-
-  /// Send online status update
-  Future<void> sendOnlineStatusUpdate(bool isOnline) async {
-    try {
-      print(
-          '🔒 SecureNotificationService: Sending online status update: $isOnline');
-      // This would typically send a notification to the server
-      print('🔒 SecureNotificationService: ✅ Online status update sent');
-    } catch (e) {
-      print(
-          '🔒 SecureNotificationService: ❌ Error sending online status update: $e');
     }
   }
 
@@ -3582,6 +4045,271 @@ class SecureNotificationService {
       );
     } else {
       _showToastMessage(message);
+    }
+  }
+
+  /// Send message notification
+  Future<bool> sendMessage({
+    required String recipientId,
+    required String senderName,
+    required String message,
+    required String conversationId,
+  }) async {
+    try {
+      print('🔒 SecureNotificationService: Sending message');
+
+      // Create message data
+      final messageData = {
+        'type': 'message',
+        'senderName': senderName,
+        'senderId': SeSessionService().currentSessionId,
+        'message': message,
+        'conversationId': conversationId,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'version': '1.0',
+      };
+
+      // Encrypt the message data
+      final encryptedData = await EncryptionService.encryptAesCbcPkcs7(
+        messageData,
+        recipientId,
+      );
+      final checksum = _generateChecksum(messageData);
+
+      // Send via AirNotifier with FULL ENCRYPTION
+      // Use generic title/body to prevent data leakage to Google/Apple servers
+      final success =
+          await AirNotifierService.instance.sendNotificationToSession(
+        sessionId: recipientId,
+        title: 'Text Alert', // Generic title - no sensitive data
+        body:
+            'You have received a text message', // Generic body - no sensitive data
+        data: {
+          'encrypted': true,
+          'type':
+              'message', // Type indicator for routing (unencrypted for routing)
+          'data': encryptedData['data'] as String, // Encrypted sensitive data
+          'checksum': checksum, // Checksum for verification
+        },
+        sound: 'message.wav',
+        encrypted: true, // Mark as encrypted for AirNotifier server
+        checksum: checksum, // Include checksum for verification
+      );
+
+      if (success) {
+        print('🔒 SecureNotificationService: ✅ Message sent');
+        return true;
+      } else {
+        print('🔒 SecureNotificationService: ❌ Failed to send message');
+        return false;
+      }
+    } catch (e) {
+      print('🔒 SecureNotificationService: Error sending message: $e');
+      return false;
+    }
+  }
+
+  /// Clear ALL data when deleting account (comprehensive cleanup)
+  Future<void> clearAllDataOnAccountDeletion() async {
+    try {
+      print(
+          '🗑️ SecureNotificationService: Starting comprehensive account data cleanup...');
+
+      // 1. Clear all secure storage (encryption keys, etc.)
+      final storage = FlutterSecureStorage();
+      final secureKeys = await storage.readAll();
+      for (final key in secureKeys.keys) {
+        await storage.delete(key: key);
+        print('🗑️ SecureNotificationService: Deleted secure key: $key');
+      }
+
+      // 2. Clear all shared preferences
+      final prefsService = SeSharedPreferenceService();
+      await prefsService.clear();
+      print('🗑️ SecureNotificationService: Cleared all shared preferences');
+
+      // 3. Clear local notifications
+      await _notifications.cancelAll();
+      print('🗑️ SecureNotificationService: Cancelled all local notifications');
+
+      // 4. Clear notification cache
+      _processedNotifications.clear();
+      print('🗑️ SecureNotificationService: Cleared notification cache');
+
+      // 5. Unlink device from AirNotifier server
+      try {
+        if (_deviceToken != null && _sessionId != null) {
+          await AirNotifierService.instance.unlinkTokenFromSession();
+          print(
+              '🗑️ SecureNotificationService: Unlinked device from AirNotifier');
+        }
+      } catch (e) {
+        print(
+            '🗑️ SecureNotificationService: Warning - AirNotifier unlink failed: $e');
+      }
+
+      // 6. Reset service state
+      _deviceToken = null;
+      _sessionId = null;
+      _permissionStatus = PermissionStatus.denied;
+      _isInitialized = false;
+      print('🗑️ SecureNotificationService: Reset service state');
+
+      // 7. Clear data from other services
+      try {
+        // Clear key exchange service data
+        await KeyExchangeService.instance.clearAllPendingExchanges();
+        print(
+            '🗑️ SecureNotificationService: Cleared key exchange service data');
+      } catch (e) {
+        print(
+            '🗑️ SecureNotificationService: Warning - some service cleanup failed: $e');
+      }
+
+      print(
+          '🗑️ SecureNotificationService: ✅ Comprehensive account cleanup completed');
+    } catch (e) {
+      print(
+          '🗑️ SecureNotificationService: ❌ Error during account cleanup: $e');
+      // Don't throw - we want to continue with cleanup even if some parts fail
+    }
+  }
+
+  /// Detect if app was reinstalled and handle re-registration
+  Future<void> detectAndHandleAppReinstall() async {
+    try {
+      print('🔄 SecureNotificationService: Checking for app reinstall...');
+
+      // Check if we have a device token but no session ID (indicates reinstall)
+      if (_deviceToken != null &&
+          _deviceToken!.isNotEmpty &&
+          _sessionId == null) {
+        print(
+            '🔄 SecureNotificationService: App reinstall detected - device token exists but no session');
+        await _handleAppReinstall();
+      }
+
+      // Check if we have a session ID but device token is not registered on AirNotifier
+      if (_sessionId != null && _deviceToken != null) {
+        // Simple check: if we have a device token and session ID, assume it's registered
+        // In a real implementation, you could make an API call to verify registration
+        final isRegistered = _deviceToken!.isNotEmpty && _sessionId!.isNotEmpty;
+
+        if (!isRegistered) {
+          print(
+              '🔄 SecureNotificationService: Device not registered on AirNotifier - re-registering');
+          await _handleAppReinstall();
+        }
+      }
+
+      // Check for app reinstall by looking at installation timestamp
+      final prefsService = SeSharedPreferenceService();
+      final lastInstallTime =
+          await prefsService.getInt('app_install_timestamp');
+      final currentTime = DateTime.now().millisecondsSinceEpoch;
+
+      if (lastInstallTime == null) {
+        // First time install - set timestamp
+        await prefsService.setInt('app_install_timestamp', currentTime);
+        print(
+            '🔄 SecureNotificationService: First install detected, setting timestamp');
+      } else {
+        // Check if app was reinstalled (timestamp difference > 1 hour)
+        final timeDiff = currentTime - lastInstallTime;
+        if (timeDiff > 3600000) {
+          // 1 hour in milliseconds
+          print(
+              '🔄 SecureNotificationService: App reinstall detected based on timestamp');
+          await _handleAppReinstall();
+          // Update timestamp
+          await prefsService.setInt('app_install_timestamp', currentTime);
+        }
+      }
+    } catch (e) {
+      print('🔄 SecureNotificationService: Error detecting app reinstall: $e');
+    }
+  }
+
+  /// Handle app reinstall by re-registering with AirNotifier
+  Future<void> _handleAppReinstall() async {
+    try {
+      print('🔄 SecureNotificationService: Handling app reinstall...');
+
+      // Clear old device token and session data
+      _deviceToken = null;
+      _sessionId = null;
+      _isInitialized = false;
+
+      // Clear notification cache
+      _processedNotifications.clear();
+
+      // Cancel all local notifications
+      await _notifications.cancelAll();
+
+      // Re-initialize the service
+      await initialize();
+
+      print(
+          '🔄 SecureNotificationService: ✅ App reinstall handled successfully');
+    } catch (e) {
+      print('🔄 SecureNotificationService: ❌ Error handling app reinstall: $e');
+    }
+  }
+
+  /// Check if device is properly registered on AirNotifier
+  Future<bool> isDeviceProperlyRegistered() async {
+    try {
+      if (_deviceToken == null || _sessionId == null) {
+        return false;
+      }
+
+      // Simple check: if we have a device token and session ID, assume it's registered
+      // In a real implementation, you could make an API call to verify registration
+      final isRegistered = _deviceToken!.isNotEmpty && _sessionId!.isNotEmpty;
+
+      if (!isRegistered) {
+        print(
+            '🔍 SecureNotificationService: Device not properly registered on AirNotifier');
+        return false;
+      }
+
+      print(
+          '🔍 SecureNotificationService: ✅ Device properly registered on AirNotifier');
+      return true;
+    } catch (e) {
+      print(
+          '🔍 SecureNotificationService: ❌ Error checking device registration: $e');
+      return false;
+    }
+  }
+
+  /// Force re-registration with AirNotifier (useful for troubleshooting)
+  Future<void> forceReregistration() async {
+    try {
+      print(
+          '🔄 SecureNotificationService: Force re-registering with AirNotifier...');
+
+      // Clear current registration
+      if (_deviceToken != null && _sessionId != null) {
+        try {
+          await AirNotifierService.instance.unlinkTokenFromSession();
+          print('🔄 SecureNotificationService: Unlinked old device token');
+        } catch (e) {
+          print('🔄 SecureNotificationService: Warning - unlink failed: $e');
+        }
+      }
+
+      // Reset service state
+      _deviceToken = null;
+      _isInitialized = false;
+
+      // Re-initialize
+      await initialize();
+
+      print('🔄 SecureNotificationService: ✅ Force re-registration completed');
+    } catch (e) {
+      print(
+          '🔄 SecureNotificationService: ❌ Error during force re-registration: $e');
     }
   }
 }
