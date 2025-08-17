@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import '../../core/services/se_session_service.dart';
-import '../../core/services/simple_notification_service.dart';
+import '../../core/services/secure_notification_service.dart';
 import '../../features/chat/services/message_storage_service.dart';
 import 'notification_permission_dialog.dart';
 
@@ -69,13 +69,13 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     print('🔄 AppLifecycleHandler: App resumed, refreshing services...');
 
     // Refresh notification permissions
-    SimpleNotificationService.instance.refreshPermissions();
+    SecureNotificationService.instance.refreshPermissions();
 
     // Validate permission status for iOS
-    SimpleNotificationService.instance.validatePermissionStatus();
+    SecureNotificationService.instance.validatePermissionStatus();
 
     // Show permission dialog if needed
-    NotificationPermissionHelper.showPermissionDialogIfNeeded(context);
+    NotificationPermissionHelper.showPermissionDialogIfNeeded();
 
     // Send online status update
     await _sendOnlineStatusUpdate(true);
@@ -129,13 +129,12 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
           await messageStorageService.getUserConversations(currentUserId);
 
       // Send online status update to all participants
-      final notificationService = SimpleNotificationService.instance;
+      final notificationService = SecureNotificationService.instance;
       for (final conversation in conversations) {
         final otherParticipantId =
             conversation.getOtherParticipantId(currentUserId);
         if (otherParticipantId != null) {
-          await notificationService.sendOnlineStatusUpdate(
-              otherParticipantId, isOnline);
+          await notificationService.sendOnlineStatusUpdate(isOnline);
         }
       }
 

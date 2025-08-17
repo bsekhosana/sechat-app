@@ -8,7 +8,6 @@ import '../widgets/message_bubble.dart';
 import '../widgets/chat_input_area.dart';
 import '../widgets/chat_header.dart';
 import '../widgets/typing_indicator.dart';
-import '../services/contact_message_service.dart' show ContactData;
 
 /// Main screen for individual chat conversations
 class ChatScreen extends StatefulWidget {
@@ -109,7 +108,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Colors.white,
       body: GestureDetector(
         onTap: () {
           // Auto-close keyboard when tapping outside input field
@@ -277,18 +276,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       builder: (context, provider, child) {
         return ChatInputArea(
           onTextMessageSent: (text) => _sendTextMessage(text, provider),
-          onVoiceMessageRecorded: (duration, filePath) =>
-              _sendVoiceMessage(duration, filePath, provider),
-          onImageSelected: (filePath) => _sendImageMessage(filePath, provider),
-          onVideoSelected: (filePath) => _sendVideoMessage(filePath, provider),
-          onDocumentSelected: (filePath) =>
-              _sendDocumentMessage(filePath, provider),
-          onLocationShared: (latitude, longitude) =>
-              _sendLocationMessage(latitude, longitude, provider),
-          onContactShared: (contactData) =>
-              _sendContactMessage(contactData, provider),
-          onEmoticonSelected: (emoticon) =>
-              _sendEmoticonMessage(emoticon, provider),
           isTyping: (isTyping) => _updateTypingIndicator(isTyping, provider),
         );
       },
@@ -305,81 +292,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       _scrollToBottom();
     } catch (e) {
       _showErrorSnackBar('Failed to send message: $e');
-    }
-  }
-
-  /// Send voice message
-  Future<void> _sendVoiceMessage(
-      int duration, String filePath, ChatProvider provider) async {
-    try {
-      await provider.sendVoiceMessage(duration, filePath);
-      _scrollToBottom();
-    } catch (e) {
-      _showErrorSnackBar('Failed to send voice message: $e');
-    }
-  }
-
-  /// Send image message
-  Future<void> _sendImageMessage(String filePath, ChatProvider provider) async {
-    try {
-      await provider.sendImageMessage(filePath);
-      _scrollToBottom();
-    } catch (e) {
-      _showErrorSnackBar('Failed to send image message: $e');
-    }
-  }
-
-  /// Send video message
-  Future<void> _sendVideoMessage(String filePath, ChatProvider provider) async {
-    try {
-      await provider.sendVideoMessage(filePath);
-      _scrollToBottom();
-    } catch (e) {
-      _showErrorSnackBar('Failed to send video message: $e');
-    }
-  }
-
-  /// Send document message
-  Future<void> _sendDocumentMessage(
-      String filePath, ChatProvider provider) async {
-    try {
-      await provider.sendDocumentMessage(filePath);
-      _scrollToBottom();
-    } catch (e) {
-      _showErrorSnackBar('Failed to send document message: $e');
-    }
-  }
-
-  /// Send location message
-  Future<void> _sendLocationMessage(
-      double latitude, double longitude, ChatProvider provider) async {
-    try {
-      await provider.sendLocationMessage(latitude, longitude);
-      _scrollToBottom();
-    } catch (e) {
-      _showErrorSnackBar('Failed to send location message: $e');
-    }
-  }
-
-  /// Send contact message
-  Future<void> _sendContactMessage(
-      ContactData contactData, ChatProvider provider) async {
-    try {
-      await provider.sendContactMessage(contactData);
-      _scrollToBottom();
-    } catch (e) {
-      _showErrorSnackBar('Failed to send contact message: $e');
-    }
-  }
-
-  /// Send emoticon message
-  Future<void> _sendEmoticonMessage(
-      String emoticon, ChatProvider provider) async {
-    try {
-      await provider.sendEmoticonMessage(emoticon);
-      _scrollToBottom();
-    } catch (e) {
-      _showErrorSnackBar('Failed to send emoticon message: $e');
     }
   }
 
@@ -450,7 +362,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               title: 'Delete chat',
               onTap: () {
                 Navigator.pop(context);
-                _showDeleteConfirmation(provider);
+                // TODO: Implement delete chat functionality
+                print('🗑️ Delete chat option selected');
               },
             ),
           ],
@@ -511,7 +424,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              provider.deleteConversation();
+              // TODO: Implement delete conversation functionality
+              print('🗑️ Delete conversation option selected');
               Navigator.pop(context);
             },
             child: Text(
@@ -645,7 +559,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              provider.deleteMessage(message.id);
+              // TODO: Implement delete message functionality
+              print('🗑️ Delete message option selected for: ${message.id}');
             },
             child: Text(
               'Delete',

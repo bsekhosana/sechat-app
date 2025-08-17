@@ -3,7 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../notifications/providers/notification_provider.dart';
-import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/secure_notification_service.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/services/indicator_service.dart';
 import '../../../shared/models/user.dart';
@@ -90,19 +90,19 @@ Download now and let's chat securely!
   }
 
   void _setupNotificationProviders() {
-    // Connect KeyExchangeRequestProvider to SimpleNotificationService
+    // Connect KeyExchangeRequestProvider to SecureNotificationService
     final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
 
     // Initialize the provider to load saved requests
     keyExchangeProvider.initialize();
 
     // Connect the notification service to the provider
-    SimpleNotificationService.instance.setOnKeyExchangeRequestReceived(
+    SecureNotificationService.instance.setOnKeyExchangeRequestReceived(
       (data) => keyExchangeProvider.processReceivedKeyExchangeRequest(data),
     );
 
     print(
-        '🔔 MainNavScreen: ✅ KeyExchangeRequestProvider connected to SimpleNotificationService and initialized');
+        '🔔 MainNavScreen: ✅ KeyExchangeRequestProvider connected to SecureNotificationService and initialized');
   }
 
   static final List<Widget> _screens = <Widget>[
@@ -121,6 +121,22 @@ Download now and let's chat securely!
     if (index == 1) {
       // K.Exchange tab
       _indicatorService.clearKeyExchangeIndicator();
+    }
+  }
+
+  /// Get the title for the current screen based on selected index
+  String _getScreenTitle() {
+    switch (_selectedIndex) {
+      case 0:
+        return 'Chats';
+      case 1:
+        return 'K.Exchange';
+      case 2:
+        return 'Notifications';
+      case 3:
+        return 'Settings';
+      default:
+        return 'Chats';
     }
   }
 
@@ -159,34 +175,21 @@ Download now and let's chat securely!
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (context) =>
-                                    const KeyExchangeRequestDialog(),
-                              );
-                            },
-                            child: Container(
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFF6B35)
-                                    .withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.person_add,
-                                    size: 22,
-                                    color: const Color(0xFFFF6B35),
+                          child: Container(
+                            height: 50,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _getScreenTitle(),
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black,
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),

@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:image_picker/image_picker.dart';
 import '../../core/utils/guid_generator.dart';
 import '../../core/services/se_session_service.dart';
-import '../../core/services/qr_code_service.dart';
 import '../../features/key_exchange/providers/key_exchange_request_provider.dart';
 import '../widgets/custom_textfield.dart';
 import '../widgets/custom_elevated_button.dart';
-import 'qr_scanner_screen.dart';
 
 class KeyExchangeRequestDialog extends StatefulWidget {
   const KeyExchangeRequestDialog({super.key});
@@ -19,9 +16,7 @@ class KeyExchangeRequestDialog extends StatefulWidget {
 
 class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
   final TextEditingController _sessionIdController = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
 
-  String _selectedMethod = 'session_id';
   String _selectedPhrase = 'Footsteps in familiar rain';
   bool _isLoading = false;
   String? _sessionIdError;
@@ -63,28 +58,25 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
     });
 
     try {
-      // Validate session ID if using session_id method
-      if (_selectedMethod == 'session_id') {
-        if (_sessionIdController.text.trim().isEmpty) {
-          setState(() {
-            _sessionIdError = 'Session ID is required';
-          });
-          return;
-        }
+      // Validate session ID
+      if (_sessionIdController.text.trim().isEmpty) {
+        setState(() {
+          _sessionIdError = 'Session ID is required';
+        });
+        return;
+      }
 
-        if (!GuidGenerator.isValidSessionGuid(
-            _sessionIdController.text.trim())) {
-          setState(() {
-            _sessionIdError = 'Invalid session ID format';
-          });
-          return;
-        }
+      if (!GuidGenerator.isValidSessionGuid(
+          _sessionIdController.text.trim())) {
+        setState(() {
+          _sessionIdError = 'Invalid session ID format';
+        });
+        return;
       }
 
       // Check for self-request
       final currentSessionId = SeSessionService().currentSessionId;
-      if (_selectedMethod == 'session_id' &&
-          _sessionIdController.text.trim() == currentSessionId) {
+      if (_sessionIdController.text.trim() == currentSessionId) {
         setState(() {
           _sessionIdError = 'Cannot send key exchange request to yourself';
         });
@@ -94,9 +86,7 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
       // Send key exchange request
       final keyExchangeProvider = KeyExchangeRequestProvider();
       final success = await keyExchangeProvider.sendKeyExchangeRequest(
-        _selectedMethod == 'session_id'
-            ? _sessionIdController.text.trim()
-            : '', // Will be set by QR processing
+        _sessionIdController.text.trim(),
         requestPhrase: _selectedPhrase,
       );
 
@@ -127,236 +117,6 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
     }
   }
 
-  Future<void> _scanQRCode() async {
-    try {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => QRScannerScreen(
-            onQRCodeScanned: (qrData) async {
-              await _processQRData(qrData);
-            },
-            onCancel: () {
-              // Handle cancellation
-            },
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error opening QR scanner: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _uploadQRCode() async {
-    try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-      if (image != null) {
-        await _processQRImage(image);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error uploading QR code: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _processQRImage(XFile image) async {
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      print('📱 InviteContactDialog: Processing QR image: ${image.path}');
-
-      // Use real QR code processing service
-      final String? qrData =
-          await QRCodeService.instance.extractQRCodeFromImage(image.path);
-
-      if (qrData != null) {
-        print('📱 InviteContactDialog: QR code extracted: $qrData');
-
-        // Process the QR data
-        await _processQRData(qrData);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'No QR code found in the image. Please try a different image.'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('📱 InviteContactDialog: Error processing QR image: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error processing QR code: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _processQRData(String qrData) async {
-    try {
-      print('📱 InviteContactDialog: Processing QR data: $qrData');
-
-      // Use QR code service to extract session ID
-      final String? sessionId =
-          await QRCodeService.instance.processQRCodeData(qrData);
-
-      if (sessionId != null) {
-        print('📱 InviteContactDialog: Valid session ID found: $sessionId');
-
-        // Update the form
-        setState(() {
-          _sessionIdController.text = sessionId;
-          _selectedMethod = 'session_id';
-        });
-
-        // Show success message
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Session ID extracted: $sessionId'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      } else {
-        print('📱 InviteContactDialog: Invalid QR code data');
-
-        // Show error message
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content:
-                  Text('Invalid QR code. Please scan a valid SeChat QR code.'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('📱 InviteContactDialog: Error processing QR data: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error processing QR code: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildMethodOption(
-      String method, IconData icon, String title, String subtitle) {
-    final isSelected = _selectedMethod == method;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedMethod = method;
-        });
-
-        // Handle QR code methods
-        if (method == 'scan_qr') {
-          _scanQRCode();
-        } else if (method == 'upload_qr') {
-          _uploadQRCode();
-        }
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFFFF6B35).withValues(alpha: 0.1)
-              : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? const Color(0xFFFF6B35) : Colors.grey[300]!,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFFFF6B35).withValues(alpha: 0.2)
-                    : Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: isSelected ? const Color(0xFFFF6B35) : Colors.grey[600],
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? const Color(0xFFFF6B35)
-                          : Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isSelected)
-              Icon(
-                Icons.check_circle,
-                color: const Color(0xFFFF6B35),
-                size: 20,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     double height = MediaQuery.of(context).size.height;
@@ -368,33 +128,53 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
         height: height * 0.95,
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
         ),
         child: Column(
           children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            // Header
+            // Header - Fixed at top
             Container(
               padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
               child: Column(
                 children: [
+                  // Close button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
                   // Icon
                   Container(
-                    width: 60,
-                    height: 60,
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(
                       Icons.person_add,
@@ -434,7 +214,7 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Column(
                   children: [
-                    // Method Selection
+                    // Session ID Field
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
@@ -445,61 +225,31 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Column(
-                            children: [
-                              _buildMethodOption(
-                                'session_id',
-                                Icons.person,
-                                'Session ID',
-                                'Enter session ID manually',
-                              ),
-                              SizedBox(height: height * 0.02),
-                              _buildMethodOption(
-                                'scan_qr',
-                                Icons.qr_code_scanner,
-                                'Scan QR Code',
-                                'Scan QR code with camera',
-                              ),
-                              SizedBox(height: height * 0.02),
-                              _buildMethodOption(
-                                'upload_qr',
-                                Icons.upload_file,
-                                'Upload QR Code',
-                                'Upload QR code from gallery',
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    SizedBox(height: height * 0.02),
-
-                    // Session ID Field (only show for session_id method)
-                    if (_selectedMethod == 'session_id')
-                      Column(
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.only(
-                                bottom:
-                                    MediaQuery.of(context).viewInsets.bottom),
-                            child: CustomTextfield(
-                              controller: _sessionIdController,
-                              label: 'Session ID',
-                              icon: Icons.person,
-                              validator: (value) {
-                                if (_sessionIdError != null)
-                                  return _sessionIdError;
-                                return null;
-                              },
-                              onChanged: (value) {
-                                if (_sessionIdError != null) {
-                                  setState(() {
-                                    _sessionIdError = null;
-                                  });
-                                }
-                              },
+                          Text(
+                            'Session ID',
+                            style: TextStyle(
+                              fontSize: width * 0.035,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
                             ),
+                          ),
+                          const SizedBox(height: 16),
+                          CustomTextfield(
+                            controller: _sessionIdController,
+                            label: 'Enter Session ID',
+                            icon: Icons.person,
+                            validator: (value) {
+                              if (_sessionIdError != null)
+                                return _sessionIdError;
+                              return null;
+                            },
+                            onChanged: (value) {
+                              if (_sessionIdError != null) {
+                                setState(() {
+                                  _sessionIdError = null;
+                                });
+                              }
+                            },
                           ),
 
                           // Error display for session ID
@@ -518,6 +268,9 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
                           const SizedBox(height: 16),
                         ],
                       ),
+                    ),
+
+                    const SizedBox(height: 24),
 
                     // Key Request Phrase Selection
                     Container(
@@ -556,9 +309,6 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
                                 vertical: 8,
                               ),
                             ),
-
-                            // dropdown meanu bg whit
-
                             items: _keyRequestPhrases.map((String phrase) {
                               return DropdownMenuItem<String>(
                                 value: phrase,

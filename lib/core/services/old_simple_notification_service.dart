@@ -1,3 +1,7 @@
+// This file has been deprecated and all functionality moved to SecureNotificationService
+// All code is commented out to prevent compilation errors
+
+/*
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1704,7 +1708,7 @@ class SimpleNotificationService {
         }
       } catch (e) {
         print(
-            '🔔 SimpleNotificationService: Error linking token to session (attempt ${retryCount + 1}): $e');
+            '�� SimpleNotificationService: Error linking token to session (attempt ${retryCount + 1}): $e');
         retryCount++;
         if (retryCount < maxRetries) {
           await Future.delayed(
@@ -3712,3 +3716,7 @@ class SimpleNotificationService {
     }
   }
 }
+*/
+
+// DEPRECATED: All functionality has been moved to SecureNotificationService
+// This file is kept for reference only and should not be used

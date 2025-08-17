@@ -2,17 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../models/message.dart';
 import 'text_message_bubble.dart';
-import 'voice_message_bubble.dart';
-import 'video_message_bubble.dart';
-import 'image_message_bubble.dart';
-import 'document_message_bubble.dart';
-import 'location_message_bubble.dart';
-import 'contact_message_bubble.dart';
-import 'emoticon_message_bubble.dart';
 import 'reply_message_bubble.dart';
 import 'system_message_bubble.dart';
 
-/// Main message bubble widget that handles all message types
+/// Main message bubble widget that handles text-based message types only
 class MessageBubble extends StatelessWidget {
   final Message message;
   final bool isFromCurrentUser;
@@ -60,62 +53,6 @@ class MessageBubble extends StatelessWidget {
     switch (message.type) {
       case MessageType.text:
         return TextMessageBubble(
-          message: message,
-          isFromCurrentUser: isFromCurrentUser,
-          onTap: onTap,
-          onLongPress: onLongPress,
-        );
-
-      case MessageType.voice:
-        return VoiceMessageBubble(
-          message: message,
-          isFromCurrentUser: isFromCurrentUser,
-          onTap: onTap,
-          onLongPress: onLongPress,
-        );
-
-      case MessageType.video:
-        return VideoMessageBubble(
-          message: message,
-          isFromCurrentUser: isFromCurrentUser,
-          onTap: onTap,
-          onLongPress: onLongPress,
-        );
-
-      case MessageType.image:
-        return ImageMessageBubble(
-          message: message,
-          isFromCurrentUser: isFromCurrentUser,
-          onTap: onTap,
-          onLongPress: onLongPress,
-        );
-
-      case MessageType.document:
-        return DocumentMessageBubble(
-          message: message,
-          isFromCurrentUser: isFromCurrentUser,
-          onTap: onTap,
-          onLongPress: onLongPress,
-        );
-
-      case MessageType.location:
-        return LocationMessageBubble(
-          message: message,
-          isFromCurrentUser: isFromCurrentUser,
-          onTap: onTap,
-          onLongPress: onLongPress,
-        );
-
-      case MessageType.contact:
-        return ContactMessageBubble(
-          message: message,
-          isFromCurrentUser: isFromCurrentUser,
-          onTap: onTap,
-          onLongPress: onLongPress,
-        );
-
-      case MessageType.emoticon:
-        return EmoticonMessageBubble(
           message: message,
           isFromCurrentUser: isFromCurrentUser,
           onTap: onTap,

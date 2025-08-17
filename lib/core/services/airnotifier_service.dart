@@ -97,6 +97,14 @@ class AirNotifierService {
   String? get currentUserId => _currentUserId;
   String? get currentDeviceToken => _currentDeviceToken;
 
+  // Set current device token (public method for external use)
+  Future<void> setCurrentDeviceToken(String token) async {
+    _currentDeviceToken = token;
+    await _storage.write(key: 'device_token', value: token);
+    print(
+        '📱 AirNotifierService: Current device token set: ${token.substring(0, 8)}...');
+  }
+
   AirNotifierService._();
 
   // Initialize the service
@@ -168,13 +176,7 @@ class AirNotifierService {
       print('📱 AirNotifierService: Current session ID: $_currentSessionId');
       print('📱 AirNotifierService: Provided session ID: $sessionId');
 
-      // Check if this token is already registered
-      if (_currentDeviceToken == deviceToken) {
-        print(
-            '📱 AirNotifierService: Device token already registered: $deviceToken');
-        return true;
-      }
-
+      // Always update local storage first
       _currentDeviceToken = deviceToken;
       await _storage.write(key: 'device_token', value: deviceToken);
 
@@ -221,7 +223,7 @@ class AirNotifierService {
 
           // For iOS, also ensure the token is properly shared across sessions
           if (deviceType == 'ios') {
-            await _ensureIOSTokenVisibility(sessionToLink);
+            await ensureIOSTokenVisibility(sessionToLink);
           }
         }
 
@@ -239,7 +241,7 @@ class AirNotifierService {
   }
 
   /// Ensure iOS token is properly visible to other sessions
-  Future<void> _ensureIOSTokenVisibility(String sessionId) async {
+  Future<void> ensureIOSTokenVisibility(String sessionId) async {
     try {
       print(
           '📱 AirNotifierService: Ensuring iOS token visibility for session: $sessionId');
@@ -269,7 +271,7 @@ class AirNotifierService {
         } else {
           print(
               '📱 AirNotifierService: ⚠️ iOS token not visible to other sessions, attempting to fix...');
-          await _fixIOSTokenVisibility(sessionId);
+          await fixIOSTokenVisibility(sessionId);
         }
       } else {
         print(
@@ -281,7 +283,7 @@ class AirNotifierService {
   }
 
   /// Fix iOS token visibility issues
-  Future<void> _fixIOSTokenVisibility(String sessionId) async {
+  Future<void> fixIOSTokenVisibility(String sessionId) async {
     try {
       print(
           '📱 AirNotifierService: Attempting to fix iOS token visibility for session: $sessionId');
@@ -327,14 +329,10 @@ class AirNotifierService {
         return false;
       }
 
-      // Check if token is already linked to this session
-      if (_currentSessionId == sessionId) {
-        print(
-            '📱 AirNotifierService: Token already linked to session: $sessionId');
-        return true;
-      }
-
-      print('📱 AirNotifierService: Linking token to session: $sessionId');
+      // Always ensure token is linked on the server, even if we think it's already linked
+      // This prevents issues where the server state might be out of sync
+      print(
+          '📱 AirNotifierService: 🔗 Ensuring token is linked to session: $sessionId');
 
       final response = await http.post(
         Uri.parse('$_baseUrl/api/v2/sessions/link'),
@@ -368,6 +366,47 @@ class AirNotifierService {
       }
     } catch (e) {
       print('📱 AirNotifierService: ❌ Error linking token to session: $e');
+      return false;
+    }
+  }
+
+  /// Save token for a specific session with platform namespacing
+  Future<bool> saveTokenForSession({
+    required String sessionId,
+    required String token,
+    required String platform,
+  }) async {
+    try {
+      final key = 'push_token:$platform:session:$sessionId';
+      await _storage.write(key: key, value: token);
+
+      // Always update current token and main device_token key for immediate use
+      // This prevents "No device token available for linking" errors
+      _currentDeviceToken = token;
+      await _storage.write(key: 'device_token', value: token);
+
+      print(
+          '📱 AirNotifierService: ✅ Token saved for session $sessionId (platform: $platform) and set as current');
+      return true;
+    } catch (e) {
+      print('📱 AirNotifierService: ❌ Error saving token for session: $e');
+      return false;
+    }
+  }
+
+  /// Check if a session has any registered tokens
+  Future<bool> hasAnyToken({required String sessionId}) async {
+    try {
+      // Check for both iOS and Android tokens
+      final iosKey = 'push_token:ios:session:$sessionId';
+      final androidKey = 'push_token:android:session:$sessionId';
+
+      final iosToken = await _storage.read(key: iosKey);
+      final androidToken = await _storage.read(key: androidKey);
+
+      return iosToken != null || androidToken != null;
+    } catch (e) {
+      print('📱 AirNotifierService: ❌ Error checking tokens for session: $e');
       return false;
     }
   }
@@ -697,7 +736,7 @@ class AirNotifierService {
           _detectDeviceType(_currentDeviceToken!) == 'ios') {
         print(
             '📱 AirNotifierService: iOS device detected, checking token visibility...');
-        await _ensureIOSTokenVisibility(_currentSessionId ?? '');
+        await ensureIOSTokenVisibility(_currentSessionId ?? '');
       }
 
       // Deduplication: Check if this exact notification was recently sent

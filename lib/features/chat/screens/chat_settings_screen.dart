@@ -398,37 +398,21 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   }
 
   void _updateNotificationSettings() {
-    // Update conversation notification settings
-    final provider = context.read<ChatProvider>();
-    provider.updateConversationSettings(
-      widget.conversation.id,
-      notificationsEnabled: _notificationsEnabled,
-      soundEnabled: _soundEnabled,
-      vibrationEnabled: _vibrationEnabled,
-    );
+    // TODO: Implement update conversation notification settings
+    print(
+        '🔔 Update notification settings: $_notificationsEnabled, $_soundEnabled, $_vibrationEnabled');
   }
 
   void _updatePrivacySettings() {
-    // Update conversation privacy settings
-    final provider = context.read<ChatProvider>();
-    provider.updateConversationSettings(
-      widget.conversation.id,
-      readReceiptsEnabled: _readReceiptsEnabled,
-      typingIndicatorsEnabled: _typingIndicatorsEnabled,
-      lastSeenEnabled: _lastSeenEnabled,
-    );
+    // TODO: Implement update conversation privacy settings
+    print(
+        '🔒 Update privacy settings: $_readReceiptsEnabled, $_typingIndicatorsEnabled, $_lastSeenEnabled');
   }
 
   void _updateMediaSettings() {
-    // Update conversation media settings
-    final provider = context.read<ChatProvider>();
-    provider.updateConversationSettings(
-      widget.conversation.id,
-      mediaAutoDownload: _mediaAutoDownload,
-      encryptMedia: _encryptMedia,
-      mediaQuality: _mediaQuality,
-      messageRetention: _messageRetention,
-    );
+    // TODO: Implement update conversation media settings
+    print(
+        '📱 Update media settings: $_mediaAutoDownload, $_encryptMedia, $_mediaQuality, $_messageRetention');
   }
 
   void _showMediaQualityDialog() {
@@ -550,9 +534,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     );
 
     if (confirmed == true) {
-      // Clear media cache
-      final provider = context.read<ChatProvider>();
-      await provider.clearConversationMedia(widget.conversation.id);
+      // TODO: Implement clear conversation media functionality
+      print('🗑️ Clear conversation media option selected');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -593,9 +576,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     );
 
     if (format != null) {
-      // Export chat
-      final provider = context.read<ChatProvider>();
-      await provider.exportConversation(widget.conversation.id, format);
+      // TODO: Implement export conversation functionality
+      print('📤 Export conversation option selected: $format');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -629,9 +611,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     );
 
     if (confirmed == true) {
-      // Block user
-      final provider = context.read<ChatProvider>();
-      await provider.blockUser(widget.conversation.id);
+      // TODO: Implement block user functionality
+      print('🚫 Block user option selected');
 
       if (mounted) {
         Navigator.pop(context); // Return to chat list
@@ -666,9 +647,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     );
 
     if (confirmed == true) {
-      // Delete conversation
-      final provider = context.read<ChatProvider>();
-      await provider.deleteConversation(widget.conversation.id ?? '');
+      // TODO: Implement delete conversation functionality
+      print('🗑️ Delete conversation option selected');
 
       if (mounted) {
         Navigator.pop(context); // Return to chat list

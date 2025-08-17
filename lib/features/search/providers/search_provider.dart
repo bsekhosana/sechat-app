@@ -219,16 +219,7 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-  // Parse QR code data
-  Map<String, dynamic>? parseQRCodeData(String qrData) {
-    try {
-      final data = json.decode(qrData);
-      return data as Map<String, dynamic>;
-    } catch (e) {
-      print('🔍 SearchProvider: Error parsing QR code data: $e');
-      return null;
-    }
-  }
+
 
   // Validate Session ID format
   bool _isValidSessionId(String sessionId) {

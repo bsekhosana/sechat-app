@@ -170,17 +170,7 @@ class GlobalUserService {
     }
   }
 
-  /// Get session QR code data
-  String? getSessionQRCodeData() {
-    final session = SeSessionService().currentSession;
-    return session?.publicKey;
-  }
 
-  /// Parse session QR code data
-  Map<String, dynamic>? parseSessionQRCodeData(String qrData) {
-    // This would need to be implemented based on QR code format
-    return null;
-  }
 
   /// Check if user has contacts
   Future<bool> hasContacts() async {

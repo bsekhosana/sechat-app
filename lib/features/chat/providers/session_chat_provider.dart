@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../../core/services/airnotifier_service.dart';
-import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/secure_notification_service.dart';
 import '../../../core/services/encryption_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
@@ -10,8 +10,8 @@ import 'dart:convert';
 
 class SessionChatProvider extends ChangeNotifier {
   final AirNotifierService _airNotifier = AirNotifierService.instance;
-  final SimpleNotificationService _notificationService =
-      SimpleNotificationService.instance;
+  final SecureNotificationService _notificationService =
+      SecureNotificationService.instance;
 
   List<Chat> _chats = [];
   final Map<String, User> _chatUsers = {};
@@ -62,15 +62,13 @@ class SessionChatProvider extends ChangeNotifier {
       final encryptedPayload = await EncryptionService.createEncryptedPayload(
           messageData, recipientId);
 
-      // Send message via SimpleNotificationService with full encryption
+      // Send message via SecureNotificationService with full encryption
       final success =
-          await SimpleNotificationService.instance.sendEncryptedMessage(
+          await SecureNotificationService.instance.sendEncryptedMessage(
         recipientId: recipientId,
         senderName: _airNotifier.currentUserId ?? 'Anonymous User',
         message: content,
         conversationId: recipientId,
-        encryptedData: encryptedPayload['data'] as String,
-        checksum: encryptedPayload['checksum'] as String,
         messageId: messageId,
       );
 

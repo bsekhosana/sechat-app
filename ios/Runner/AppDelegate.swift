@@ -28,6 +28,7 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
 @objc class AppDelegate: FlutterAppDelegate {
   private var notificationEventSink: FlutterEventSink?
   private let notificationStreamHandler = NotificationStreamHandler()
+  private var cachedDeviceToken: String?
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -67,11 +68,60 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
     
     pushChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       print("📱 iOS: Received method call: \(call.method)")
+      
       switch call.method {
+      case "getAuthorizationStatus":
+        print("📱 iOS: Flutter requested authorization status")
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+          let status: String
+          switch settings.authorizationStatus {
+          case .authorized:
+            status = "authorized"
+          case .denied:
+            status = "denied"
+          case .provisional:
+            status = "provisional"
+          case .ephemeral:
+            status = "ephemeral"
+          case .notDetermined:
+            status = "notDetermined"
+          default:
+            status = "notDetermined"
+          }
+          print("📱 iOS: Authorization status: \(status)")
+          result(status)
+        }
+        
+      case "requestAuthorization":
+        print("📱 iOS: Flutter requested authorization")
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+          if granted {
+            print("📱 iOS: ✅ Authorization granted")
+            DispatchQueue.main.async {
+              UIApplication.shared.registerForRemoteNotifications()
+            }
+          } else {
+            print("📱 iOS: ❌ Authorization denied: \(error?.localizedDescription ?? "Unknown error")")
+          }
+          result(granted)
+        }
+        
+      case "getDeviceToken":
+        print("📱 iOS: Flutter requested device token")
+        // Return the cached device token if available
+        if let token = self?.cachedDeviceToken {
+          print("📱 iOS: Returning cached device token: \(String(token.prefix(8)))...")
+          result(token)
+        } else {
+          print("📱 iOS: No device token available")
+          result(nil)
+        }
+        
       case "requestDeviceToken":
         print("📱 iOS: Flutter requested device token")
         // The device token will be sent via didRegisterForRemoteNotificationsWithDeviceToken
         result(nil)
+        
       case "registerForRemoteNotifications":
         print("📱 iOS: Flutter requested registration for remote notifications")
         DispatchQueue.main.async {
@@ -79,19 +129,33 @@ class NotificationStreamHandler: NSObject, FlutterStreamHandler {
           print("📱 iOS: ✅ Registration for remote notifications completed")
         }
         result(true)
+        
       case "requestNotificationPermissions":
         print("📱 iOS: Flutter requested notification permissions")
         self?.requestNotificationPermissions { granted in
           result(granted)
         }
+        
+      case "openNotificationSettings":
+        print("📱 iOS: Flutter requested to open notification settings")
+        DispatchQueue.main.async {
+          if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settingsUrl)
+          }
+        }
+        result(true)
+        
       case "testMethodChannel":
         print("📱 iOS: Flutter requested test method channel")
         result("iOS method channel is working!")
+        
       case "processStoredNotifications":
         print("📱 iOS: Flutter requested to process stored notifications")
         self?.processStoredNotifications()
         result(true)
+        
       default:
+        print("📱 iOS: Method not implemented: \(call.method)")
         result(FlutterMethodNotImplemented)
       }
     }
@@ -835,6 +899,10 @@ extension AppDelegate {
   ) {
     let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
     print("📱 iOS: ✅ Device token received: \(tokenString)")
+    
+    // Cache the device token for future requests
+    cachedDeviceToken = tokenString
+    print("📱 iOS: ✅ Device token cached: \(String(tokenString.prefix(8)))...")
     
     // Send token to Flutter
     let controller = window?.rootViewController as! FlutterViewController

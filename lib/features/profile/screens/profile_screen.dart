@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/global_user_service.dart';
 import '../../../core/services/airnotifier_service.dart';
-import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/secure_notification_service.dart';
 import '../../../core/services/se_session_service.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -63,12 +63,12 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Device Token: ${SimpleNotificationService.instance.deviceToken ?? 'Not received'}',
+                      'Device Token: ${SecureNotificationService.instance.deviceToken ?? 'Not received'}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'AirNotifier Registered: ${SimpleNotificationService.instance.isDeviceTokenRegistered() ? 'Yes' : 'No'}',
+                      'AirNotifier Registered: ${SecureNotificationService.instance.isDeviceTokenRegistered() ? 'Yes' : 'No'}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 16),

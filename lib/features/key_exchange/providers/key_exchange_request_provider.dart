@@ -7,7 +7,7 @@ import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:sechat_app/core/utils/guid_generator.dart';
 import 'package:sechat_app/shared/models/key_exchange_request.dart';
-import 'package:sechat_app/core/services/simple_notification_service.dart';
+import 'package:sechat_app/core/services/secure_notification_service.dart';
 import 'dart:convert'; // Added for base64 decoding
 
 /// Provider for managing key exchange requests
@@ -91,20 +91,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   void _ensureNotificationServiceConnection() {
     try {
       // Connect to notification service for key exchange notifications
-      SimpleNotificationService.instance.setOnKeyExchangeRequestReceived(
+      SecureNotificationService.instance.setOnKeyExchangeRequestReceived(
         (data) => processReceivedKeyExchangeRequest(data),
       );
 
-      SimpleNotificationService.instance.setOnKeyExchangeAccepted(
+      SecureNotificationService.instance.setOnKeyExchangeAccepted(
         (data) => processKeyExchangeAccepted(data),
       );
 
-      SimpleNotificationService.instance.setOnKeyExchangeDeclined(
+      SecureNotificationService.instance.setOnKeyExchangeDeclined(
         (data) => processKeyExchangeDeclined(data),
       );
 
       print(
-          '🔑 KeyExchangeRequestProvider: ✅ Connected to SimpleNotificationService');
+          '🔑 KeyExchangeRequestProvider: ✅ Connected to SecureNotificationService');
     } catch (e) {
       print(
           '🔑 KeyExchangeRequestProvider: Error connecting to notification service: $e');
@@ -115,11 +115,11 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   void _addNotificationItem(
       String title, String body, String type, Map<String, dynamic>? data) {
     try {
-      // Create notification through SimpleNotificationService by triggering the callback
-      // This will be handled by the NotificationProvider through the SimpleNotificationService
+      // Create notification through SecureNotificationService by triggering the callback
+      // This will be handled by the NotificationProvider through the SecureNotificationService
       print('🔑 KeyExchangeRequestProvider: Notification item added: $title');
 
-      // The actual notification creation will happen through the SimpleNotificationService
+      // The actual notification creation will happen through the SecureNotificationService
       // when it processes the key exchange notifications
     } catch (e) {
       print(

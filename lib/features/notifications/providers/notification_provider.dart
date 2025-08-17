@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:sechat_app/features/notifications/models/local_notification.dart';
-import 'package:sechat_app/core/services/simple_notification_service.dart';
+import 'package:sechat_app/core/services/secure_notification_service.dart';
 import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 
 class NotificationProvider extends ChangeNotifier {
@@ -19,8 +19,8 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   void _setupNotificationServiceCallback() {
-    // Connect to SimpleNotificationService for key exchange notifications
-    SimpleNotificationService.instance.setOnNotificationReceived(
+    // Connect to SecureNotificationService for key exchange notifications
+    SecureNotificationService.instance.setOnNotificationReceived(
       (title, body, type, data) =>
           _handleNotificationFromService(title, body, type, data),
     );

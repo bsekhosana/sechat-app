@@ -5,7 +5,7 @@ import '../models/message.dart';
 import '../models/message_status.dart' as msg_status;
 import '../models/chat_conversation.dart';
 import 'message_storage_service.dart';
-import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/secure_notification_service.dart';
 import '../../../core/services/se_session_service.dart';
 
 /// Service for tracking message delivery status and read receipts
@@ -15,8 +15,8 @@ class MessageStatusTrackingService {
       _instance ??= MessageStatusTrackingService._();
 
   final MessageStorageService _storageService = MessageStorageService.instance;
-  final SimpleNotificationService _notificationService =
-      SimpleNotificationService.instance;
+  final SecureNotificationService _notificationService =
+      SecureNotificationService.instance;
   final SeSessionService _sessionService = SeSessionService();
 
   // Stream controllers for real-time updates
@@ -354,7 +354,7 @@ class MessageStatusTrackingService {
   }
 
   /// Public method to handle typing indicators from external sources (e.g., push notifications)
-  /// This method can be called from SimpleNotificationService when typing indicator notifications are received
+  /// This method can be called from SecureNotificationService when typing indicator notifications are received
   Future<void> handleExternalTypingIndicator(
       String senderId, bool isTyping) async {
     try {

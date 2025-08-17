@@ -18,12 +18,445 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
+class _AccountCreatedActionSheet extends StatefulWidget {
+  final String? sessionId;
+  final String? privateKey;
+  final String displayName;
+  final VoidCallback onStartChatting;
+
+  const _AccountCreatedActionSheet({
+    required this.sessionId,
+    required this.privateKey,
+    required this.displayName,
+    required this.onStartChatting,
+  });
+
+  @override
+  State<_AccountCreatedActionSheet> createState() =>
+      _AccountCreatedActionSheetState();
+}
+
+class _AccountCreatedActionSheetState
+    extends State<_AccountCreatedActionSheet> {
+  // Copy feedback states
+  bool _showSessionIdCopied = false;
+  bool _showPasswordCopied = false;
+
+  // Loading state for start chatting button
+  bool _isStartChattingLoading = false;
+
+  void _copySessionIdToClipboard() {
+    if (widget.sessionId != null) {
+      Clipboard.setData(ClipboardData(text: widget.sessionId!));
+      print('🔐 Debug: Copying Session ID to clipboard');
+
+      // Force UI rebuild
+      setState(() {
+        _showSessionIdCopied = true;
+      });
+      print('🔐 Debug: _showSessionIdCopied set to: $_showSessionIdCopied');
+
+      // Hide the copied message after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) {
+          setState(() {
+            _showSessionIdCopied = false;
+          });
+          print(
+              '🔐 Debug: _showSessionIdCopied reset to: $_showSessionIdCopied');
+        }
+      });
+    }
+  }
+
+  void _copyPasswordToClipboard() {
+    if (widget.privateKey != null) {
+      Clipboard.setData(ClipboardData(text: widget.privateKey!));
+      print('🔐 Debug: Copying Password to clipboard');
+
+      // Force UI rebuild
+      setState(() {
+        _showPasswordCopied = true;
+      });
+      print('🔐 Debug: _showPasswordCopied set to: $_showPasswordCopied');
+
+      // Hide the copied message after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) {
+          setState(() {
+            _showPasswordCopied = false;
+          });
+          print('🔐 Debug: _showPasswordCopied reset to: $_showPasswordCopied');
+        }
+      });
+    }
+  }
+
+  Future<void> _handleStartChatting() async {
+    setState(() {
+      _isStartChattingLoading = true;
+    });
+
+    try {
+      widget.onStartChatting();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isStartChattingLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: Colors.black,
+        fontWeight: FontWeight.bold,
+        fontSize: 16,
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(
+      String label, String value, IconData? copyIcon, VoidCallback? onCopy) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 14,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (copyIcon != null && onCopy != null) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: onCopy,
+              icon: Icon(copyIcon, size: 18, color: const Color(0xFFFF6B35)),
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B35).withOpacity(0.1),
+                shape: const CircleBorder(),
+                padding: const EdgeInsets.all(4),
+              ),
+              tooltip: 'Copy $label',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRowWithCopyFeedback(String label, String value,
+      IconData? copyIcon, VoidCallback? onCopy, bool showCopied) {
+    print(
+        '🔐 Debug: Building detail row for $label with showCopied: $showCopied');
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 14,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (copyIcon != null && onCopy != null) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: onCopy,
+                  icon:
+                      Icon(copyIcon, size: 18, color: const Color(0xFFFF6B35)),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF6B35).withOpacity(0.1),
+                    shape: const CircleBorder(),
+                    padding: const EdgeInsets.all(4),
+                  ),
+                  tooltip: 'Copy $label',
+                ),
+              ],
+            ],
+          ),
+          // Copy feedback label
+          if (showCopied) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$label copied successfully!',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.95,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Header
+            Container(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Color(0xFFFF6B35), size: 24),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${widget.displayName}\'s Session Created!',
+                      style: TextStyle(
+                        color: Color(0xFFFF6B35),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Scrollable Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Your SeChat session has been created successfully.',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Warning Box
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.warning, color: Colors.red, size: 16),
+                              SizedBox(width: 8),
+                              Text(
+                                'Important',
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '• Save your login password securely\n'
+                            '• You\'ll need it to access your account\n'
+                            '• Never share your password with anyone',
+                            style: TextStyle(color: Colors.red, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    // Login Details Section
+                    _buildSectionHeader('Login Details'),
+                    const SizedBox(height: 12),
+
+                    if (widget.sessionId != null)
+                      _buildDetailRowWithCopyFeedback(
+                        'Session ID',
+                        widget.sessionId!,
+                        Icons.copy,
+                        _copySessionIdToClipboard,
+                        _showSessionIdCopied,
+                      ),
+
+                    if (widget.privateKey != null) ...[
+                      const SizedBox(height: 8),
+                      _buildDetailRowWithCopyFeedback(
+                        'Login Password',
+                        widget.privateKey!,
+                        Icons.copy,
+                        _copyPasswordToClipboard,
+                        _showPasswordCopied,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+
+            // Action Button (kept outside the scroll view)
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: ElevatedButton(
+                onPressed:
+                    _isStartChattingLoading ? null : _handleStartChatting,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF6B35),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 2,
+                ),
+                child: _isStartChattingLoading
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Starting...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.chat_bubble_outline, size: 20),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Start Chatting',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _displayNameController = TextEditingController();
   bool _isLoading = false;
+  bool _isStartChattingLoading = false;
+  bool _isWhyChooseExpanded = false;
   String? _error;
-  String? _qrCodeData;
+
   String? _sessionId;
   String? _privateKey;
 
@@ -58,7 +491,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         setState(() {
           _sessionId = sessionData.sessionId;
-          _qrCodeData = sessionData.publicKey; // Use public key as QR data
           _privateKey = password; // Store password for display
         });
 
@@ -70,7 +502,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         print('🔐 Debug: Created At: ${sessionData.createdAt}');
 
         // Show success dialog with Session details
-        _showSuccessDialog();
+        await _showSuccessDialog();
       } else {
         setState(() {
           _error = 'Failed to create session';
@@ -87,196 +519,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  void _showSuccessDialog() {
-    showDialog(
+  Future<void> _showSuccessDialog() async {
+    await showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Container(
-          constraints: const BoxConstraints(
-            maxHeight: 600,
-            maxWidth: 400,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF6B35),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle,
-                        color: Colors.white, size: 24),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Account Created!',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AccountCreatedActionSheet(
+        sessionId: _sessionId,
+        privateKey: _privateKey,
+        displayName: _displayNameController.text.trim(),
+        onStartChatting: () async {
+          setState(() => _isStartChattingLoading = true);
+          try {
+            // Initialize notification services with new session
+            final seSessionService = SeSessionService();
+            await seSessionService.initializeNotificationServices();
 
-              // Scrollable Content
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Your SeChat account has been created successfully.',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
-                      const SizedBox(height: 24),
+            // Add welcome notification to SharedPreferences
+            await _addWelcomeNotification();
 
-                      // Login Details Section
-                      _buildSectionHeader('Login Details'),
-                      const SizedBox(height: 12),
-
-                      if (_sessionId != null)
-                        _buildDetailRow(
-                          'Session ID',
-                          _sessionId!,
-                          Icons.copy,
-                          () => _copyToClipboard(
-                              context, _sessionId!, 'Session ID'),
-                        ),
-
-                      if (_privateKey != null) ...[
-                        const SizedBox(height: 8),
-                        _buildDetailRow(
-                          'Login Password',
-                          _privateKey!,
-                          Icons.copy,
-                          () => _copyToClipboard(
-                              context, _privateKey!, 'Login Password'),
-                        ),
-                      ],
-
-                      const SizedBox(height: 20),
-
-                      // Personal Section
-                      _buildSectionHeader('Personal'),
-                      const SizedBox(height: 12),
-
-                      _buildDetailRow(
-                        'Display Name',
-                        _displayNameController.text.trim(),
-                        null,
-                        null,
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      _buildDetailRow(
-                        'Date',
-                        _formatDate(DateTime.now()),
-                        null,
-                        null,
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Warning Box
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border:
-                              Border.all(color: Colors.red.withOpacity(0.3)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.warning,
-                                    color: Colors.red, size: 16),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Important',
-                                  style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              '• Save your login password securely\n'
-                              '• You\'ll need it to access your account\n'
-                              '• Never share your password with anyone',
-                              style: TextStyle(color: Colors.red, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Action Button
-              Container(
-                padding: const EdgeInsets.all(20),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      // Initialize notification services with new session
-                      final seSessionService = SeSessionService();
-                      await seSessionService.initializeNotificationServices();
-
-                      // Add welcome notification to SharedPreferences
-                      await _addWelcomeNotification();
-
-                      Navigator.of(context).pop();
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => MainNavScreen()),
-                        (route) => false,
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF6B35),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Start Chatting',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+            if (context.mounted) {
+              Navigator.of(context).pop();
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const MainNavScreen()),
+                (route) => false,
+              );
+            }
+          } finally {
+            if (mounted) {
+              setState(() => _isStartChattingLoading = false);
+            }
+          }
+        },
       ),
     );
   }
@@ -393,7 +667,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     children: [
                       const SizedBox(height: 10),
                       // App Icon
-                      AppIcon(widthPerc: 0.2),
+                      AppIcon(widthPerc: 0.2, heroTag: 'sechat_app_icon'),
                       const SizedBox(height: 30),
                       const Text(
                         'Create Your SeChat Account',
@@ -453,30 +727,77 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Icon(Icons.security,
-                                    color: const Color(0xFFFF6B35), size: 20),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Why Choose SeChat?',
-                                  style: TextStyle(
-                                    color: Color(0xFFFF6B35),
-                                    fontWeight: FontWeight.w600,
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _isWhyChooseExpanded = !_isWhyChooseExpanded;
+                                });
+                              },
+                              child: Row(
+                                children: [
+                                  Icon(Icons.security,
+                                      color: const Color(0xFFFF6B35), size: 20),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'Why Choose SeChat?',
+                                      style: TextStyle(
+                                        color: Color(0xFFFF6B35),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  AnimatedRotation(
+                                    turns: _isWhyChooseExpanded ? 0.5 : 0.0,
+                                    duration: const Duration(milliseconds: 300),
+                                    child: Icon(
+                                      Icons.keyboard_arrow_down,
+                                      color: const Color(0xFFFF6B35),
+                                      size: 20,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 12),
-                            _buildInfoRow(
-                                Icons.lock, 'Your messages are private'),
-                            _buildInfoRow(Icons.visibility_off,
-                                'No phone numbers needed'),
-                            _buildInfoRow(
-                                Icons.storage, 'Your data stays on your phone'),
-                            _buildInfoRow(Icons.person_off, 'Stay anonymous'),
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
+                              child: _isWhyChooseExpanded
+                                  ? Column(
+                                      children: [
+                                        const SizedBox(height: 12),
+                                        _buildInfoRow(Icons.lock,
+                                            'Your messages are private'),
+                                        _buildInfoRow(Icons.visibility_off,
+                                            'No phone numbers needed'),
+                                        _buildInfoRow(Icons.storage,
+                                            'Your data stays on your phone'),
+                                        _buildInfoRow(
+                                            Icons.person_off, 'Stay anonymous'),
+                                      ],
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
                           ],
                         ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Display Name Field
+                      CustomTextfield(
+                        controller: _displayNameController,
+                        label: 'Your Name',
+                        icon: Icons.person_outline,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your name';
+                          }
+                          if (value.length < 2 || value.length > 30) {
+                            return 'Name must be 2-30 characters';
+                          }
+                          return null;
+                        },
                       ),
 
                       const SizedBox(height: 20),
@@ -507,28 +828,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       const SizedBox(height: 20),
 
-                      // Display Name Field
-                      CustomTextfield(
-                        controller: _displayNameController,
-                        label: 'Your Name',
-                        icon: Icons.person_outline,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter your name';
-                          }
-                          if (value.length < 2 || value.length > 30) {
-                            return 'Name must be 2-30 characters';
-                          }
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 20),
-
                       CustomElevatedButton(
                         isLoading: _isLoading,
                         onPressed: _createSessionIdentity,
-                        text: 'Create Account',
+                        text: 'Create Session',
                         icon: Icons.add_circle_outline,
                         isPrimary: true,
                         orangeLoading: true,

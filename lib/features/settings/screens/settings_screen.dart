@@ -1,20 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/se_shared_preference_service.dart';
 import '../../auth/screens/login_screen.dart';
-import '../../auth/screens/welcome_screen.dart';
 import '../../../core/services/se_session_service.dart';
-
-import 'package:sechat_app/shared/widgets/app_icon.dart';
-import 'package:sechat_app/core/services/simple_notification_service.dart';
-import 'package:sechat_app/core/services/airnotifier_service.dart';
-import 'package:sechat_app/core/services/network_service.dart';
-import 'package:sechat_app/shared/widgets/connection_status_widget.dart';
-import 'package:sechat_app/features/notifications/providers/notification_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -260,6 +253,15 @@ Download now and let's chat securely!
     }
   }
 
+  void _showGeneralChatSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const GeneralChatSettingsScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -268,42 +270,6 @@ Download now and let's chat securely!
         top: false,
         child: Column(
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey[300]!),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.settings,
-                      color: Color(0xFFFF6B35),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text(
-                    'Settings',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
             // Settings options
             Expanded(
               child: Padding(
@@ -317,39 +283,44 @@ Download now and let's chat securely!
                         onTap: () => _showStorageManagementSheet(context),
                       ),
                       _buildSettingsItem(
+                        title: 'General Chat Settings',
+                        subtitle: 'Manage your chat settings',
+                        onTap: () => _showGeneralChatSettings(context),
+                      ),
+                      _buildSettingsItem(
                         title: 'Logout',
                         subtitle: 'Sign out of your account',
                         onTap: () => _showLogoutConfirmation(context),
                         isDestructive: true,
                       ),
                       const SizedBox(height: 30),
-                      // App version info
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 20),
-                        child: Column(
-                          children: [
-                            Text(
-                              'SeChat',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Version 1.0.0 (Build 1)',
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
+              ),
+            ),
+            // Footer with version info
+            Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Text(
+                    'SeChat',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Version 1.0.0 (Build 1)',
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -794,6 +765,212 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Simple general chat settings screen
+class GeneralChatSettingsScreen extends StatefulWidget {
+  const GeneralChatSettingsScreen({super.key});
+
+  @override
+  State<GeneralChatSettingsScreen> createState() =>
+      _GeneralChatSettingsScreenState();
+}
+
+class _GeneralChatSettingsScreenState extends State<GeneralChatSettingsScreen> {
+  bool _notificationsEnabled = true;
+  bool _soundEnabled = true;
+  bool _vibrationEnabled = true;
+  bool _readReceiptsEnabled = true;
+  bool _typingIndicatorsEnabled = true;
+  bool _lastSeenEnabled = true;
+  bool _mediaAutoDownload = true;
+  bool _encryptMedia = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          'Chat Settings',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.settings,
+                      color: const Color(0xFFFF6B35),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'General Chat Settings',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFF6B35),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Notification settings
+              _buildSettingsSection(
+                'Notifications',
+                Icons.notifications,
+                [
+                  SwitchListTile(
+                    title: const Text('Enable notifications'),
+                    subtitle:
+                        const Text('Receive notifications for new messages'),
+                    value: _notificationsEnabled,
+                    onChanged: (value) =>
+                        setState(() => _notificationsEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Sound'),
+                    subtitle: const Text('Play sound for notifications'),
+                    value: _soundEnabled,
+                    onChanged: (value) => setState(() => _soundEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Vibration'),
+                    subtitle: const Text('Vibrate for notifications'),
+                    value: _vibrationEnabled,
+                    onChanged: (value) =>
+                        setState(() => _vibrationEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // Privacy settings
+              _buildSettingsSection(
+                'Privacy',
+                Icons.privacy_tip,
+                [
+                  SwitchListTile(
+                    title: const Text('Read receipts'),
+                    subtitle: const Text('Show when messages are read'),
+                    value: _readReceiptsEnabled,
+                    onChanged: (value) =>
+                        setState(() => _readReceiptsEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Typing indicators'),
+                    subtitle: const Text('Show when someone is typing'),
+                    value: _typingIndicatorsEnabled,
+                    onChanged: (value) =>
+                        setState(() => _typingIndicatorsEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Last seen'),
+                    subtitle: const Text('Show when you were last online'),
+                    value: _lastSeenEnabled,
+                    onChanged: (value) =>
+                        setState(() => _lastSeenEnabled = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // Media settings
+              _buildSettingsSection(
+                'Media',
+                Icons.photo_library,
+                [
+                  SwitchListTile(
+                    title: const Text('Auto-download media'),
+                    subtitle:
+                        const Text('Automatically download images and videos'),
+                    value: _mediaAutoDownload,
+                    onChanged: (value) =>
+                        setState(() => _mediaAutoDownload = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Encrypt media'),
+                    subtitle: const Text('Encrypt media files for security'),
+                    value: _encryptMedia,
+                    onChanged: (value) => setState(() => _encryptMedia = value),
+                    activeColor: const Color(0xFFFF6B35),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsSection(
+      String title, IconData icon, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              icon,
+              color: Colors.grey[600],
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(children: children),
+        ),
+      ],
     );
   }
 }

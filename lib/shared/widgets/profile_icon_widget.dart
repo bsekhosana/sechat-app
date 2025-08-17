@@ -2,16 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
+import '../../core/utils/store_link_resolver.dart';
 import '../../core/services/global_user_service.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
 import 'package:sechat_app/core/services/local_storage_service.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:ui' as ui;
-import 'dart:typed_data';
-import 'dart:io';
-import 'dart:math';
 
 class ProfileIconWidget extends StatefulWidget {
   const ProfileIconWidget({super.key});
@@ -217,7 +213,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                 // Content - Scrollable
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Column(
                       children: [
                         // Menu options container
@@ -247,10 +243,10 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                               ),
                               const SizedBox(height: 16),
                               _buildMenuButton(
-                                icon: Icons.qr_code,
-                                title: 'My QR Code',
+                                icon: Icons.app_registration,
+                                title: 'My Session Code',
                                 subtitle: 'Share your Session ID with others',
-                                onTap: () => _showQRCode(),
+                                onTap: () => _showSessionCode(),
                                 isDestructive: false,
                               ),
                             ],
@@ -476,7 +472,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
     }
   }
 
-  void _showQRCode() {
+  void _showSessionCode() {
     Navigator.pop(context); // Close the bottom sheet first
     showModalBottomSheet(
       context: context,
@@ -520,16 +516,21 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                         color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(30),
                       ),
-                      child: const Icon(
-                        Icons.qr_code,
-                        color: Color(0xFFFF6B35),
-                        size: 30,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          image: const DecorationImage(
+                            image: AssetImage('assets/logo/seChat_Logo.png'),
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
                     // Title
                     const Text(
-                      'My QR Code',
+                      'My Session Code',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -555,7 +556,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
-                      // QR Code Image
+                      // App Icon with Session ID
                       Container(
                         width: 200,
                         height: 200,
@@ -571,36 +572,33 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                             ),
                           ],
                         ),
-                        child: Stack(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // QR Code
-                            Positioned.fill(
-                              child: CustomPaint(
-                                painter: QRCodePainter(sessionId),
+                            // App Logo
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                image: const DecorationImage(
+                                  image:
+                                      AssetImage('assets/logo/seChat_Logo.png'),
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             ),
-                            // Center logo
-                            Center(
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.grey[300]!),
-                                ),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(4),
-                                    image: const DecorationImage(
-                                      image: AssetImage(
-                                          'assets/logo/seChat_Logo.png'),
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                ),
+                            const SizedBox(height: 16),
+                            // Session ID Text
+                            Text(
+                              sessionId,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey,
+                                fontFamily: 'monospace',
                               ),
+                              textAlign: TextAlign.center,
                             ),
                           ],
                         ),
@@ -721,7 +719,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => _shareQRCode(context),
+                        onTap: () => _shareSessionCode(context),
                         child: Container(
                           height: 50,
                           decoration: BoxDecoration(
@@ -739,7 +737,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                               ),
                               SizedBox(width: 8),
                               Text(
-                                'Share QR Code',
+                                'Share Session Code',
                                 style: TextStyle(
                                   color: Color(0xFFFF6B35),
                                   fontSize: 16,
@@ -781,61 +779,43 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
     }
   }
 
-  void _shareQRCode(BuildContext context) async {
+  void _shareSessionCode(BuildContext context) async {
     try {
       final sessionId = SeSessionService().currentSessionId;
       final displayName =
           GlobalUserService.instance.currentUsername ?? 'SeChat User';
 
       if (sessionId != null) {
-        // Create QR code data
-        final qrData = {
-          'sessionId': sessionId,
-          'displayName': displayName,
-          'app': 'SeChat',
-          'version': '2.0.0',
-        };
+        // Detect platform for appropriate app store link
+        final link = await StoreLinkResolver.resolve();
 
-        // Convert QR data to JSON string
-        final qrString = qrData.toString();
+        // Create invitation message
+        final invitationMessage = '🔐 Connect with me on SeChat!\n\n'
+            '👤 My Name: $displayName\n'
+            '🆔 My Session ID: $sessionId\n\n'
+            '📱 Download SeChat to start chatting securely:\n'
+            '$link\n\n'
+            '💬 Use my Session ID to send me a secure connection request!';
 
-        // Generate QR code image using custom painter
-        final recorder = ui.PictureRecorder();
-        final canvas = Canvas(recorder);
-        final painter = QRCodePainter(qrString);
-        painter.paint(canvas, const Size(400, 400));
-        final picture = recorder.endRecording();
-        final image = await picture.toImage(400, 400);
-        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-        final bytes = byteData!.buffer.asUint8List();
-
-        // Save to temporary directory first
-        final tempDir = await getTemporaryDirectory();
-        final fileName =
-            'sechat_qr_${DateTime.now().millisecondsSinceEpoch}.png';
-        final tempFile = File('${tempDir.path}/$fileName');
-        await tempFile.writeAsBytes(bytes);
-
-        await Share.shareXFiles(
-          [XFile(tempFile.path)],
-          text:
-              'Connect with me on SeChat!\n\nMy Session ID: $sessionId\n\nDownload SeChat to start chatting securely.',
-          subject: 'Connect on SeChat',
+        // Share the invitation message
+        await Share.share(
+          invitationMessage,
+          subject: 'Connect on SeChat - Secure Messaging',
         );
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('QR code shared successfully!'),
+            content: Text('Session code shared successfully!'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      print('Error sharing QR code: $e');
+      print('Error sharing session code: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to share QR code: ${e.toString()}'),
+          content: Text('Failed to share session code: ${e.toString()}'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 2),
         ),
@@ -936,40 +916,4 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       },
     );
   }
-}
-
-// Simple QR Code Painter
-class QRCodePainter extends CustomPainter {
-  QRCodePainter(this.data);
-
-  final String data;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.fill;
-
-    // Generate a simple pattern based on the data
-    final bytes = data.codeUnits;
-    final gridSize = 25;
-    final cellSize = size.width / gridSize;
-
-    for (int i = 0; i < gridSize; i++) {
-      for (int j = 0; j < gridSize; j++) {
-        final index = (i * gridSize + j) % bytes.length;
-        final shouldFill = bytes[index] % 2 == 0;
-
-        if (shouldFill) {
-          canvas.drawRect(
-            Rect.fromLTWH(i * cellSize, j * cellSize, cellSize, cellSize),
-            paint,
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

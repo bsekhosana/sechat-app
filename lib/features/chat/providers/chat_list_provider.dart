@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/services/se_session_service.dart';
-import '../../../core/services/simple_notification_service.dart';
+import '../../../core/services/secure_notification_service.dart';
 
 import '../services/message_storage_service.dart';
 import '../services/message_status_tracking_service.dart';
@@ -178,11 +178,13 @@ class ChatListProvider extends ChangeNotifier {
   /// Setup conversation creation listener
   void _setupConversationCreationListener() {
     try {
-      final notificationService = SimpleNotificationService.instance;
-      notificationService.setOnConversationCreated((conversation) {
+      final notificationService = SecureNotificationService.instance;
+      notificationService.setOnConversationCreated((conversationData) {
         print(
-            '📱 ChatListProvider: 🆕 New conversation created: ${conversation.id}');
-        addConversation(conversation);
+            '📱 ChatListProvider: 🆕 New conversation created: ${conversationData.id}');
+        // Add the new conversation to the list
+        _addNewConversation(conversationData);
+        print('📱 ChatListProvider: Conversation data: $conversationData');
       });
       print('📱 ChatListProvider: ✅ Conversation creation listener set up');
     } catch (e) {
@@ -225,6 +227,23 @@ class ChatListProvider extends ChangeNotifier {
 
       print(
           '📱 ChatListProvider: ✅ Last seen updated for conversation: ${conversation.id}');
+    }
+  }
+
+  /// Add a new conversation to the list
+  void _addNewConversation(ChatConversation conversation) {
+    try {
+      // Check if conversation already exists
+      if (!_conversations.any((conv) => conv.id == conversation.id)) {
+        _conversations.add(conversation);
+        _applySearchFilter();
+        notifyListeners();
+        print('📱 ChatListProvider: ✅ New conversation added to list: ${conversation.id}');
+      } else {
+        print('📱 ChatListProvider: ℹ️ Conversation already exists: ${conversation.id}');
+      }
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error adding new conversation: $e');
     }
   }
 
@@ -351,7 +370,7 @@ class ChatListProvider extends ChangeNotifier {
   /// Get the latest message for a conversation to show tick status
   Future<Message?> getLatestMessage(String conversationId) async {
     try {
-      final messages = await _storageService.getConversationMessages(
+      final messages = await _storageService.getMessages(
         conversationId,
         limit: 1,
       );
@@ -411,25 +430,6 @@ class ChatListProvider extends ChangeNotifier {
     switch (message.type) {
       case MessageType.text:
         return message.content['text'] as String? ?? '';
-      case MessageType.voice:
-        final duration = message.content['duration'] as int? ?? 0;
-        return '🎤 Voice message (${duration}s)';
-      case MessageType.video:
-        final duration = message.content['duration'] as int? ?? 0;
-        return '🎥 Video message (${duration}s)';
-      case MessageType.image:
-        return '🖼️ Image';
-      case MessageType.document:
-        final fileName = message.content['file_name'] as String? ?? 'File';
-        return '📄 $fileName';
-      case MessageType.location:
-        return '📍 Location';
-      case MessageType.contact:
-        final contactName =
-            message.content['contact_name'] as String? ?? 'Contact';
-        return '👤 $contactName';
-      case MessageType.emoticon:
-        return message.content['emoticon'] as String? ?? '😊';
       case MessageType.reply:
         final replyText = message.content['reply_text'] as String? ?? '';
         return '↩️ Reply: $replyText';

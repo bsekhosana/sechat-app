@@ -27,17 +27,15 @@ class CustomElevatedButton extends StatelessWidget {
             ? SizedBox(
                 width: 20,
                 height: 20,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      orangeLoading ? Color(0xFFFF6B35) : Colors.white,
-                    ),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    orangeLoading ? Color(0xFFFF6B35) : Colors.white,
                   ),
                 ),
               )
             : Icon(icon ?? Icons.add_circle_outline),
-        label: Text(isLoading ? 'Loading...' : text),
+        label: isLoading ? const SizedBox.shrink() : Text(text),
         style: ElevatedButton.styleFrom(
           backgroundColor: isPrimary ? const Color(0xFFFF6B35) : Colors.white,
           foregroundColor: isPrimary ? Colors.white : Colors.black,

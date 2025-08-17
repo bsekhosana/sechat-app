@@ -6,7 +6,7 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:pointycastle/export.dart' as pc;
 import 'se_shared_preference_service.dart';
 import '../utils/guid_generator.dart';
-import 'simple_notification_service.dart';
+import 'secure_notification_service.dart';
 import 'airnotifier_service.dart';
 
 class SessionData {
@@ -830,8 +830,8 @@ class SeSessionService {
       print(
           '🔍 SeSessionService: Setting session ID for notifications: $sessionId');
 
-      // Set session ID in SimpleNotificationService
-      await SimpleNotificationService.instance.setSessionId(sessionId);
+      // Set session ID in SecureNotificationService
+      await SecureNotificationService.instance.setSessionId(sessionId);
 
       // Initialize AirNotifier with session ID
       await AirNotifierService.instance.initialize(sessionId: sessionId);
@@ -857,8 +857,8 @@ class SeSessionService {
 
       final sessionId = currentSession!.sessionId;
 
-      // Register token with SimpleNotificationService
-      await SimpleNotificationService.instance.setDeviceToken(deviceToken);
+      // Register token with SecureNotificationService
+      await SecureNotificationService.instance.setDeviceToken(deviceToken);
 
       // Register token with AirNotifier
       await AirNotifierService.instance.registerDeviceToken(
@@ -914,7 +914,7 @@ class SeSessionService {
 
       final sessionId = currentSession!.sessionId;
       final hasDeviceToken =
-          SimpleNotificationService.instance.isDeviceTokenRegistered();
+          SecureNotificationService.instance.isDeviceTokenRegistered();
       final airNotifierConnected =
           await AirNotifierService.instance.testAirNotifierConnection();
 

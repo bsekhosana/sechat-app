@@ -79,7 +79,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             children: [
               const SizedBox(height: 60),
               // App Icon and Title
-              AppIcon(widthPerc: 0.32),
+              AppIcon(widthPerc: 0.32, heroTag: 'sechat_app_icon'),
               const SizedBox(height: 40),
               const Text(
                 'Welcome to SeChat',

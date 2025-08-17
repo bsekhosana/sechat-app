@@ -11,7 +11,6 @@ import 'features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'features/notifications/providers/notification_provider.dart';
 import 'features/chat/providers/chat_list_provider.dart';
 import 'features/chat/providers/chat_provider.dart';
-import 'features/chat/providers/session_chat_provider.dart';
 
 // import screens
 import 'features/auth/screens/welcome_screen.dart';
@@ -23,7 +22,7 @@ import 'shared/widgets/app_lifecycle_handler.dart';
 import 'shared/widgets/notification_permission_dialog.dart';
 
 // import services
-import 'core/services/simple_notification_service.dart';
+import 'core/services/secure_notification_service.dart';
 import 'core/services/se_session_service.dart';
 import 'core/services/se_shared_preference_service.dart';
 import 'core/services/network_service.dart';
@@ -62,7 +61,7 @@ Future<void> main() async {
   if (seSessionService.currentSession != null) {
     await seSessionService.initializeNotificationServices();
   } else {
-    await SimpleNotificationService.instance.initialize();
+    await SecureNotificationService.instance.initialize();
   }
 
   // Set up notification callbacks
@@ -93,7 +92,7 @@ Future<void> main() async {
 
 // Simple notification setup
 void _setupSimpleNotifications() {
-  final notificationService = SimpleNotificationService.instance;
+  final notificationService = SecureNotificationService.instance;
 
   // Set up notification callbacks
   notificationService.setOnMessageReceived(
@@ -125,7 +124,7 @@ void _setupSimpleNotifications() {
   notificationService.setOnTypingIndicator((senderId, isTyping) {
     print('🔔 Main: Typing indicator from $senderId: $isTyping');
 
-    // Typing indicator is already handled by SimpleNotificationService
+    // Typing indicator is already handled by SecureNotificationService
     print('🔔 Main: ✅ Typing indicator handled by notification service');
   });
 
@@ -134,16 +133,9 @@ void _setupSimpleNotifications() {
     print(
         '🔔 Main: Message status update: $messageId -> $status from $senderId');
 
-    // Message status updates are already handled by SimpleNotificationService
+    // Message status updates are already handled by SecureNotificationService
     print('🔔 Main: ✅ Message status update handled by notification service');
   });
-}
-
-// Set up provider instances for notification service
-void _setupNotificationProviders(BuildContext context) {
-  // The NotificationProvider is already set up in its constructor
-  // No additional setup needed here
-  print('🔔 Main: ✅ NotificationProvider already initialized in constructor');
 }
 
 // Set up method channels and event channels for native communication
@@ -168,7 +160,7 @@ void _setupMethodChannels() {
 
         // Handle device token received from native platform
         try {
-          await SimpleNotificationService.instance
+          await SecureNotificationService.instance
               .handleDeviceTokenReceived(deviceToken);
           print('🔔 Main: ✅ Device token handled successfully');
         } catch (e) {
@@ -201,7 +193,7 @@ void _setupMethodChannels() {
           print('🔔 Main: Processed notification data: $notificationData');
 
           // Handle the notification
-          await SimpleNotificationService.instance
+          await SecureNotificationService.instance
               .handleNotification(notificationData);
         } catch (e) {
           print('🔔 Main: Error handling remote notification: $e');
@@ -243,14 +235,11 @@ Future<void> _sendOnlineStatusUpdate(bool isOnline) async {
         await messageStorageService.getUserConversations(currentUserId);
 
     // Send online status update to all participants
-    final notificationService = SimpleNotificationService.instance;
+    final notificationService = SecureNotificationService.instance;
     for (final conversation in conversations) {
       final otherParticipantId =
           conversation.getOtherParticipantId(currentUserId);
-      if (otherParticipantId != null) {
-        await notificationService.sendOnlineStatusUpdate(
-            otherParticipantId, isOnline);
-      }
+      await notificationService.sendOnlineStatusUpdate(isOnline);
     }
 
     print(
@@ -269,9 +258,8 @@ void _handleNotificationEvent(dynamic event) async {
     Map<String, dynamic> notificationData;
     if (event is Map) {
       // Convert from Map<dynamic, dynamic> to Map<String, dynamic> safely
-      final dynamicMap = event as Map;
       notificationData = <String, dynamic>{};
-      dynamicMap.forEach((key, value) {
+      event.forEach((key, value) {
         if (key is String) {
           notificationData[key] = value;
         }
@@ -284,7 +272,7 @@ void _handleNotificationEvent(dynamic event) async {
     print('🔔 Main: Processed notification event data: $notificationData');
 
     // Handle the notification
-    await SimpleNotificationService.instance
+    await SecureNotificationService.instance
         .handleNotification(notificationData);
   } catch (e) {
     print('🔔 Main: Error handling notification event: $e');
@@ -437,6 +425,7 @@ class _AuthCheckerState extends State<AuthChecker> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
+      backgroundColor: Colors.white,
       body: Center(
         child: CircularProgressIndicator(),
       ),

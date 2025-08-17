@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 class AppIcon extends StatelessWidget {
   final double widthPerc; // e.g. 0.2 for 20% of screen width
-  const AppIcon({super.key, required this.widthPerc});
+  final String? heroTag; // Optional hero tag for animations
+  const AppIcon({super.key, required this.widthPerc, this.heroTag});
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width * widthPerc;
-    return Center(
+
+    Widget iconContent = Center(
       child: Container(
         width: width,
         height: width,
@@ -47,5 +49,15 @@ class AppIcon extends StatelessWidget {
         ),
       ),
     );
+
+    // Wrap with Hero if heroTag is provided
+    if (heroTag != null) {
+      return Hero(
+        tag: heroTag!,
+        child: iconContent,
+      );
+    }
+
+    return iconContent;
   }
 }

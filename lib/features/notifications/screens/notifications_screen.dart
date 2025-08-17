@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sechat_app/shared/widgets/profile_icon_widget.dart';
 
-import 'package:sechat_app/core/services/simple_notification_service.dart';
+import 'package:sechat_app/core/services/secure_notification_service.dart';
 import 'package:sechat_app/features/notifications/providers/notification_provider.dart';
 import 'package:sechat_app/features/notifications/models/local_notification.dart';
 import 'package:sechat_app/features/auth/screens/main_nav_screen.dart';
@@ -31,67 +31,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         top: false,
         child: Column(
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(
-                  bottom: BorderSide(color: Colors.grey[300]!),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.notifications,
-                      color: Color(0xFFFF6B35),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    child: Text(
-                      'Notifications',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                  Consumer<NotificationProvider>(
-                    builder: (context, notificationProvider, child) {
-                      if (notificationProvider.notifications.isNotEmpty) {
-                        return GestureDetector(
-                          onTap: () => _showClearAllDialog(
-                              context, notificationProvider),
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.clear_all,
-                              color: Colors.grey,
-                              size: 20,
-                            ),
-                          ),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-                ],
-              ),
-            ),
-
             // Notifications List
             Expanded(
               child: Consumer<NotificationProvider>(

@@ -4,13 +4,6 @@ import 'package:uuid/uuid.dart';
 /// Enum for different message types
 enum MessageType {
   text,
-  voice,
-  video,
-  image,
-  document,
-  location,
-  contact,
-  emoticon,
   reply,
   system,
 }
@@ -25,7 +18,7 @@ enum MessageStatus {
   deleted, // Message deleted
 }
 
-/// Core message model for all message types
+/// Core message model for text-based messages only
 class Message {
   final String id;
   final String conversationId;
@@ -42,8 +35,6 @@ class Message {
   final Map<String, dynamic>? metadata;
   final bool isEncrypted;
   final String? checksum;
-  final int? fileSize; // Size in bytes for media messages
-  final String? mimeType; // MIME type for media messages
 
   Message({
     String? id,
@@ -61,8 +52,6 @@ class Message {
     this.metadata,
     this.isEncrypted = true,
     this.checksum,
-    this.fileSize,
-    this.mimeType,
   })  : id = id ?? const Uuid().v4(),
         timestamp = timestamp ?? DateTime.now();
 
@@ -83,8 +72,6 @@ class Message {
     Map<String, dynamic>? metadata,
     bool? isEncrypted,
     String? checksum,
-    int? fileSize,
-    String? mimeType,
   }) {
     return Message(
       id: id ?? this.id,
@@ -102,8 +89,6 @@ class Message {
       metadata: metadata ?? this.metadata,
       isEncrypted: isEncrypted ?? this.isEncrypted,
       checksum: checksum ?? this.checksum,
-      fileSize: fileSize ?? this.fileSize,
-      mimeType: mimeType ?? this.mimeType,
     );
   }
 
@@ -125,8 +110,6 @@ class Message {
       'metadata': metadata != null ? jsonEncode(metadata) : null,
       'is_encrypted': isEncrypted ? 1 : 0,
       'checksum': checksum,
-      'file_size': fileSize,
-      'mime_type': mimeType,
     };
   }
 
@@ -160,47 +143,18 @@ class Message {
       metadata: _parseMetadata(json['metadata']),
       isEncrypted: _parseBool(json['is_encrypted']) ?? true,
       checksum: json['checksum'] as String?,
-      fileSize: json['file_size'] as int?,
-      mimeType: json['mime_type'] as String?,
     );
   }
 
-  /// Check if message is a media message
-  bool get isMediaMessage =>
-      type == MessageType.voice ||
-      type == MessageType.video ||
-      type == MessageType.image ||
-      type == MessageType.document;
-
   /// Check if message is a text-based message
   bool get isTextMessage =>
-      type == MessageType.text ||
-      type == MessageType.emoticon ||
-      type == MessageType.reply;
+      type == MessageType.text || type == MessageType.reply;
 
   /// Get message preview text for chat list
   String get previewText {
     switch (type) {
       case MessageType.text:
         return content['text'] as String? ?? '';
-      case MessageType.voice:
-        final duration = content['duration'] as int? ?? 0;
-        return '🎤 Voice message (${duration}s)';
-      case MessageType.video:
-        final duration = content['duration'] as int? ?? 0;
-        return '🎥 Video message (${duration}s)';
-      case MessageType.image:
-        return '🖼️ Image';
-      case MessageType.document:
-        final fileName = content['file_name'] as String? ?? 'Document';
-        return '📄 $fileName';
-      case MessageType.location:
-        return '📍 Location';
-      case MessageType.contact:
-        final contactName = content['contact_name'] as String? ?? 'Contact';
-        return '👤 $contactName';
-      case MessageType.emoticon:
-        return content['emoticon'] as String? ?? '😊';
       case MessageType.reply:
         final replyText = content['reply_text'] as String? ?? '';
         return '↩️ Reply: $replyText';
