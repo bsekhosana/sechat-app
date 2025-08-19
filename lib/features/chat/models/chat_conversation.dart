@@ -21,6 +21,7 @@ class ChatConversation {
   final bool isPinned;
   final Map<String, dynamic>? metadata;
   final DateTime? lastSeen; // Last time the other participant was seen
+  final bool isOnline; // Whether the other participant is currently online
   final bool isTyping; // Whether the other participant is typing
   final DateTime? typingStartedAt; // When typing started
 
@@ -59,6 +60,7 @@ class ChatConversation {
     this.isPinned = false,
     this.metadata,
     this.lastSeen,
+    this.isOnline = false,
     this.isTyping = false,
     this.typingStartedAt,
     this.notificationsEnabled,
@@ -113,6 +115,7 @@ class ChatConversation {
     bool? isPinned,
     Map<String, dynamic>? metadata,
     DateTime? lastSeen,
+    bool? isOnline,
     bool? isTyping,
     DateTime? typingStartedAt,
     bool? notificationsEnabled,
@@ -147,6 +150,7 @@ class ChatConversation {
       isPinned: isPinned ?? this.isPinned,
       metadata: metadata ?? this.metadata,
       lastSeen: lastSeen ?? this.lastSeen,
+      isOnline: isOnline ?? this.isOnline,
       isTyping: isTyping ?? this.isTyping,
       typingStartedAt: typingStartedAt ?? this.typingStartedAt,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,

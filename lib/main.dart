@@ -6,11 +6,15 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 
+// Import models for message status updates
+import 'features/chat/services/message_status_tracking_service.dart';
+import 'features/chat/models/message.dart';
+
 // import feature providers
 import 'features/key_exchange/providers/key_exchange_request_provider.dart';
-import 'features/notifications/providers/notification_provider.dart';
-import 'features/chat/providers/optimized_chat_list_provider.dart';
-import 'features/chat/providers/optimized_session_chat_provider.dart';
+import 'features/chat/providers/chat_list_provider.dart';
+import 'features/chat/providers/session_chat_provider.dart';
+import 'shared/providers/socket_provider.dart';
 
 // import screens
 import 'features/auth/screens/welcome_screen.dart';
@@ -19,17 +23,17 @@ import 'features/auth/screens/login_screen.dart';
 
 // import widgets
 import 'shared/widgets/app_lifecycle_handler.dart';
-import 'shared/widgets/notification_permission_dialog.dart';
 
 // import services
-import 'core/services/secure_notification_service.dart';
-import 'core/services/optimized_notification_service.dart';
-import 'core/services/airnotifier_service.dart';
 import 'core/services/se_session_service.dart';
 import 'core/services/se_shared_preference_service.dart';
 import 'core/services/network_service.dart';
 import 'core/services/local_storage_service.dart';
 import 'features/chat/services/message_storage_service.dart';
+import 'core/services/se_socket_service.dart';
+import 'core/services/key_exchange_service.dart';
+import 'core/services/ui_service.dart';
+import 'features/notifications/services/notification_manager_service.dart';
 
 // Global navigator key to access context from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -37,67 +41,87 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
 
-  print('🔔 Main: Starting SeChat application...');
+  print('🔌 Main: Starting SeChat application...');
   print(
-      '🔔 Main: Platform: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : 'Web'}');
+      '🔌 Main: Platform: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : 'Web'}');
 
   // Only use native splash on mobile platforms
   if (!kIsWeb) {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   }
 
-  // Hive initialization removed - using SharedPreferences only
-
   // Initialize core services in parallel for faster startup
   await Future.wait([
     LocalStorageService.instance.initialize(),
     SeSharedPreferenceService().initialize(),
     MessageStorageService.instance.initialize(),
+    NotificationManagerService().initialize(),
   ]);
 
   // Initialize SeSessionService
   final seSessionService = SeSessionService();
   await seSessionService.loadSession();
 
-  // Initialize optimized notification service
-  final optimizedNotificationService = OptimizedNotificationService();
+  // Initialize SeChat socket service
+  final socketService = SeSocketService();
+  bool socketInitialized = false;
 
-  // Initialize notification services
   if (seSessionService.currentSession != null) {
-    await seSessionService.initializeNotificationServices();
+    // Initialize socket connection
+    socketInitialized = await socketService.initialize();
+    if (socketInitialized) {
+      print('🔌 Main: ✅ Socket service initialized successfully');
+    } else {
+      print('🔌 Main: ❌ Socket service initialization failed');
+    }
   }
 
-  // Set up notification callbacks for the optimized service
-  _setupOptimizedNotificationCallbacks(optimizedNotificationService);
+  // Set up socket callbacks
+  _setupSocketCallbacks(socketService);
 
-  // Set up notification callbacks
-  _setupSimpleNotifications();
-
-  // Set up method channel for native communication
-  _setupMethodChannels();
-
-  // All real-time features now use silent notifications via AirNotifier
+  // All real-time features now use SeChat socket
 
   runApp(
     MultiProvider(
       providers: [
-        // ChangeNotifierProvider(create: (_) => SearchProvider()), // Removed search functionality
-        ChangeNotifierProvider(create: (_) => OptimizedSessionChatProvider()),
+        ChangeNotifierProvider(create: (_) => SessionChatProvider()),
         ChangeNotifierProvider(create: (_) => KeyExchangeRequestProvider()),
-        ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) {
-          final provider = OptimizedChatListProvider();
+          final provider = SocketProvider();
+          // Initialize in the next frame to avoid blocking the UI
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            await provider.initialize();
+            // Refresh connection state after initialization
+            provider.refreshConnectionState();
+          });
+          return provider;
+        }),
+        ChangeNotifierProvider(create: (_) {
+          final provider = ChatListProvider();
           // Initialize in the next frame to avoid blocking the UI
           WidgetsBinding.instance.addPostFrameCallback((_) {
             provider.initialize();
-            // Set up the conversation created callback
-            OptimizedChatListProvider.setConversationCreatedCallback(() {
-              provider.refresh();
+          });
+          return provider;
+        }),
+        ChangeNotifierProvider(create: (_) {
+          final provider = SessionChatProvider();
+          // Set up online status callback to ChatListProvider
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            final chatListProvider = Provider.of<ChatListProvider>(
+                navigatorKey.currentContext!,
+                listen: false);
+            chatListProvider
+                .setOnOnlineStatusChanged((userId, isOnline, lastSeen) {
+              provider.updateRecipientStatus(
+                recipientId: userId,
+                isOnline: isOnline,
+                lastSeen: lastSeen,
+              );
             });
           });
           return provider;
         }),
-        // ChangeNotifierProvider(create: (_) => AuthProvider()), // Temporarily disabled
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
         ChangeNotifierProvider(create: (_) => LocalStorageService.instance),
       ],
@@ -106,315 +130,116 @@ Future<void> main() async {
   );
 }
 
-// Set up optimized notification callbacks
-void _setupOptimizedNotificationCallbacks(
-    OptimizedNotificationService service) {
-  // Set up callbacks for the optimized notification service
-  service.setOnMessageReceived(
+// Set up socket callbacks
+void _setupSocketCallbacks(SeSocketService socketService) {
+  // Set up callbacks for the socket service
+  socketService.setOnMessageReceived(
       (senderId, senderName, message, conversationId, messageId) {
     print(
-        '🔔 Main: Message received callback from optimized service: $senderName: $message');
+        '🔌 Main: Message received callback from socket: $senderName: $message');
   });
 
-  service.setOnTypingIndicator((senderId, isTyping) {
-    print(
-        '🔔 Main: Typing indicator from optimized service: $senderId: $isTyping');
+  socketService.setOnTypingIndicator((senderId, isTyping) {
+    print('🔌 Main: Typing indicator from socket: $senderId: $isTyping');
   });
 
-  service.setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
-    print(
-        '🔔 Main: Online status update from optimized service: $senderId: $isOnline');
+  socketService.setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
+    print('🔌 Main: Online status update from socket: $senderId: $isOnline');
   });
 
-  service.setOnMessageStatusUpdate((senderId, messageId, status) {
-    print(
-        '🔔 Main: Message status update from optimized service: $messageId -> $status');
+  socketService.setOnMessageStatusUpdate((senderId, messageId, status) {
+    print('🔌 Main: Message status update from socket: $messageId -> $status');
+
+    // Update message status in ChatListProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Create a MessageStatusUpdate and process it
+        final statusUpdate = MessageStatusUpdate(
+          messageId: messageId,
+          status: _parseMessageStatus(status),
+          timestamp: DateTime.now(),
+          senderId: senderId,
+        );
+
+        chatListProvider.processMessageStatusUpdate(statusUpdate);
+        print(
+            '🔌 Main: ✅ Message status update processed: $messageId -> $status');
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to process message status update: $e');
+      }
+    });
   });
 
   // Set up key exchange callbacks
-  service.setOnKeyExchangeRequestReceived((data) {
-    print(
-        '🔔 Main: Key exchange request received from optimized service: $data');
+  socketService.setOnKeyExchangeRequestReceived((data) {
+    print('🔌 Main: Key exchange request received from socket: $data');
     // This will be connected to the KeyExchangeRequestProvider in main_nav_screen
   });
 
-  service.setOnKeyExchangeAccepted((data) {
-    print('🔔 Main: Key exchange accepted from optimized service: $data');
-  });
-
-  service.setOnKeyExchangeDeclined((data) {
-    print('🔔 Main: Key exchange declined from optimized service: $data');
-  });
-
-  service.setOnConversationCreated((conversation) {
+  socketService.setOnKeyExchangeAccepted((data) {
+    print('🔌 Main: Key exchange accepted from socket: $data');
     print(
-        '🔔 Main: Conversation created from optimized service: ${conversation.id}');
+        '🔌 Main: ✅ Key exchange accepted callback triggered - flow should continue automatically');
 
-    // Notify the OptimizedChatListProvider to refresh its data
-    OptimizedChatListProvider.notifyConversationCreated();
+    // The flow should continue automatically through KeyExchangeService.processKeyExchangeResponse()
+    // which will send the initial user data to complete the handshake
+  });
+
+  socketService.setOnKeyExchangeDeclined((data) {
+    print('🔌 Main: Key exchange declined from socket: $data');
+  });
+
+  socketService.setOnConversationCreated((conversation) {
+    print('🔌 Main: Conversation created from socket: ${conversation.id}');
+
+    // Notify the ChatListProvider to refresh its data
+    // This will be handled by the provider's socket callbacks
+    print('🔌 Main: ✅ Conversation created event received from socket');
+  });
+
+  // Set up KeyExchangeService callback for conversation creation
+  KeyExchangeService.instance.setOnConversationCreated((conversation) {
     print(
-        '🔔 Main: ✅ Notified OptimizedChatListProvider to refresh conversations');
-  });
-}
+        '🔑 Main: Conversation created via KeyExchangeService: ${conversation.id}');
 
-// Simple notification setup
-void _setupSimpleNotifications() {
-  final notificationService = OptimizedNotificationService();
-
-  // Set up notification callbacks
-  // NOTE: Message handling is now done directly in SecureNotificationService
-  // to avoid duplicate processing. This callback is kept for future use if needed.
-  notificationService.setOnMessageReceived(
-      (senderId, senderName, message, conversationId, messageId) {
-    print(
-        '🔔 Main: Message received callback (handled by SecureNotificationService)');
-    // Message is already handled by SecureNotificationService
-    // No need to route again to avoid duplication
-  });
-
-  notificationService.setOnTypingIndicator((senderId, isTyping) {
-    print('🔔 Main: Typing indicator from $senderId: $isTyping');
-
-    // Typing indicator is already handled by SecureNotificationService
-    print('🔔 Main: ✅ Typing indicator handled by notification service');
-  });
-
-  // Set up message status update callback for read receipts
-  notificationService.setOnMessageStatusUpdate((senderId, messageId, status) {
-    print(
-        '🔔 Main: Message status update: $messageId -> $status from $senderId');
-
-    // Message status updates are already handled by SecureNotificationService
-    print('🔔 Main: ✅ Message status update handled by notification service');
-  });
-}
-
-// Set up method channels and event channels for native communication
-void _setupMethodChannels() {
-  const MethodChannel channel = MethodChannel('push_notifications');
-  const EventChannel eventChannel = EventChannel('push_notifications_events');
-
-  // App lifecycle handling is done by AppLifecycleHandler widget
-  // Online status updates will be sent when the app goes to background/foreground
-
-  // Listen to real-time notifications via EventChannel
-  eventChannel.receiveBroadcastStream().listen((dynamic event) {
-    _handleNotificationEvent(event);
-  }, onError: (dynamic error) {
-    print('🔔 Main: EventChannel error: $error');
-  });
-
-  channel.setMethodCallHandler((call) async {
-    switch (call.method) {
-      case 'onDeviceTokenReceived':
-        final String deviceToken = call.arguments as String;
-
-        // Handle device token received from native platform
-        try {
-          // For now, we'll use the secure notification service for device token handling
-          // as the optimized service doesn't have this method yet
-          await SecureNotificationService.instance
-              .handleDeviceTokenReceived(deviceToken);
-          print('🔔 Main: ✅ Device token handled successfully');
-        } catch (e) {
-          print('🔔 Main: Error handling device token: $e');
-        }
-        return null;
-
-      case 'onRemoteNotificationReceived':
-        print(
-            '🔔 Main: Received remote notification call with arguments: ${call.arguments}');
-
-        try {
-          // Handle different argument types safely
-          Map<String, dynamic> notificationData;
-          if (call.arguments is Map) {
-            // Convert from Map<dynamic, dynamic> to Map<String, dynamic> safely
-            final dynamicMap = call.arguments as Map;
-            notificationData = <String, dynamic>{};
-            dynamicMap.forEach((key, value) {
-              if (key is String) {
-                notificationData[key] = value;
-              }
-            });
-          } else {
-            print(
-                '🔔 Main: Arguments is not a Map: ${call.arguments.runtimeType}');
-            return null;
-          }
-
-          print('🔔 Main: Processed notification data: $notificationData');
-
-          // Handle the notification using optimized service
-          await OptimizedNotificationService()
-              .handleNotification(notificationData);
-        } catch (e) {
-          print('🔔 Main: Error handling remote notification: $e');
-          print('🔔 Main: Error stack trace: ${StackTrace.current}');
-        }
-        return null;
-
-      case 'requestDeviceToken':
-        print('🔔 Main: Native platform requested device token');
-        // This is handled by the native platform automatically
-        return null;
-
-      default:
-        print('🔔 Main: Unknown method call: ${call.method}');
-        return null;
-    }
-  });
-
-  print('🔔 Main: Method channels setup complete');
-}
-
-/// Send online status update to all contacts
-Future<void> _sendOnlineStatusUpdate(bool isOnline) async {
-  try {
-    print('🔔 Main: Sending online status update: $isOnline');
-
-    // Get current user ID
-    final sessionService = SeSessionService();
-    final currentUserId = sessionService.currentSessionId;
-
-    if (currentUserId == null) {
-      print('🔔 Main: ❌ No current session ID available');
-      return;
-    }
-
-    // Get all conversations to send status updates
-    final messageStorageService = MessageStorageService.instance;
-    final conversations =
-        await messageStorageService.getUserConversations(currentUserId);
-
-    // Send online status update to all participants
-    for (final conversation in conversations) {
-      final otherParticipantId =
-          conversation.getOtherParticipantId(currentUserId);
-      if (otherParticipantId != null) {
-        // Use AirNotifierService directly for online status updates
-        // as the optimized service doesn't have this method yet
-        await AirNotifierService.instance.sendOnlineStatusUpdate(
-            recipientId: otherParticipantId, isOnline: isOnline);
+    // Get the ChatListProvider from the provider and add the new conversation
+    // This will be handled in the next frame when the provider is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+        chatListProvider.addConversation(conversation);
+        print('🔑 Main: ✅ ChatListProvider updated with new conversation');
+      } catch (e) {
+        print('🔑 Main: ❌ Failed to update ChatListProvider: $e');
       }
-    }
-
-    print(
-        '🔔 Main: ✅ Online status updates sent to ${conversations.length} contacts');
-  } catch (e) {
-    print('🔔 Main: ❌ Error sending online status updates: $e');
-  }
+    });
+  });
 }
 
-// Handle notification events from EventChannel
-void _handleNotificationEvent(dynamic event) async {
-  try {
-    print('🔔 Main: Processing notification event: $event');
-    print('🔔 Main: Event type: ${event.runtimeType}');
-    print('🔔 Main: Event keys: ${event is Map ? event.keys : 'Not a Map'}');
-
-    // Handle different argument types safely
-    Map<String, dynamic> notificationData;
-    if (event is Map) {
-      // Convert from Map<dynamic, dynamic> to Map<String, dynamic> safely
-      notificationData = <String, dynamic>{};
-      event.forEach((key, value) {
-        if (key is String) {
-          notificationData[key] = value;
-        }
-      });
-
-      // Add debug logging for nested data structures
-      if (notificationData.containsKey('data') &&
-          notificationData['data'] is Map) {
-        final nestedData = notificationData['data'] as Map;
-        print('🔔 Main: 🔍 Nested data found: ${nestedData.keys}');
-        print('🔔 Main: 🔍 Nested data type: ${nestedData['type']}');
-      }
-    } else {
-      print('🔔 Main: Event is not a Map: ${event.runtimeType}');
-      return;
-    }
-
-    print('🔔 Main: Processed notification event data: $notificationData');
-
-    // CRITICAL: Add duplicate prevention for EventChannel notifications
-    // This prevents the same notification from being processed multiple times
-    print(
-        '🔔 Main: 🔍 About to generate notification ID for duplicate prevention');
-    final notificationId = _generateNotificationId(notificationData);
-    print('🔔 Main: 🔍 Generated notification ID: $notificationId');
-
-    if (_processedEventNotifications.contains(notificationId)) {
-      print(
-          '🔔 Main: ⚠️ Duplicate EventChannel notification detected, skipping: $notificationId');
-      return;
-    }
-    _processedEventNotifications.add(notificationId);
-    print(
-        '🔔 Main: 🔍 Added notification ID to processed set: $notificationId');
-
-    // Handle the notification using optimized service
-    print(
-        '🔔 Main: 🔍 About to call OptimizedNotificationService.handleNotification');
-    print(
-        '🔔 Main: 🔍 Final notification data being passed: $notificationData');
-    await OptimizedNotificationService().handleNotification(notificationData);
-    print(
-        '🔔 Main: 🔍 OptimizedNotificationService.handleNotification completed');
-  } catch (e) {
-    print('🔔 Main: Error handling notification event: $e');
-    print('🔔 Main: Error stack trace: ${StackTrace.current}');
+/// Parse message status string to MessageStatus enum
+MessageStatus _parseMessageStatus(String status) {
+  switch (status.toLowerCase()) {
+    case 'sending':
+      return MessageStatus.sending;
+    case 'sent':
+      return MessageStatus.sent;
+    case 'delivered':
+      return MessageStatus.delivered;
+    case 'read':
+      return MessageStatus.read;
+    case 'failed':
+      return MessageStatus.failed;
+    case 'deleted':
+      return MessageStatus.deleted;
+    default:
+      return MessageStatus.sent; // Default to sent
   }
-}
-
-// Track processed EventChannel notifications to prevent duplicates
-final Set<String> _processedEventNotifications = <String>{};
-
-// Generate unique notification ID for duplicate prevention
-String _generateNotificationId(Map<String, dynamic> notificationData) {
-  print(
-      '🔔 Main: 🔍 _generateNotificationId called with: ${notificationData.keys}');
-
-  // Handle both direct and nested data structures
-  String type = 'unknown';
-  String messageId = DateTime.now().millisecondsSinceEpoch.toString();
-  String senderId = 'unknown';
-
-  if (notificationData['type'] != null) {
-    // Direct structure
-    type = notificationData['type'] as String? ?? 'unknown';
-    messageId = notificationData['messageId'] as String? ??
-        notificationData['message_id'] as String? ??
-        DateTime.now().millisecondsSinceEpoch.toString();
-    senderId = notificationData['senderId'] as String? ??
-        notificationData['sender_id'] as String? ??
-        'unknown';
-    print(
-        '🔔 Main: 🔍 Using direct structure - type: $type, messageId: $messageId, senderId: $senderId');
-  } else if (notificationData['data'] != null &&
-      notificationData['data'] is Map) {
-    // Nested structure - handle Map<Object?, Object?> from native platform
-    final nestedData = notificationData['data'] as Map;
-    print('🔔 Main: 🔍 Found nested data with keys: ${nestedData.keys}');
-    type = nestedData['type'] as String? ?? 'unknown';
-    messageId = nestedData['messageId'] as String? ??
-        nestedData['message_id'] as String? ??
-        nestedData['request_id'] as String? ?? // For key exchange notifications
-        DateTime.now().millisecondsSinceEpoch.toString();
-    senderId = nestedData['senderId'] as String? ??
-        nestedData['sender_id'] as String? ??
-        nestedData['recipient_id'] as String? ?? // For key exchange accepted
-        'unknown';
-    print(
-        '🔔 Main: 🔍 Using nested structure - type: $type, messageId: $messageId, senderId: $senderId');
-  } else {
-    print('🔔 Main: 🔍 No type or nested data found, using defaults');
-  }
-
-  final result = '${type}_${senderId}_$messageId';
-  print('🔔 Main: 🔍 Generated notification ID: $result');
-  return result;
 }
 
 class SeChatApp extends StatelessWidget {
@@ -422,6 +247,12 @@ class SeChatApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Attach navigator key for global UI access
+    UIService().attachNavigatorKey(navigatorKey);
+
+    // Set navigator key for notification deep linking
+    NotificationManagerService.setNavigatorKey(navigatorKey);
+
     return AppLifecycleHandler(
       child: MaterialApp(
         navigatorKey: navigatorKey,
@@ -502,14 +333,19 @@ class _AuthCheckerState extends State<AuthChecker> {
         print('🔍 AuthChecker: Is user logged in: $isLoggedIn');
 
         if (isLoggedIn) {
-          // User is logged in, initialize notification services and go to main screen
+          // User is logged in, initialize socket services and go to main screen
           print(
-              '🔍 AuthChecker: User is logged in, initializing notification services...');
-          await seSessionService.initializeNotificationServices();
+              '🔍 AuthChecker: User is logged in, initializing socket services...');
 
-          // Check notification permissions after services are initialized
-          print('🔍 AuthChecker: Checking notification permissions...');
-          await _checkNotificationPermissions();
+          // Initialize socket connection
+          final socketService = SeSocketService();
+          final socketInitialized = await socketService.initialize();
+
+          if (socketInitialized) {
+            print('🔍 AuthChecker: ✅ Socket service initialized successfully');
+          } else {
+            print('🔍 AuthChecker: ❌ Socket service initialization failed');
+          }
 
           print('🔍 AuthChecker: User is logged in, navigating to main screen');
           Navigator.of(context).pushReplacement(
@@ -539,23 +375,6 @@ class _AuthCheckerState extends State<AuthChecker> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const WelcomeScreen()),
       );
-    }
-  }
-
-  /// Check notification permissions and show dialog if needed
-  Future<void> _checkNotificationPermissions() async {
-    if (!mounted) return;
-
-    try {
-      // Small delay to ensure the app is fully loaded
-      await Future.delayed(const Duration(milliseconds: 1000));
-
-      if (!mounted) return;
-
-      // Check and show permission dialog if needed
-      await NotificationPermissionHelper.checkAndRequestPermissions(context);
-    } catch (e) {
-      print('🔍 AuthChecker: Error checking notification permissions: $e');
     }
   }
 

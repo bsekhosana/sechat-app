@@ -31,7 +31,7 @@ class SystemMessageBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Theme.of(context)
                     .colorScheme
-                    .surfaceVariant
+                    .surfaceContainerHighest
                     .withOpacity(0.3),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(

@@ -1,14 +1,13 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 // import '../../shared/providers/auth_provider.dart'; // Temporarily disabled
 // import '../../features/chat/providers/chat_provider.dart'; // Temporarily disabled
 // import '../../features/invitations/providers/invitation_provider.dart'; // Temporarily disabled
 // import '../../features/search/providers/search_provider.dart'; // Removed search functionality
 import 'se_session_service.dart';
+import 'se_socket_service.dart';
 import 'local_storage_service.dart';
-import 'secure_notification_service.dart';
+// import 'secure_notification_service.dart'; // Removed - now handled by socket service
 
 class UserExistenceGuard {
   static final UserExistenceGuard _instance = UserExistenceGuard._internal();
@@ -32,7 +31,15 @@ class UserExistenceGuard {
         '🔍 UserExistenceGuard: User no longer exists, starting logout process');
 
     try {
-      // 1. Logout from SeSessionService
+      // 1. Remove session on socket server (if possible) then logout locally
+      try {
+        final socketService = SeSocketService();
+        final sessionId = SeSessionService().currentSessionId;
+        await socketService.deleteSessionOnServer(sessionId: sessionId);
+      } catch (e) {
+        // Best-effort; proceed regardless
+      }
+
       print('🔍 UserExistenceGuard: Logging out from SeSessionService');
       await SeSessionService().logout();
 
@@ -44,9 +51,8 @@ class UserExistenceGuard {
       print('🔍 UserExistenceGuard: Clearing secure storage');
       await _clearSecureStorage();
 
-      // 4. Cancel all notifications
-      print('🔍 UserExistenceGuard: Cancelling notifications');
-      await SecureNotificationService.instance.cancelAllNotifications();
+      // 4. Cancel all notifications (now handled by socket service)
+      print('🔍 UserExistenceGuard: Notifications handled by socket service');
 
       // 5. Reset all providers (this will be done by the app when it detects the logout)
       print('🔍 UserExistenceGuard: Logout process completed');
@@ -115,9 +121,8 @@ class UserExistenceGuard {
       print('🔍 UserExistenceGuard: Clearing secure storage');
       await _clearSecureStorage();
 
-      // 4. Cancel all notifications
-      print('🔍 UserExistenceGuard: Cancelling notifications');
-      await SecureNotificationService.instance.cancelAllNotifications();
+      // 4. Cancel all notifications (now handled by socket service)
+      print('🔍 UserExistenceGuard: Notifications handled by socket service');
 
       // 5. Reset all providers
       print('🔍 UserExistenceGuard: Resetting providers');

@@ -1,81 +1,29 @@
 import 'package:flutter/foundation.dart';
-import 'se_shared_preference_service.dart';
-import 'se_session_service.dart';
-import '../../features/chat/services/message_storage_service.dart';
 
 class IndicatorService extends ChangeNotifier {
   static final IndicatorService _instance = IndicatorService._internal();
   factory IndicatorService() => _instance;
   IndicatorService._internal();
 
-  bool _hasNewChats = false;
-  bool _hasNewInvitations = false;
-  bool _hasNewNotifications = false;
-  bool _hasNewKeyExchange = false;
+  // Count-based badges instead of boolean indicators
+  int _unreadChatsCount = 0;
+  int _pendingKeyExchangeCount = 0;
+  int _unreadNotificationsCount = 0;
 
-  bool get hasNewChats => _hasNewChats;
-  bool get hasNewInvitations => _hasNewInvitations;
-  bool get hasNewNotifications => _hasNewNotifications;
-  bool get hasNewKeyExchange => _hasNewKeyExchange;
+  // Getters for counts
+  int get unreadChatsCount => _unreadChatsCount;
+  int get pendingKeyExchangeCount => _pendingKeyExchangeCount;
+  int get unreadNotificationsCount => _unreadNotificationsCount;
+
+  // Boolean getters for backward compatibility
+  bool get hasNewChats => _unreadChatsCount > 0;
+  bool get hasNewKeyExchange => _pendingKeyExchangeCount > 0;
+  bool get hasNewNotifications => _unreadNotificationsCount > 0;
 
   Future<void> checkForNewItems() async {
     try {
-      final prefsService = SeSharedPreferenceService();
-
-      // Check for new chats (conversations with recent activity from database)
-      try {
-        final messageStorageService = MessageStorageService.instance;
-        final currentUserId = SeSessionService().currentSessionId;
-        if (currentUserId != null) {
-          final conversations =
-              await messageStorageService.getUserConversations(currentUserId);
-          final now = DateTime.now();
-          _hasNewChats = conversations.any((conv) {
-            final lastMessageAt = conv.lastMessageAt;
-            if (lastMessageAt != null) {
-              return now.difference(lastMessageAt).inMinutes <
-                  5; // New if within 5 minutes
-            }
-            return false;
-          });
-        } else {
-          _hasNewChats = false;
-        }
-      } catch (e) {
-        print('🔔 IndicatorService: Error checking database for new chats: $e');
-        _hasNewChats = false;
-      }
-
-      // Check for new invitations (pending invitations)
-      final invitationsJson =
-          await prefsService.getJsonList('invitations') ?? [];
-      _hasNewInvitations = invitationsJson.any((invitation) {
-        return invitation['status'] == 'pending';
-      });
-
-      // Check for new notifications (unread notifications)
-      final notificationsJson =
-          await prefsService.getJsonList('notifications') ?? [];
-      _hasNewNotifications = notificationsJson.any((notification) {
-        return notification['isRead'] == false;
-      });
-
-      // Check for new key exchange requests (within last 5 minutes)
-      final keyExchangeRequestsJson =
-          await prefsService.getJsonList('key_exchange_requests') ?? [];
-      final now = DateTime.now();
-      final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
-      _hasNewKeyExchange = keyExchangeRequestsJson.any((request) {
-        try {
-          final timestamp = DateTime.parse(request['timestamp']);
-          final status = request['status'] as String?;
-          return timestamp.isAfter(fiveMinutesAgo) &&
-              (status == 'pending' || status == 'sent' || status == 'received');
-        } catch (e) {
-          return false;
-        }
-      });
-
+      // This method will be called by the providers when data changes
+      // The actual counts are updated via updateCounts() method
       notifyListeners();
     } catch (e) {
       print('🔔 IndicatorService: Error checking for new items: $e');
@@ -83,42 +31,49 @@ class IndicatorService extends ChangeNotifier {
   }
 
   void clearChatIndicator() {
-    _hasNewChats = false;
-    notifyListeners();
-  }
-
-  void clearInvitationIndicator() {
-    _hasNewInvitations = false;
+    _unreadChatsCount = 0;
     notifyListeners();
   }
 
   void clearNotificationIndicator() {
-    _hasNewNotifications = false;
+    _unreadNotificationsCount = 0;
     notifyListeners();
   }
 
   void clearKeyExchangeIndicator() {
-    _hasNewKeyExchange = false;
+    _pendingKeyExchangeCount = 0;
     notifyListeners();
   }
 
-  void setNewChat() {
-    _hasNewChats = true;
-    notifyListeners();
-  }
+  /// Update counts from external sources
+  void updateCounts({
+    int? unreadChats,
+    int? pendingKeyExchange,
+    int? unreadNotifications,
+  }) {
+    bool hasChanges = false;
 
-  void setNewInvitation() {
-    _hasNewInvitations = true;
-    notifyListeners();
-  }
+    if (unreadChats != null && _unreadChatsCount != unreadChats) {
+      _unreadChatsCount = unreadChats;
+      hasChanges = true;
+    }
 
-  void setNewNotification() {
-    _hasNewNotifications = true;
-    notifyListeners();
-  }
+    if (pendingKeyExchange != null &&
+        _pendingKeyExchangeCount != pendingKeyExchange) {
+      _pendingKeyExchangeCount = pendingKeyExchange;
+      hasChanges = true;
+    }
 
-  void setNewKeyExchange() {
-    _hasNewKeyExchange = true;
-    notifyListeners();
+    if (unreadNotifications != null &&
+        _unreadNotificationsCount != unreadNotifications) {
+      _unreadNotificationsCount = unreadNotifications;
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      notifyListeners();
+      print(
+          '🔔 IndicatorService: ✅ Counts updated - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
+    }
   }
 }

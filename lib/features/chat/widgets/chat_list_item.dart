@@ -70,7 +70,7 @@ class ChatListItem extends StatelessWidget {
                           ),
                         ),
                         // Online status indicator
-                        if (_isUserOnline(conversation.lastSeen))
+                        if (conversation.isOnline)
                           Positioned(
                             right: 0,
                             bottom: 0,
@@ -88,7 +88,7 @@ class ChatListItem extends StatelessWidget {
                             ),
                           ),
                         // Offline indicator (show when user was last seen)
-                        if (!_isUserOnline(conversation.lastSeen) &&
+                        if (!conversation.isOnline &&
                             conversation.lastSeen != null)
                           Positioned(
                             right: 0,
@@ -133,25 +133,19 @@ class ChatListItem extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
 
-                          // Online status and last seen
-                          if (conversation.lastSeen != null) ...[
+                          // Last seen (only show when user is offline)
+                          if (conversation.lastSeen != null && !conversation.isOnline) ...[
                             const SizedBox(height: 2),
                             Row(
                               children: [
                                 Icon(
-                                  _isUserOnline(conversation.lastSeen)
-                                      ? Icons.circle
-                                      : Icons.access_time,
+                                  Icons.access_time,
                                   size: 10,
-                                  color: _isUserOnline(conversation.lastSeen)
-                                      ? Colors.green
-                                      : Colors.grey[500],
+                                  color: Colors.grey[500],
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  _isUserOnline(conversation.lastSeen)
-                                      ? 'Online'
-                                      : 'Last seen ${_formatLastSeen(conversation.lastSeen!)}',
+                                  'Last seen ${_formatLastSeen(conversation.lastSeen!)}',
                                   style: TextStyle(
                                     color: Colors.grey[600],
                                     fontSize: 11,

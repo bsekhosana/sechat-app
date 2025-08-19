@@ -7,6 +7,7 @@ class KeyExchangeRequest {
   String status; // 'pending', 'received', 'accepted', 'declined', 'failed'
   final DateTime timestamp;
   final String type;
+  final String? version; // Added: version from the original request
   DateTime? respondedAt;
   String? errorMessage;
   String? displayName; // Added: display name from user_data_exchange
@@ -19,6 +20,7 @@ class KeyExchangeRequest {
     required this.status,
     required this.timestamp,
     required this.type,
+    this.version, // Added: version parameter
     this.respondedAt,
     this.errorMessage,
     this.displayName, // Added: display name parameter
@@ -34,6 +36,7 @@ class KeyExchangeRequest {
       status: json['status'] as String,
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int),
       type: json['type'] as String,
+      version: json['version'] as String?, // Added: parse version
       respondedAt: json['respondedAt'] != null
           ? DateTime.fromMillisecondsSinceEpoch(json['respondedAt'] as int)
           : null,
@@ -52,6 +55,7 @@ class KeyExchangeRequest {
       'status': status,
       'timestamp': timestamp.millisecondsSinceEpoch,
       'type': type,
+      'version': version, // Added: include version
       'respondedAt': respondedAt?.millisecondsSinceEpoch,
       'errorMessage': errorMessage,
       'displayName': displayName, // Added: include display name
@@ -67,6 +71,7 @@ class KeyExchangeRequest {
     String? status,
     DateTime? timestamp,
     String? type,
+    String? version, // Added: version parameter
     DateTime? respondedAt,
     String? errorMessage,
     String? displayName, // Added: display name parameter
@@ -79,6 +84,7 @@ class KeyExchangeRequest {
       status: status ?? this.status,
       timestamp: timestamp ?? this.timestamp,
       type: type ?? this.type,
+      version: version ?? this.version, // Added: update version
       respondedAt: respondedAt ?? this.respondedAt,
       errorMessage: errorMessage ?? this.errorMessage,
       displayName:

@@ -10,7 +10,7 @@ class UserAvatar extends StatelessWidget {
   final VoidCallback? onTap;
 
   const UserAvatar({
-    Key? key,
+    super.key,
     this.profilePicture,
     this.displayName,
     this.sessionId,
@@ -18,7 +18,7 @@ class UserAvatar extends StatelessWidget {
     this.backgroundColor,
     this.textColor,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -219,8 +219,6 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-
-
   // Validate Session ID format
   bool _isValidSessionId(String sessionId) {
     // Basic validation - check if it's not empty and has reasonable length
@@ -266,8 +264,9 @@ class SearchProvider extends ChangeNotifier {
   SearchState get searchState {
     if (_isLoading) return SearchState.loading;
     if (_error != null) return SearchState.error;
-    if (_searchResults.isEmpty && _lastSearchQuery.isNotEmpty)
+    if (_searchResults.isEmpty && _lastSearchQuery.isNotEmpty) {
       return SearchState.noResults;
+    }
     if (_searchResults.isNotEmpty) return SearchState.success;
     return SearchState.idle;
   }
@@ -311,10 +310,5 @@ class SearchProvider extends ChangeNotifier {
     _error = null;
     _lastSearchQuery = '';
     notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }

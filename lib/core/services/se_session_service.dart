@@ -3,18 +3,13 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'package:pointycastle/export.dart' as pc;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'se_shared_preference_service.dart';
 import '../utils/guid_generator.dart';
-import 'secure_notification_service.dart';
-import 'airnotifier_service.dart';
 import '../../features/chat/services/message_storage_service.dart';
 import 'local_storage_service.dart';
 import 'key_exchange_service.dart';
 import 'indicator_service.dart';
-import 'online_status_service.dart';
-import 'optimized_notification_service.dart';
 import 'encryption_service.dart';
 
 class SessionData {
@@ -651,14 +646,14 @@ class SeSessionService {
     try {
       print('🗑️ SeSessionService: Starting complete account deletion...');
 
-      // 1. Clear all notification service data
+      // 1. Clear all notification service data (now handled by socket service)
       try {
-        await SecureNotificationService.instance
-            .clearAllDataOnAccountDeletion();
-        print('🗑️ SeSessionService: ✅ Notification service data cleared');
+        // Socket service cleanup will be handled automatically
+        print(
+            '🗑️ SeSessionService: ✅ Socket service cleanup handled automatically');
       } catch (e) {
         print(
-            '🗑️ SeSessionService: ⚠️ Warning - notification service cleanup failed: $e');
+            '🗑️ SeSessionService: ⚠️ Warning - socket service cleanup failed: $e');
       }
 
       // 2. Clear all database data
@@ -731,7 +726,6 @@ class SeSessionService {
       try {
         final indicatorService = IndicatorService();
         indicatorService.clearChatIndicator();
-        indicatorService.clearInvitationIndicator();
         indicatorService.clearNotificationIndicator();
         indicatorService.clearKeyExchangeIndicator();
         print('🗑️ SeSessionService: ✅ Indicator service data cleared');
@@ -750,16 +744,14 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - online status service cleanup failed: $e');
       }
 
-      // 9. Clear all optimized notification service data
+      // 9. Clear all optimized notification service data (now handled by socket service)
       try {
-        final optimizedNotificationService = OptimizedNotificationService();
-        // Clear optimized notification service data
-        optimizedNotificationService.clearProcessedNotifications();
+        // Socket service cleanup will be handled automatically
         print(
-            '🗑️ SeSessionService: ✅ Optimized notification service data cleared');
+            '🗑️ SeSessionService: ✅ Socket service cleanup handled automatically');
       } catch (e) {
         print(
-            '🗑️ SeSessionService: ⚠️ Warning - optimized notification service cleanup failed: $e');
+            '🗑️ SeSessionService: ⚠️ Warning - socket service cleanup failed: $e');
       }
 
       // 10. Clear all provider states (if accessible)
@@ -1016,81 +1008,39 @@ class SeSessionService {
   /// Initialize notification services with current session
   Future<void> initializeNotificationServices() async {
     try {
-      print('🔍 SeSessionService: Initializing notification services...');
-
+      print(
+          '🔍 SeSessionService: Skipping legacy notification services init (socket-only mode)');
       if (currentSession == null) {
-        print(
-            '🔍 SeSessionService: No session available for notification services');
+        print('🔍 SeSessionService: No session available for socket init');
         return;
       }
-
-      final sessionId = currentSession!.sessionId;
+      // Socket service is initialized elsewhere (main/auth flow)
       print(
-          '🔍 SeSessionService: Setting session ID for notifications: $sessionId');
-
-      // Set session ID in SecureNotificationService
-      await SecureNotificationService.instance.setSessionId(sessionId);
-
-      // Initialize AirNotifier with session ID
-      await AirNotifierService.instance.initialize(sessionId: sessionId);
-
-      print(
-          '🔍 SeSessionService: ✅ Notification services initialized with session: $sessionId');
+          '🔍 SeSessionService: ✅ Socket mode active for session: ${currentSession!.sessionId}');
     } catch (e) {
-      print(
-          '🔍 SeSessionService: Error initializing notification services: $e');
+      print('🔍 SeSessionService: Error during socket-mode init: $e');
     }
   }
 
-  /// Register device token with current session
+  /// Register device token with current session (not used in socket mode)
   Future<void> registerDeviceToken(String deviceToken) async {
     try {
-      print('🔍 SeSessionService: Registering device token: $deviceToken');
-
-      if (currentSession == null) {
-        print(
-            '🔍 SeSessionService: No session available for device token registration');
-        return;
-      }
-
-      final sessionId = currentSession!.sessionId;
-
-      // Register token with SecureNotificationService
-      await SecureNotificationService.instance.setDeviceToken(deviceToken);
-
-      // Register token with AirNotifier
-      await AirNotifierService.instance.registerDeviceToken(
-        deviceToken: deviceToken,
-        sessionId: sessionId,
-      );
-
       print(
-          '🔍 SeSessionService: ✅ Device token registered with session: $sessionId');
+          '🔍 SeSessionService: registerDeviceToken ignored in socket-only mode');
     } catch (e) {
-      print('🔍 SeSessionService: Error registering device token: $e');
+      print(
+          '🔍 SeSessionService: Error (ignored) registering device token: $e');
     }
   }
 
-  /// Unregister device token from current session
+  /// Unregister device token from current session (not used in socket mode)
   Future<void> unregisterDeviceToken() async {
     try {
-      print('🔍 SeSessionService: Unregistering device token...');
-
-      if (currentSession == null) {
-        print(
-            '🔍 SeSessionService: No session available for device token unregistration');
-        return;
-      }
-
-      final sessionId = currentSession!.sessionId;
-
-      // Unlink token from AirNotifier
-      await AirNotifierService.instance.unlinkTokenFromSession();
-
       print(
-          '🔍 SeSessionService: ✅ Device token unregistered from session: $sessionId');
+          '🔍 SeSessionService: unregisterDeviceToken ignored in socket-only mode');
     } catch (e) {
-      print('🔍 SeSessionService: Error unregistering device token: $e');
+      print(
+          '🔍 SeSessionService: Error (ignored) unregistering device token: $e');
     }
   }
 
@@ -1103,28 +1053,19 @@ class SeSessionService {
     return session?.displayName;
   }
 
-  /// Check if notification services are properly configured
+  /// Check if notification services are properly configured (socket mode)
   Future<bool> areNotificationServicesConfigured() async {
     try {
       if (currentSession == null) {
         return false;
       }
-
-      final sessionId = currentSession!.sessionId;
-      final hasDeviceToken =
-          SecureNotificationService.instance.isDeviceTokenRegistered();
-      final airNotifierConnected =
-          await AirNotifierService.instance.testAirNotifierConnection();
-
-      print('🔍 SeSessionService: Notification services check:');
-      print('🔍 SeSessionService: - Session ID: $sessionId');
-      print('🔍 SeSessionService: - Has device token: $hasDeviceToken');
+      // In socket-only mode, configuration is tied to having a session
       print(
-          '🔍 SeSessionService: - AirNotifier connected: $airNotifierConnected');
-
-      return hasDeviceToken && airNotifierConnected;
+          '🔍 SeSessionService: Socket mode notification config OK for session: ${currentSession!.sessionId}');
+      return true;
     } catch (e) {
-      print('🔍 SeSessionService: Error checking notification services: $e');
+      print(
+          '🔍 SeSessionService: Error checking socket-mode notification config: $e');
       return false;
     }
   }

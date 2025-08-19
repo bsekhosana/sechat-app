@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 /// AirNotifier configuration for different environments
 class AirNotifierConfig {
   // Environment detection

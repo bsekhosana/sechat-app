@@ -6,6 +6,7 @@ import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/se_shared_preference_service.dart';
+import '../../../core/services/se_socket_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/services/se_session_service.dart';
 
@@ -203,6 +204,24 @@ Download now and let's chat securely!
           ),
         ),
       );
+
+      // Send offline status to all contacts and disconnect socket
+      try {
+        final socketService = SeSocketService();
+        await socketService.sendOnlineStatusToAllContacts(false);
+        print('🔌 Settings: ✅ Offline status sent to all contacts');
+
+        // Best effort: remove session on server
+        final sessionId = SeSessionService().currentSessionId;
+        await socketService.deleteSessionOnServer(sessionId: sessionId);
+
+        // Disconnect socket
+        await socketService.disconnect();
+        print('🔌 Settings: ✅ Socket disconnected');
+      } catch (e) {
+        print(
+            '🔌 Settings: ⚠️ Error handling socket during logout: $e, but continuing with logout');
+      }
 
       // Perform logout using SeSessionService
       final seSessionService = SeSessionService();
@@ -540,8 +559,9 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
   String _formatBytes(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    if (bytes < 1024 * 1024 * 1024)
+    if (bytes < 1024 * 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 
@@ -779,9 +799,7 @@ class GeneralChatSettingsScreen extends StatefulWidget {
 }
 
 class _GeneralChatSettingsScreenState extends State<GeneralChatSettingsScreen> {
-  bool _notificationsEnabled = true;
-  bool _soundEnabled = true;
-  bool _vibrationEnabled = true;
+  // Notification settings removed - now handled by socket service
   bool _readReceiptsEnabled = true;
   bool _typingIndicatorsEnabled = true;
   bool _lastSeenEnabled = true;
@@ -841,37 +859,7 @@ class _GeneralChatSettingsScreenState extends State<GeneralChatSettingsScreen> {
 
               const SizedBox(height: 24),
 
-              // Notification settings
-              _buildSettingsSection(
-                'Notifications',
-                Icons.notifications,
-                [
-                  SwitchListTile(
-                    title: const Text('Enable notifications'),
-                    subtitle:
-                        const Text('Receive notifications for new messages'),
-                    value: _notificationsEnabled,
-                    onChanged: (value) =>
-                        setState(() => _notificationsEnabled = value),
-                    activeColor: const Color(0xFFFF6B35),
-                  ),
-                  SwitchListTile(
-                    title: const Text('Sound'),
-                    subtitle: const Text('Play sound for notifications'),
-                    value: _soundEnabled,
-                    onChanged: (value) => setState(() => _soundEnabled = value),
-                    activeColor: const Color(0xFFFF6B35),
-                  ),
-                  SwitchListTile(
-                    title: const Text('Vibration'),
-                    subtitle: const Text('Vibrate for notifications'),
-                    value: _vibrationEnabled,
-                    onChanged: (value) =>
-                        setState(() => _vibrationEnabled = value),
-                    activeColor: const Color(0xFFFF6B35),
-                  ),
-                ],
-              ),
+              // Notification settings removed - now handled by socket service
 
               const SizedBox(height: 24),
 

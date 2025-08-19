@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:pointycastle/export.dart';
@@ -307,20 +306,21 @@ class EncryptionService {
   static Future<void> clearAllRecipientPublicKeys() async {
     try {
       print('🔒 EncryptionService: 🗑️ Clearing all recipient public keys...');
-      
+
       // Get all keys from secure storage
       final allKeys = await _storage.readAll();
-      final recipientKeys = allKeys.keys.where((key) => key.startsWith('recipient_key_'));
-      
+      final recipientKeys =
+          allKeys.keys.where((key) => key.startsWith('recipient_key_'));
+
       // Delete each recipient key
       for (final key in recipientKeys) {
         await _storage.delete(key: key);
         print('🔒 EncryptionService: ✅ Deleted recipient key: $key');
       }
-      
+
       // Clear the cache
       _recipientPublicKeysCache.clear();
-      
+
       print('🔒 EncryptionService: 🗑️ All recipient public keys cleared');
     } catch (e) {
       print('🔒 EncryptionService: ❌ Error clearing recipient public keys: $e');

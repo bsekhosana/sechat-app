@@ -4,9 +4,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:sechat_app/core/services/key_exchange_service.dart';
-import 'package:sechat_app/core/services/encryption_service.dart';
 import '../models/optimized_message.dart';
-import '../models/optimized_conversation.dart';
 
 /// Enhanced Chat Encryption Service
 /// Provides proper encryption for all chat messages and notifications

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 // import '../../../shared/providers/auth_provider.dart'; // Temporarily disabled
 import 'login_screen.dart';
 import 'register_screen.dart';

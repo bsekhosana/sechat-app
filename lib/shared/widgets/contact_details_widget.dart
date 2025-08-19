@@ -10,13 +10,13 @@ class ContactDetailsWidget extends StatelessWidget {
   final VoidCallback? onClose;
 
   const ContactDetailsWidget({
-    Key? key,
+    super.key,
     required this.sessionId,
     this.displayName,
     this.profilePicture,
     this.createdAt,
     this.onClose,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

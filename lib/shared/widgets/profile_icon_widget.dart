@@ -5,7 +5,6 @@ import 'package:sechat_app/core/services/network_service.dart';
 import '../../core/utils/store_link_resolver.dart';
 import '../../core/services/global_user_service.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
-import 'package:sechat_app/core/services/local_storage_service.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 

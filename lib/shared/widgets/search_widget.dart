@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../../features/search/providers/search_provider.dart';
 import '../models/user.dart';
 // import '../../features/invitations/providers/invitation_provider.dart'; // Temporarily disabled
-import '../../core/services/global_user_service.dart';
 
 class SearchWidget extends StatefulWidget {
   const SearchWidget({super.key});

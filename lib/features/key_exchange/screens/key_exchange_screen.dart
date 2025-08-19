@@ -191,7 +191,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(request.status).withOpacity(0.1),
+                    color:
+                        _getStatusColor(request.status).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -229,6 +230,16 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
                     request.status == 'failed')) ...[
               const SizedBox(height: 16),
               _buildActionButtons(request),
+            ],
+            // Add resend button for sent requests that are not accepted
+            if (!isReceived && request.status != 'accepted') ...[
+              const SizedBox(height: 16),
+              _buildResendButton(request),
+            ],
+            // Add delete button based on request status and type
+            if (_shouldShowDeleteButton(request, isReceived)) ...[
+              const SizedBox(height: 16),
+              _buildDeleteButton(request, isReceived),
             ],
           ],
         ),
@@ -332,6 +343,31 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
     );
   }
 
+  Widget _buildResendButton(KeyExchangeRequest request) {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () => _resendRequest(request.id),
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            label: const Text(
+              'Resend Request',
+              style: TextStyle(color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue[600],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _acceptRequest(String requestId) async {
     try {
       final provider = context.read<KeyExchangeRequestProvider>();
@@ -418,6 +454,149 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
       }
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resendRequest(String requestId) async {
+    try {
+      final provider = context.read<KeyExchangeRequestProvider>();
+      final success = await provider.resendKeyExchangeRequest(requestId);
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Key exchange request resent successfully'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to resend key exchange request'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Check if delete button should be shown based on request status and type
+  bool _shouldShowDeleteButton(KeyExchangeRequest request, bool isReceived) {
+    if (isReceived) {
+      // Recipients can only delete requests that are still pending (received status)
+      return request.status == 'received';
+    } else {
+      // Senders can only delete/revoke requests that haven't been responded to
+      return request.status == 'pending' || request.status == 'sent';
+    }
+  }
+
+  Widget _buildDeleteButton(KeyExchangeRequest request, bool isReceived) {
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () => _showDeleteConfirmation(request, isReceived),
+            icon: const Icon(Icons.delete, color: Colors.white),
+            label: Text(
+              isReceived ? 'Delete Request' : 'Revoke Request',
+              style: const TextStyle(color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[600],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showDeleteConfirmation(KeyExchangeRequest request, bool isReceived) {
+    final title = isReceived ? 'Delete Request' : 'Revoke Request';
+    final message = isReceived
+        ? 'Are you sure you want to delete this key exchange request? This action cannot be undone.'
+        : 'Are you sure you want to revoke this key exchange request? The recipient will no longer be able to accept it.';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _deleteRequest(request, isReceived);
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+              child: Text(isReceived ? 'Delete' : 'Revoke'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteRequest(
+      KeyExchangeRequest request, bool isReceived) async {
+    try {
+      final provider = context.read<KeyExchangeRequestProvider>();
+      bool success;
+
+      if (isReceived) {
+        success = await provider.deleteReceivedRequest(request.id);
+      } else {
+        success = await provider.deleteSentRequest(request.id);
+      }
+
+      if (success && mounted) {
+        final actionText = isReceived ? 'deleted' : 'revoked';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Key exchange request $actionText successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else if (mounted) {
+        final actionText = isReceived ? 'delete' : 'revoke';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to $actionText key exchange request'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final actionText = isReceived ? 'delete' : 'revoke';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),

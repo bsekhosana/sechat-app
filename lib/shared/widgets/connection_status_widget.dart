@@ -13,7 +13,7 @@ class ConnectionStatusWidget extends StatefulWidget {
 
 class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
   Timer? _countdownTimer;
-  int _countdownSeconds = 30;
+  final int _countdownSeconds = 30;
   bool _isVisible = false;
   String _statusMessage = '';
   Color _statusColor = Colors.orange;

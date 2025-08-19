@@ -8,6 +8,7 @@ import '../../../core/services/network_service.dart';
 import 'main_nav_screen.dart';
 import 'dart:convert';
 import '../../../core/services/se_session_service.dart';
+import '../../../core/services/se_socket_service.dart';
 import '../../../shared/widgets/custom_elevated_button.dart';
 import '../../../shared/widgets/custom_textfield.dart';
 
@@ -485,29 +486,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final seSessionService = SeSessionService();
       final result = await seSessionService.createSession(displayName);
 
-      if (result != null) {
-        final sessionData = result['sessionData'] as SessionData;
-        final password = result['password'] as String;
+      final sessionData = result['sessionData'] as SessionData;
+      final password = result['password'] as String;
 
-        setState(() {
-          _sessionId = sessionData.sessionId;
-          _privateKey = password; // Store password for display
-        });
+      setState(() {
+        _sessionId = sessionData.sessionId;
+        _privateKey = password; // Store password for display
+      });
 
-        // Debug: Check if session was created successfully
-        print('🔐 Debug: Session ID: ${sessionData.sessionId}');
-        print('🔐 Debug: Public Key: ${sessionData.publicKey}');
-        print('🔐 Debug: Display Name: ${sessionData.displayName}');
-        print('🔐 Debug: Password: $password');
-        print('🔐 Debug: Created At: ${sessionData.createdAt}');
+      // Debug: Check if session was created successfully
+      print('🔐 Debug: Session ID: ${sessionData.sessionId}');
+      print('🔐 Debug: Public Key: ${sessionData.publicKey}');
+      print('🔐 Debug: Display Name: ${sessionData.displayName}');
+      print('🔐 Debug: Password: $password');
+      print('🔐 Debug: Created At: ${sessionData.createdAt}');
 
-        // Show success dialog with Session details
-        await _showSuccessDialog();
-      } else {
-        setState(() {
-          _error = 'Failed to create session';
-        });
-      }
+      // Show success dialog with Session details
+      await _showSuccessDialog();
     } catch (e) {
       setState(() {
         _error = 'Error: $e';
@@ -523,6 +518,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (context) => _AccountCreatedActionSheet(
         sessionId: _sessionId,
@@ -534,6 +531,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
             // Initialize notification services with new session
             final seSessionService = SeSessionService();
             await seSessionService.initializeNotificationServices();
+
+            // Connect to socket with the new session ID
+            if (_sessionId != null) {
+              final socketService = SeSocketService();
+              final socketInitialized = await socketService.initialize();
+
+              if (socketInitialized) {
+                print(
+                    '🔌 RegisterScreen: ✅ Socket connected successfully with session: $_sessionId');
+              } else {
+                print(
+                    '🔌 RegisterScreen: ⚠️ Socket connection failed, but continuing with registration');
+              }
+            }
 
             // Add welcome notification to SharedPreferences
             await _addWelcomeNotification();

@@ -19,8 +19,9 @@ class TextMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = message.content['text'] as String? ?? 'Message content unavailable';
-    
+    final text =
+        message.content['text'] as String? ?? 'Message content unavailable';
+
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -32,7 +33,7 @@ class TextMessageBubble extends StatelessWidget {
         decoration: BoxDecoration(
           color: isFromCurrentUser
               ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surfaceVariant,
+              : Theme.of(context).colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
@@ -55,16 +56,16 @@ class TextMessageBubble extends StatelessWidget {
               _buildReplyPreview(context),
               const SizedBox(height: 8),
             ],
-            
+
             // Main text content
             Text(
               text,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: isFromCurrentUser
-                    ? Theme.of(context).colorScheme.onPrimary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                height: 1.4,
-              ),
+                    color: isFromCurrentUser
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
             ),
           ],
         ),
@@ -74,8 +75,9 @@ class TextMessageBubble extends StatelessWidget {
 
   /// Build reply preview
   Widget _buildReplyPreview(BuildContext context) {
-    final replyText = message.content['replyText'] as String? ?? 'Reply to message';
-    
+    final replyText =
+        message.content['replyText'] as String? ?? 'Reply to message';
+
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -97,21 +99,30 @@ class TextMessageBubble extends StatelessWidget {
             size: 16,
             color: isFromCurrentUser
                 ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)
-                : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7),
+                : Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withOpacity(0.7),
           ),
-          
+
           const SizedBox(width: 8),
-          
+
           // Reply text preview
           Expanded(
             child: Text(
               replyText,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: isFromCurrentUser
-                    ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.8)
-                    : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.8),
-                fontStyle: FontStyle.italic,
-              ),
+                    color: isFromCurrentUser
+                        ? Theme.of(context)
+                            .colorScheme
+                            .onPrimary
+                            .withOpacity(0.8)
+                        : Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant
+                            .withOpacity(0.8),
+                    fontStyle: FontStyle.italic,
+                  ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),

@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import 'package:sechat_app/core/services/secure_notification_service.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import '../../features/chat/services/message_storage_service.dart';
@@ -74,9 +73,10 @@ class OnlineStatusService {
 
       // Send online status to all contacts
       for (final contactId in contactIds) {
-        await SecureNotificationService.instance.sendEncryptedOnlineStatus(
+        await SeSocketService().sendMessageStatusUpdate(
           recipientId: contactId,
-          isOnline: isOnline,
+          messageId: 'status_update_${DateTime.now().millisecondsSinceEpoch}',
+          status: isOnline ? 'online' : 'offline',
         );
       }
 

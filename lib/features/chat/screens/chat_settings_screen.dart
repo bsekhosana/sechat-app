@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../models/message.dart';
 import '../models/chat_conversation.dart';
 
 /// Comprehensive chat settings screen for conversation configuration
@@ -18,9 +16,7 @@ class ChatSettingsScreen extends StatefulWidget {
 }
 
 class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
-  bool _notificationsEnabled = true;
-  bool _soundEnabled = true;
-  bool _vibrationEnabled = true;
+  // Notification settings removed - now handled by socket service
   bool _readReceiptsEnabled = true;
   bool _typingIndicatorsEnabled = true;
   bool _lastSeenEnabled = true;
@@ -40,9 +36,6 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   Future<void> _loadSettings() async {
     // Load conversation settings
     setState(() {
-      _notificationsEnabled = widget.conversation.notificationsEnabled ?? true;
-      _soundEnabled = widget.conversation.soundEnabled ?? true;
-      _vibrationEnabled = widget.conversation.vibrationEnabled ?? true;
       _readReceiptsEnabled = widget.conversation.readReceiptsEnabled ?? true;
       _typingIndicatorsEnabled =
           widget.conversation.typingIndicatorsEnabled ?? true;
@@ -83,8 +76,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
 
             const SizedBox(height: 16),
 
-            // Notification settings
-            _buildNotificationSettings(),
+            // Notification settings removed - now handled by socket service
 
             const SizedBox(height: 16),
 
@@ -162,43 +154,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     );
   }
 
-  Widget _buildNotificationSettings() {
-    return _buildSettingsSection(
-      title: 'Notifications',
-      icon: Icons.notifications,
-      children: [
-        _buildSwitchTile(
-          title: 'Enable Notifications',
-          subtitle: 'Receive notifications for new messages',
-          value: _notificationsEnabled,
-          onChanged: (value) {
-            setState(() => _notificationsEnabled = value);
-            _updateNotificationSettings();
-          },
-        ),
-        if (_notificationsEnabled) ...[
-          _buildSwitchTile(
-            title: 'Sound',
-            subtitle: 'Play sound for notifications',
-            value: _soundEnabled,
-            onChanged: (value) {
-              setState(() => _soundEnabled = value);
-              _updateNotificationSettings();
-            },
-          ),
-          _buildSwitchTile(
-            title: 'Vibration',
-            subtitle: 'Vibrate for notifications',
-            value: _vibrationEnabled,
-            onChanged: (value) {
-              setState(() => _vibrationEnabled = value);
-              _updateNotificationSettings();
-            },
-          ),
-        ],
-      ],
-    );
-  }
+  // Notification settings removed - now handled by socket service
 
   Widget _buildPrivacySettings() {
     return _buildSettingsSection(
@@ -397,11 +353,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
     );
   }
 
-  void _updateNotificationSettings() {
-    // TODO: Implement update conversation notification settings
-    print(
-        '🔔 Update notification settings: $_notificationsEnabled, $_soundEnabled, $_vibrationEnabled');
-  }
+  // Notification settings update removed - now handled by socket service
 
   void _updatePrivacySettings() {
     // TODO: Implement update conversation privacy settings

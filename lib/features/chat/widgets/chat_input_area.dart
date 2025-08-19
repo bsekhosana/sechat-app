@@ -111,7 +111,10 @@ class _ChatInputAreaState extends State<ChatInputArea> {
   Widget _buildTextInputField() {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withOpacity(0.3),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: Theme.of(context).colorScheme.outline.withOpacity(0.2),

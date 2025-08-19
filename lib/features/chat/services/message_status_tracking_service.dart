@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'package:uuid/uuid.dart';
 
 import '../models/message.dart';
 import '../models/message_status.dart' as msg_status;
-import '../models/chat_conversation.dart';
 import 'message_storage_service.dart';
-import '../../../core/services/secure_notification_service.dart';
+import '../../../core/services/se_socket_service.dart';
 import '../../../core/services/se_session_service.dart';
 
 /// Service for tracking message delivery status and read receipts
@@ -15,8 +13,7 @@ class MessageStatusTrackingService {
       _instance ??= MessageStatusTrackingService._();
 
   final MessageStorageService _storageService = MessageStorageService.instance;
-  final SecureNotificationService _notificationService =
-      SecureNotificationService.instance;
+  final SeSocketService _socketService = SeSocketService();
   final SeSessionService _sessionService = SeSessionService();
 
   // Stream controllers for real-time updates
@@ -52,16 +49,15 @@ class MessageStatusTrackingService {
     }
   }
 
-  /// Set up notification service callbacks
+  /// Set up socket service callbacks
   void _setupNotificationCallbacks() {
     // Set up callbacks for message status updates
-    _notificationService
-        .setOnMessageStatusUpdate((senderId, messageId, status) {
+    _socketService.setOnMessageStatusUpdate((senderId, messageId, status) {
       _handleMessageStatusUpdate(senderId, messageId, status);
     });
 
     // Set up callbacks for typing indicators
-    _notificationService.setOnTypingIndicator((senderId, isTyping) {
+    _socketService.setOnTypingIndicator((senderId, isTyping) {
       _handleTypingIndicator(senderId, isTyping);
     });
   }

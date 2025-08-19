@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/services/se_session_service.dart';
-import '../../../core/services/secure_notification_service.dart';
+import '../../../core/services/se_socket_service.dart';
 
 import '../services/message_storage_service.dart';
 import '../services/message_status_tracking_service.dart';
@@ -15,6 +15,9 @@ class ChatListProvider extends ChangeNotifier {
   final MessageStatusTrackingService _statusTrackingService =
       MessageStatusTrackingService.instance;
 
+  // Callback for online status updates to notify other providers
+  Function(String, bool, DateTime?)? _onOnlineStatusChanged;
+
   // State
   List<ChatConversation> _conversations = [];
   List<ChatConversation> _filteredConversations = [];
@@ -22,6 +25,16 @@ class ChatListProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _hasError = false;
   String? _errorMessage;
+
+  /// Set callback for online status changes
+  void setOnOnlineStatusChanged(Function(String, bool, DateTime?) callback) {
+    _onOnlineStatusChanged = callback;
+  }
+
+  /// Process message status update from external source
+  void processMessageStatusUpdate(MessageStatusUpdate update) {
+    _updateMessageStatus(update);
+  }
 
   // Getters
   List<ChatConversation> get conversations => _conversations;
@@ -207,40 +220,40 @@ class ChatListProvider extends ChangeNotifier {
   /// Setup status tracking for real-time updates
   void _setupStatusTracking() {
     // Listen for typing indicator updates
-    _statusTrackingService.typingIndicatorStream?.listen((update) {
+    _statusTrackingService.typingIndicatorStream.listen((update) {
       _updateTypingIndicator(update);
     });
 
     // Listen for last seen updates
-    _statusTrackingService.lastSeenStream?.listen((update) {
+    _statusTrackingService.lastSeenStream.listen((update) {
       _updateLastSeen(update);
     });
 
     // Listen for message status updates
-    _statusTrackingService.statusUpdateStream?.listen((update) {
+    _statusTrackingService.statusUpdateStream.listen((update) {
       _updateMessageStatus(update);
     });
 
-    // Listen for typing indicators from SecureNotificationService
+    // Listen for typing indicators from socket service
     try {
-      final notificationService = SecureNotificationService.instance;
-      notificationService.setOnTypingIndicator((senderId, isTyping) {
-        _handleTypingIndicatorFromNotification(senderId, isTyping);
+      final socketService = SeSocketService();
+      socketService.setOnTypingIndicator((senderId, isTyping) {
+        _handleTypingIndicatorFromSocket(senderId, isTyping);
       });
       print(
-          '📱 ChatListProvider: ✅ SecureNotificationService typing indicator callback set');
+          '🔌 ChatListProvider: ✅ Socket service typing indicator callback set');
     } catch (e) {
       print(
-          '📱 ChatListProvider: ❌ Failed to set up SecureNotificationService typing indicator callback: $e');
+          '🔌 ChatListProvider: ❌ Failed to set up socket service typing indicator callback: $e');
     }
 
-    // Listen for online status updates from SecureNotificationService
+    // Listen for online status updates from socket service
     try {
-      final notificationService = SecureNotificationService.instance;
+      final socketService = SeSocketService();
       // Note: Online status updates are handled through lastSeen updates
-      print('📱 ChatListProvider: ✅ Status tracking services set up');
+      print('🔌 ChatListProvider: ✅ Status tracking services set up');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to set up status tracking: $e');
+      print('🔌 ChatListProvider: ❌ Failed to set up status tracking: $e');
     }
   }
 
@@ -271,23 +284,23 @@ class ChatListProvider extends ChangeNotifier {
   /// Setup conversation creation listener
   void _setupConversationCreationListener() {
     try {
-      final notificationService = SecureNotificationService.instance;
-      notificationService.setOnConversationCreated((conversationData) {
+      final socketService = SeSocketService();
+      socketService.setOnConversationCreated((conversationData) {
         print(
-            '📱 ChatListProvider: 🆕 New conversation created: ${conversationData.id}');
+            '🔌 ChatListProvider: 🆕 New conversation created: ${conversationData.id}');
         // Add the new conversation to the list
         _addNewConversation(conversationData);
-        print('📱 ChatListProvider: Conversation data: $conversationData');
+        print('🔌 ChatListProvider: Conversation data: $conversationData');
       });
-      print('📱 ChatListProvider: ✅ Conversation creation listener set up');
+      print('🔌 ChatListProvider: ✅ Conversation creation listener set up');
     } catch (e) {
       print(
-          '📱 ChatListProvider: ❌ Failed to set up conversation creation listener: $e');
+          '🔌 ChatListProvider: ❌ Failed to set up conversation creation listener: $e');
     }
   }
 
-  /// Handle typing indicator from SecureNotificationService
-  void _handleTypingIndicatorFromNotification(String senderId, bool isTyping) {
+  /// Handle typing indicator from socket service
+  void _handleTypingIndicatorFromSocket(String senderId, bool isTyping) {
     try {
       print(
           '📱 ChatListProvider: 🔔 Typing indicator from notification: $senderId -> $isTyping');
@@ -395,6 +408,11 @@ class ChatListProvider extends ChangeNotifier {
         // Update the conversation's last message status
         final updatedConversation = conversation.copyWith(
           updatedAt: DateTime.now(),
+          metadata: {
+            ...?conversation.metadata,
+            'last_message_status': update.status.toString().split('.').last,
+            'last_message_status_updated': update.timestamp.toIso8601String(),
+          },
         );
 
         // Update in storage
@@ -412,7 +430,7 @@ class ChatListProvider extends ChangeNotifier {
         notifyListeners();
 
         print(
-            '📱 ChatListProvider: ✅ Message status updated for conversation: ${conversation!.id}');
+            '📱 ChatListProvider: ✅ Message status updated for conversation: ${conversation.id}');
       } else {
         print(
             '📱 ChatListProvider: ⚠️ No conversation found for message: ${update.messageId}');
@@ -1107,16 +1125,17 @@ class ChatListProvider extends ChangeNotifier {
   /// Setup online status callback
   void _setupOnlineStatusCallback() {
     try {
-      // Set up online status callback from SecureNotificationService
-      SecureNotificationService.instance.setOnOnlineStatusUpdate(
+      // Set up online status callback from socket service
+      final socketService = SeSocketService();
+      socketService.setOnOnlineStatusUpdate(
         (senderId, isOnline, lastSeen) {
           _handleOnlineStatusUpdate(senderId, isOnline, lastSeen);
         },
       );
-      print('📱 ChatListProvider: ✅ Online status callback setup complete');
+      print('🔌 ChatListProvider: ✅ Online status callback setup complete');
     } catch (e) {
       print(
-          '📱 ChatListProvider: ❌ Error setting up online status callback: $e');
+          '🔌 ChatListProvider: ❌ Error setting up online status callback: $e');
     }
   }
 
@@ -1137,16 +1156,17 @@ class ChatListProvider extends ChangeNotifier {
         final conversation = _conversations[conversationIndex];
         final updatedConversation = conversation.copyWith(
           lastSeen: lastSeen != null ? DateTime.tryParse(lastSeen) : null,
-          metadata: {
-            ...?conversation.metadata,
-            'is_online': isOnline,
-            'last_seen': lastSeen ?? DateTime.now().toIso8601String(),
-          },
+          isOnline: isOnline,
         );
 
         _conversations[conversationIndex] = updatedConversation;
         _applySearchFilter();
         notifyListeners();
+
+        // Notify other providers about online status change
+        if (_onOnlineStatusChanged != null) {
+          _onOnlineStatusChanged!(senderId, isOnline, updatedConversation.lastSeen);
+        }
 
         print(
             '📱 ChatListProvider: ✅ Online status updated for conversation: ${conversation.id}');

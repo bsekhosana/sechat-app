@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/global_user_service.dart';
-import '../../../core/services/airnotifier_service.dart';
-import '../../../core/services/secure_notification_service.dart';
 import '../../../core/services/se_session_service.dart';
+import '../../../core/services/se_socket_service.dart';
+import '../../../core/services/se_socket_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -18,7 +18,6 @@ class ProfileScreen extends StatelessWidget {
             'Are you sure you want to delete your account? This action cannot be undone and will:\n\n'
             '• Remove all your data\n'
             '• Delete all conversations\n'
-            '• Unlink your device from notifications\n'
             '• Clear all encryption keys',
           ),
           actions: [
@@ -63,7 +62,27 @@ class ProfileScreen extends StatelessWidget {
         },
       );
 
-      // Use the comprehensive account deletion method
+      // Disconnect socket before deleting account
+      try {
+        final socketService = SeSocketService();
+        await socketService.disconnect();
+        print(
+            '🔌 ProfileScreen: ✅ Socket disconnected before account deletion');
+      } catch (e) {
+        print(
+            '🔌 ProfileScreen: ⚠️ Error disconnecting socket: $e, but continuing with account deletion');
+      }
+
+      // Tell socket server to remove this session and clear queues before local purge
+      try {
+        final socketService = SeSocketService();
+        final sessionId = SeSessionService().currentSessionId;
+        await socketService.deleteSessionOnServer(sessionId: sessionId);
+      } catch (e) {
+        // Continue even if this fails; local cleanup still proceeds
+      }
+
+      // Use the comprehensive account deletion method (local data)
       await SeSessionService().deleteAccount();
 
       // Close loading dialog
@@ -103,6 +122,17 @@ class ProfileScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
+              // Send offline status and disconnect socket before logout
+              try {
+                final socketService = SeSocketService();
+                await socketService.sendOnlineStatusToAllContacts(false);
+                await socketService.disconnect();
+                print('🔌 ProfileScreen: ✅ Socket disconnected during logout');
+              } catch (e) {
+                print(
+                    '🔌 ProfileScreen: ⚠️ Error handling socket during logout: $e');
+              }
+
               await SeSessionService().logout();
               // Navigate to login screen or show logout message
             },
@@ -129,92 +159,6 @@ class ProfileScreen extends StatelessWidget {
                     Text(
                       'Session ID: ${SeSessionService().currentSessionId ?? 'Not set'}',
                       style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Push notification test section
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Push Notification Test',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Device Token: ${SecureNotificationService.instance.deviceToken ?? 'Not received'}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'AirNotifier Registered: ${SecureNotificationService.instance.isDeviceTokenRegistered() ? 'Yes' : 'No'}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              final sessionId =
-                                  SeSessionService().currentSessionId;
-                              if (sessionId != null) {
-                                await AirNotifierService.instance
-                                    .initialize(sessionId: sessionId);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('AirNotifier initialized')),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Please login first')),
-                                );
-                              }
-                            },
-                            child: const Text('Initialize AirNotifier'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              final sessionId =
-                                  SeSessionService().currentSessionId;
-                              if (sessionId != null) {
-                                final success = await AirNotifierService
-                                    .instance
-                                    .sendTestNotification(
-                                  recipientId: sessionId,
-                                );
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(success
-                                        ? 'Test notification sent'
-                                        : 'Failed to send notification'),
-                                    backgroundColor:
-                                        success ? Colors.green : Colors.red,
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Please login first')),
-                                );
-                              }
-                            },
-                            child: const Text('Send Test Notification'),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),

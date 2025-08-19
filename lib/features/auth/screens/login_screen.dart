@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/features/auth/screens/register_screen.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
 import 'package:sechat_app/features/auth/screens/main_nav_screen.dart';
@@ -10,7 +11,7 @@ import 'package:sechat_app/shared/widgets/custom_textfield.dart';
 import 'package:sechat_app/shared/widgets/custom_elevated_button.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -21,8 +22,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _displayNameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-  bool _showPassword = false;
-  bool _isCreatingNewAccount = false;
+  final bool _showPassword = false;
+  final bool _isCreatingNewAccount = false;
   String _sessionDisplayName = '';
 
   @override
@@ -389,6 +390,26 @@ class _LoginScreenState extends State<LoginScreen> {
         if (success) {
           // Initialize notification services with logged in session
           await seSessionService.initializeNotificationServices();
+
+          // Connect to socket and send online status to all contacts
+          try {
+            final socketService = SeSocketService();
+            final socketInitialized = await socketService.initialize();
+
+            if (socketInitialized) {
+              print('🔌 LoginScreen: ✅ Socket connected successfully');
+
+              // Send online status to all contacts
+              await socketService.sendOnlineStatusToAllContacts(true);
+              print('🔌 LoginScreen: ✅ Online status sent to all contacts');
+            } else {
+              print(
+                  '🔌 LoginScreen: ⚠️ Socket connection failed, but continuing with login');
+            }
+          } catch (e) {
+            print(
+                '🔌 LoginScreen: ⚠️ Error connecting to socket: $e, but continuing with login');
+          }
 
           // Navigate to main app
           if (mounted) {

@@ -71,8 +71,10 @@ class _TypingIndicatorState extends State<TypingIndicator>
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color:
-                Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest
+                .withOpacity(0.3),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(context).colorScheme.outline.withOpacity(0.2),

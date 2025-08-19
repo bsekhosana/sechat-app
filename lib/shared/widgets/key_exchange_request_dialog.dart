@@ -66,8 +66,7 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
         return;
       }
 
-      if (!GuidGenerator.isValidSessionGuid(
-          _sessionIdController.text.trim())) {
+      if (!GuidGenerator.isValidSessionGuid(_sessionIdController.text.trim())) {
         setState(() {
           _sessionIdError = 'Invalid session ID format';
         });
@@ -239,8 +238,9 @@ class _KeyExchangeRequestDialogState extends State<KeyExchangeRequestDialog> {
                             label: 'Enter Session ID',
                             icon: Icons.person,
                             validator: (value) {
-                              if (_sessionIdError != null)
+                              if (_sessionIdError != null) {
                                 return _sessionIdError;
+                              }
                               return null;
                             },
                             onChanged: (value) {

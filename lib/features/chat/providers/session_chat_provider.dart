@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
-import '../../../core/services/airnotifier_service.dart';
-import '../../../core/services/secure_notification_service.dart';
+import '../../../core/services/se_socket_service.dart';
 import '../../../core/services/encryption_service.dart';
 import '../services/message_storage_service.dart';
 import '../../../shared/models/chat.dart';
@@ -10,12 +9,10 @@ import 'dart:async';
 import 'dart:convert';
 
 class SessionChatProvider extends ChangeNotifier {
-  final AirNotifierService _airNotifier = AirNotifierService.instance;
-  final SecureNotificationService _notificationService =
-      SecureNotificationService.instance;
+  final SeSocketService _socketService = SeSocketService();
 
   // State
-  List<Chat> _chats = [];
+  final List<Chat> _chats = [];
   final Map<String, User> _chatUsers = {};
   final Map<String, bool> _typingUsers = {};
   final Map<String, int> _unreadCounts = {};
@@ -26,7 +23,7 @@ class SessionChatProvider extends ChangeNotifier {
   String? _currentConversationId;
   String? _currentRecipientId;
   String? _currentRecipientName;
-  List<Message> _messages = [];
+  final List<Message> _messages = [];
   bool _isRecipientTyping = false;
   DateTime? _recipientLastSeen;
   bool _isRecipientOnline = false;
@@ -44,7 +41,8 @@ class SessionChatProvider extends ChangeNotifier {
 
   /// Check if a message is from the current user
   bool isMessageFromCurrentUser(Message message) {
-    final currentUserId = _airNotifier.currentUserId;
+    // TODO: Get current user ID from session service
+    final currentUserId = 'current_user_id'; // Placeholder
     // Use both metadata and senderId for reliable ownership detection
     if (currentUserId != null) {
       // First check metadata if available
@@ -59,7 +57,8 @@ class SessionChatProvider extends ChangeNotifier {
   }
 
   /// Get current user ID
-  String? get currentUserId => _airNotifier.currentUserId;
+  String? get currentUserId =>
+      'current_user_id'; // Placeholder - TODO: Get from session service
 
   /// Check if a specific user is typing
   bool isUserTyping(String userId) {
@@ -71,36 +70,49 @@ class SessionChatProvider extends ChangeNotifier {
   }
 
   SessionChatProvider() {
-    // No real-time callbacks needed - everything goes through silent notifications
+    // Set up socket callbacks for real-time communication
 
-    // Set up typing indicator callback from SecureNotificationService
-    SecureNotificationService.instance
-        .setOnTypingIndicator((senderId, isTyping) {
-      _handleTypingIndicatorFromNotification(senderId, isTyping);
+    // Set up typing indicator callback from socket service
+    _socketService.setOnTypingIndicator((senderId, isTyping) {
+      _handleTypingIndicatorFromSocket(senderId, isTyping);
     });
 
-    // Set up online status callback from SecureNotificationService
-    SecureNotificationService.instance
-        .setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
-      _handleOnlineStatusUpdateFromNotification(senderId, isOnline, lastSeen);
+    // Set up online status callback from socket service
+    _socketService.setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
+      _handleOnlineStatusUpdateFromSocket(senderId, isOnline, lastSeen);
     });
 
-    // Set up chat message received callback from SecureNotificationService
-    SecureNotificationService.instance.setOnChatMessageReceived(
+    // Set up chat message received callback from socket service
+    _socketService.setOnMessageReceived(
         (senderId, senderName, message, conversationId, messageId) {
-      _handleChatMessageReceivedFromNotification(
+      _handleChatMessageReceivedFromSocket(
           senderId, senderName, message, conversationId, messageId);
     });
   }
 
-  /// Handle typing indicator from notification callback
-  void _handleTypingIndicatorFromNotification(String senderId, bool isTyping) {
+  /// Update recipient online status from external source (e.g., ChatListProvider)
+  void updateRecipientStatus({
+    required String recipientId,
+    required bool isOnline,
+    DateTime? lastSeen,
+  }) {
+    if (_currentRecipientId == recipientId) {
+      _isRecipientOnline = isOnline;
+      _recipientLastSeen = lastSeen;
+      notifyListeners();
+      print('🔌 SessionChatProvider: ✅ Recipient status updated: $isOnline');
+    }
+  }
+
+  /// Handle typing indicator from socket callback
+  void _handleTypingIndicatorFromSocket(String senderId, bool isTyping) {
     try {
       print(
-          '📱 SessionChatProvider: 🔔 Typing indicator callback received: $senderId -> $isTyping');
+          '🔌 SessionChatProvider: Typing indicator callback received: $senderId -> $isTyping');
 
       // CRITICAL: Prevent sender from processing their own typing indicator
-      final currentUserId = _airNotifier.currentUserId;
+      final currentUserId =
+          'current_user_id'; // Placeholder - TODO: Get from session service
       if (currentUserId != null && senderId == currentUserId) {
         print(
             '📱 SessionChatProvider: ⚠️ Ignoring own typing indicator from: $senderId');
@@ -129,15 +141,16 @@ class SessionChatProvider extends ChangeNotifier {
     }
   }
 
-  /// Handle online status update from notification callback
-  void _handleOnlineStatusUpdateFromNotification(
+  /// Handle online status update from socket callback
+  void _handleOnlineStatusUpdateFromSocket(
       String senderId, bool isOnline, String? lastSeen) {
     try {
       print(
           '📱 SessionChatProvider: 🔔 Online status callback received: $senderId -> $isOnline (lastSeen: $lastSeen)');
 
       // CRITICAL: Prevent sender from processing their own online status update
-      final currentUserId = _airNotifier.currentUserId;
+      final currentUserId =
+          'current_user_id'; // Placeholder - TODO: Get from session service
       if (currentUserId != null && senderId == currentUserId) {
         print(
             '📱 SessionChatProvider: ⚠️ Ignoring own online status update from: $senderId');
@@ -184,13 +197,9 @@ class SessionChatProvider extends ChangeNotifier {
     }
   }
 
-  /// Handle chat message received from notification callback
-  void _handleChatMessageReceivedFromNotification(
-      String senderId,
-      String senderName,
-      String message,
-      String conversationId,
-      String messageId) {
+  /// Handle chat message received from socket callback
+  void _handleChatMessageReceivedFromSocket(String senderId, String senderName,
+      String message, String conversationId, String messageId) {
     try {
       print(
           '📱 SessionChatProvider: 🔔 Chat message callback received: $senderName -> $message (ID: $messageId)');
@@ -206,7 +215,8 @@ class SessionChatProvider extends ChangeNotifier {
           isForCurrentConversation = true;
         } else {
           // Check if the conversation ID contains the current user and the other participant
-          final currentUserId = _airNotifier.currentUserId;
+          final currentUserId =
+              'current_user_id'; // Placeholder - TODO: Get from session service
           if (currentUserId != null) {
             // Check if this is a conversation between current user and sender
             if (conversationId.contains(currentUserId) &&
@@ -227,7 +237,8 @@ class SessionChatProvider extends ChangeNotifier {
           id: messageId,
           conversationId: conversationId,
           senderId: senderId,
-          recipientId: _airNotifier.currentUserId ?? '',
+          recipientId:
+              'current_user_id', // Placeholder - TODO: Get from session service
           type: MessageType.text,
           content: {'text': message},
           status: MessageStatus.delivered,
@@ -277,11 +288,13 @@ class SessionChatProvider extends ChangeNotifier {
       final messageData = {
         'type': 'message',
         'message_id': messageId,
-        'sender_id': _airNotifier.currentUserId ?? '',
-        'sender_name': _airNotifier.currentUserId ?? 'Anonymous User',
+        'sender_id':
+            'current_user_id', // Placeholder - TODO: Get from session service
+        'sender_name':
+            'current_user_name', // Placeholder - TODO: Get from session service
         'message': content,
         'conversation_id': _currentConversationId ??
-            'chat_${_airNotifier.currentUserId}_$recipientId',
+            'chat_${'current_user_id'}_$recipientId', // Placeholder - TODO: Get from session service
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       };
 
@@ -289,23 +302,19 @@ class SessionChatProvider extends ChangeNotifier {
       final encryptedPayload = await EncryptionService.createEncryptedPayload(
           messageData, recipientId);
 
-      // Send message via SecureNotificationService with full encryption
-      final success =
-          await SecureNotificationService.instance.sendEncryptedMessage(
+      // Send message via socket service
+      final success = await _socketService.sendMessage(
         recipientId: recipientId,
-        senderName: _airNotifier.currentUserId ?? 'Anonymous User',
         message: content,
         conversationId: _currentConversationId ??
-            'chat_${_airNotifier.currentUserId}_$recipientId',
-        encryptedData: encryptedPayload['data'] as String,
-        checksum: encryptedPayload['checksum'] as String,
+            'chat_${'current_user_id'}_$recipientId', // Placeholder - TODO: Get from session service
         messageId: messageId,
       );
 
       if (success) {
         // Create message object with proper conversation ID
         final properConversationId = _currentConversationId ??
-            'chat_${_airNotifier.currentUserId}_$recipientId';
+            'chat_${'current_user_id'}_$recipientId'; // Placeholder - TODO: Get from session service
 
         print(
             '📱 SessionChatProvider: 🔍 Sending message with conversation ID: $properConversationId');
@@ -316,7 +325,8 @@ class SessionChatProvider extends ChangeNotifier {
         final message = Message(
           id: messageId,
           conversationId: properConversationId,
-          senderId: _airNotifier.currentUserId ?? '',
+          senderId:
+              'current_user_id', // Placeholder - TODO: Get from session service
           recipientId: recipientId,
           type: MessageType.text,
           content: {'text': content},
@@ -345,7 +355,8 @@ class SessionChatProvider extends ChangeNotifier {
         try {
           // Update the chat list directly to show the latest message
           // This ensures the sender's chat list updates immediately
-          final currentUserId = _airNotifier.currentUserId;
+          final currentUserId =
+              'current_user_id'; // Placeholder - TODO: Get from session service
           if (currentUserId != null) {
             // Find and update the chat in the chat list
             final chatIndex = _chats.indexWhere((chat) =>
@@ -419,9 +430,10 @@ class SessionChatProvider extends ChangeNotifier {
       print(
           '📱 SessionChatProvider: 🔍 Sending typing indicator to: $recipientId (isTyping: $isTyping)');
 
-      final success = await _airNotifier.sendTypingIndicator(
+      final success = await _socketService.sendTypingIndicator(
         recipientId: recipientId,
-        senderName: _airNotifier.currentUserId ?? 'Anonymous User',
+        conversationId:
+            _currentConversationId ?? 'chat_${'current_user_id'}_$recipientId',
         isTyping: isTyping,
       );
 
@@ -453,9 +465,10 @@ class SessionChatProvider extends ChangeNotifier {
       // Create message object
       final message = Message(
         id: messageId,
-        conversationId: senderId,
+        conversationId: conversationId,
         senderId: senderId,
-        recipientId: _airNotifier.currentUserId ?? '',
+        recipientId:
+            'current_user_id', // Placeholder - TODO: Get from session service
         type: MessageType.text,
         content: {'text': content},
         status: MessageStatus.sent,
@@ -468,24 +481,24 @@ class SessionChatProvider extends ChangeNotifier {
       _updateOrCreateChat(senderId, message);
 
       // Show notification
-      await _notificationService.showLocalNotification(
-        title: senderName,
-        body: content,
-        type: 'message',
-        data: {
-          'senderName': senderName,
-          'message': content,
-          'conversationId': conversationId,
-        },
-      );
+      // await _notificationService.showLocalNotification( // This line was removed as per the new_code
+      //   title: senderName,
+      //   body: content,
+      //   type: 'message',
+      //   data: {
+      //     'senderName': senderName,
+      //     'message': content,
+      //     'conversationId': conversationId,
+      //   },
+      // );
 
       // Send delivery status
-      _airNotifier.sendMessageDeliveryStatus(
-        recipientId: senderId,
-        messageId: messageId,
-        status: 'delivered',
-        conversationId: conversationId,
-      );
+      // _airNotifier.sendMessageDeliveryStatus( // This line was removed as per the new_code
+      //   recipientId: senderId,
+      //   messageId: messageId,
+      //   status: 'delivered',
+      //   conversationId: conversationId,
+      // );
 
       print(
           '📱 SessionChatProvider: Message received via silent notification: $senderId');
@@ -584,7 +597,8 @@ class SessionChatProvider extends ChangeNotifier {
   void _addMessageToChat(String chatId, Message message) {
     // Add message to the messages list for the current conversation
     // Also add if this is a message we're sending (sender is current user)
-    final currentUserId = _airNotifier.currentUserId;
+    final currentUserId =
+        'current_user_id'; // Placeholder - TODO: Get from session service
     final isOwnMessage =
         currentUserId != null && message.senderId == currentUserId;
 
@@ -657,7 +671,8 @@ class SessionChatProvider extends ChangeNotifier {
 
       final chat = Chat(
         id: conversationId,
-        user1Id: _airNotifier.currentUserId ?? '',
+        user1Id:
+            'current_user_id', // Placeholder - TODO: Get from session service
         user2Id: recipientId,
         user1DisplayName: 'Me',
         user2DisplayName: user.username,
@@ -682,7 +697,8 @@ class SessionChatProvider extends ChangeNotifier {
       // Format: chat_${senderId}_${currentUserId} or chat_${currentUserId}_${recipientId}
       final parts = conversationId.split('_');
       if (parts.length >= 3) {
-        final currentUserId = _airNotifier.currentUserId;
+        final currentUserId =
+            'current_user_id'; // Placeholder - TODO: Get from session service
         if (currentUserId != null) {
           // Return the part that's not the current user ID
           if (parts[1] == currentUserId) {
@@ -713,12 +729,11 @@ class SessionChatProvider extends ChangeNotifier {
   // Mark message as read
   Future<void> markMessageAsRead(String messageId, String senderId) async {
     try {
-      // Send read receipt via AirNotifier
-      await _airNotifier.sendMessageDeliveryStatus(
+      // Send read receipt via socket service
+      await _socketService.sendMessageStatusUpdate(
         recipientId: senderId,
         messageId: messageId,
         status: 'read',
-        conversationId: senderId,
       );
 
       print('📱 SessionChatProvider: Message marked as read: $messageId');
@@ -853,7 +868,8 @@ class SessionChatProvider extends ChangeNotifier {
   void updateTypingIndicator(bool isTyping) async {
     try {
       // CRITICAL: Only update local typing state, don't send to self
-      final currentUserId = _airNotifier.currentUserId;
+      final currentUserId =
+          'current_user_id'; // Placeholder - TODO: Get from session service
       if (_currentRecipientId != null && _currentRecipientId != currentUserId) {
         // Send typing indicator to other user via silent notification
         await sendTypingIndicator(_currentRecipientId!, isTyping);
@@ -901,10 +917,5 @@ class SessionChatProvider extends ChangeNotifier {
     } catch (e) {
       print('📱 SessionChatProvider: ❌ Error toggling mute notifications: $e');
     }
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }

@@ -12,7 +12,7 @@ class NetworkService extends ChangeNotifier {
   Timer? _reconnectionTimer;
   Timer? _connectionTestTimer;
   int _reconnectionCountdown = 0;
-  bool _isPollingEnabled = true;
+  final bool _isPollingEnabled = true;
 
   bool _isConnected = true;
   bool _isReconnecting = false;

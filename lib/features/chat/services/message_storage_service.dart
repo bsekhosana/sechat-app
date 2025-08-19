@@ -149,9 +149,7 @@ class MessageStorageService {
           'is_archived': conversation.isArchived ? 1 : 0,
           'is_muted': conversation.isMuted ? 1 : 0,
           'is_pinned': conversation.isPinned ? 1 : 0,
-          'metadata': conversation.metadata != null
-              ? conversation.metadata.toString()
-              : null,
+          'metadata': conversation.metadata?.toString(),
           'last_seen': conversation.lastSeen?.toIso8601String(),
           'is_typing': conversation.isTyping == true ? 1 : 0,
           'typing_started_at': conversation.typingStartedAt?.toIso8601String(),
@@ -198,8 +196,7 @@ class MessageStorageService {
           'read_at': message.readAt?.toIso8601String(),
           'deleted_at': message.deletedAt?.toIso8601String(),
           'reply_to_message_id': message.replyToMessageId,
-          'metadata':
-              message.metadata != null ? message.metadata.toString() : null,
+          'metadata': message.metadata?.toString(),
           'is_encrypted': message.isEncrypted ? 1 : 0,
           'checksum': message.checksum,
         },

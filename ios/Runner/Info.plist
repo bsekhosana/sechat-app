@@ -39,6 +39,8 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<string>background-processing</string>
+		<string>background-fetch</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -46,6 +48,14 @@
 	<string>Main</string>
 	<key>UIStatusBarHidden</key>
 	<false/>
+	        <key>NSUserNotificationUsageDescription</key>
+        <string>This app needs notification permissions to show you important updates when the app is in the background.</string>
+        <key>UIBackgroundModes</key>
+        <array>
+            <string>remote-notification</string>
+            <string>background-processing</string>
+            <string>background-fetch</string>
+        </array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
