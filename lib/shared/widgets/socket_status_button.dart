@@ -142,7 +142,7 @@ class _SocketStatusButtonState extends State<SocketStatusButton>
         }
 
         return GestureDetector(
-          onLongPress: () {
+          onTap: () {
             _showConnectionDebugDialog(context, socketProvider);
           },
           child: Container(

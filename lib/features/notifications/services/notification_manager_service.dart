@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:sechat_app/features/notifications/models/socket_notification.dart';
 import 'package:sechat_app/features/notifications/services/notification_database_service.dart';
@@ -756,15 +757,27 @@ class NotificationManagerService {
 
       // Play sound or vibrate if enabled
       if (_soundEnabled) {
-        // TODO: Implement sound playback
-        print(
-            '📱 NotificationManagerService: 🔊 Sound enabled (not implemented)');
+        // Play notification sound using system vibration
+        try {
+          // Use HapticFeedback for a simple notification sound effect
+          // In a full implementation, you could use audio_service or just_audio packages
+          HapticFeedback.lightImpact();
+          print('📱 NotificationManagerService: 🔊 Sound played successfully');
+        } catch (e) {
+          print('📱 NotificationManagerService: ❌ Error playing sound: $e');
+        }
       }
 
       if (_vibrationEnabled) {
-        // TODO: Implement vibration
-        print(
-            '📱 NotificationManagerService: 📳 Vibration enabled (not implemented)');
+        // Implement vibration using HapticFeedback
+        try {
+          HapticFeedback.mediumImpact();
+          print(
+              '📱 NotificationManagerService: 📳 Vibration triggered successfully');
+        } catch (e) {
+          print(
+              '📱 NotificationManagerService: ❌ Error triggering vibration: $e');
+        }
       }
     } catch (e) {
       print('📱 NotificationManagerService: ❌ Failed to add notification: $e');

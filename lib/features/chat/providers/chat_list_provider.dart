@@ -36,6 +36,38 @@ class ChatListProvider extends ChangeNotifier {
     _updateMessageStatus(update);
   }
 
+  /// Update conversation online status from external source
+  void updateConversationOnlineStatus(
+      String userId, bool isOnline, String? lastSeen) {
+    try {
+      // Find conversation with this user and update online status
+      final conversationIndex = _conversations.indexWhere(
+        (conv) =>
+            conv.participant1Id == userId || conv.participant2Id == userId,
+      );
+
+      if (conversationIndex != -1) {
+        final conversation = _conversations[conversationIndex];
+        final updatedConversation = conversation.copyWith(
+          isOnline: isOnline,
+          lastSeen: lastSeen != null ? DateTime.tryParse(lastSeen) : null,
+        );
+
+        _conversations[conversationIndex] = updatedConversation;
+        _applySearchFilter();
+        notifyListeners();
+
+        print(
+            '📱 ChatListProvider: ✅ Online status updated for conversation: ${conversation.id}');
+      } else {
+        print(
+            '📱 ChatListProvider: ⚠️ No conversation found for user: $userId');
+      }
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error updating online status: $e');
+    }
+  }
+
   // Getters
   List<ChatConversation> get conversations => _conversations;
   List<ChatConversation> get filteredConversations => _filteredConversations;
@@ -346,6 +378,48 @@ class ChatListProvider extends ChangeNotifier {
       _conversations[index] = updatedConversation;
       _applySearchFilter();
       notifyListeners();
+    }
+  }
+
+  /// Update typing indicator by participant ID (for socket events)
+  void updateTypingIndicatorByParticipant(String participantId, bool isTyping) {
+    try {
+      print(
+          '📱 ChatListProvider: 🔔 Updating typing indicator for participant: $participantId -> $isTyping');
+
+      // CRITICAL: Prevent sender from processing their own typing indicator
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId != null && participantId == currentUserId) {
+        print(
+            '📱 ChatListProvider: ⚠️ Ignoring own typing indicator from: $participantId');
+        return; // Don't process own typing indicator
+      }
+
+      // Find conversation by participant ID
+      final index = _conversations.indexWhere((conv) =>
+          conv.participant1Id == participantId ||
+          conv.participant2Id == participantId);
+
+      if (index != -1) {
+        final conversation = _conversations[index];
+        final updatedConversation = conversation.copyWith(
+          isTyping: isTyping,
+          typingStartedAt: isTyping ? DateTime.now() : null,
+        );
+
+        _conversations[index] = updatedConversation;
+        _applySearchFilter();
+        notifyListeners();
+
+        print(
+            '📱 ChatListProvider: ✅ Updated typing indicator for conversation: ${conversation.id}');
+      } else {
+        print(
+            '📱 ChatListProvider: ⚠️ No conversation found for typing indicator from: $participantId');
+      }
+    } catch (e) {
+      print(
+          '📱 ChatListProvider: ❌ Error updating typing indicator by participant: $e');
     }
   }
 
@@ -920,10 +994,6 @@ class ChatListProvider extends ChangeNotifier {
           readReceiptsEnabled: true,
           typingIndicatorsEnabled: true,
           lastSeenEnabled: true,
-          mediaAutoDownload: true,
-          encryptMedia: true,
-          mediaQuality: 'High',
-          messageRetention: '30 days',
           isBlocked: false,
           blockedAt: null,
           recipientId: senderId,
@@ -1047,10 +1117,6 @@ class ChatListProvider extends ChangeNotifier {
           readReceiptsEnabled: true,
           typingIndicatorsEnabled: true,
           lastSeenEnabled: true,
-          mediaAutoDownload: true,
-          encryptMedia: true,
-          mediaQuality: 'High',
-          messageRetention: '30 days',
           isBlocked: false,
           blockedAt: null,
           recipientId: recipientId,
@@ -1165,7 +1231,8 @@ class ChatListProvider extends ChangeNotifier {
 
         // Notify other providers about online status change
         if (_onOnlineStatusChanged != null) {
-          _onOnlineStatusChanged!(senderId, isOnline, updatedConversation.lastSeen);
+          _onOnlineStatusChanged!(
+              senderId, isOnline, updatedConversation.lastSeen);
         }
 
         print(

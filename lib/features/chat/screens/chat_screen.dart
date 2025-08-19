@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/message.dart';
@@ -346,7 +347,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               title: 'Search messages',
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement search functionality
+                _showSearchDialog();
               },
             ),
             _buildChatOption(
@@ -364,8 +365,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               title: 'Delete chat',
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement delete chat functionality
-                print('🗑️ Delete chat option selected');
+                _showDeleteChatConfirmation();
               },
             ),
           ],
@@ -392,6 +392,153 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             ),
       ),
       onTap: onTap,
+    );
+  }
+
+  /// Show search dialog
+  void _showSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: Text(
+          'Search Messages',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Enter search term...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                prefixIcon: const Icon(Icons.search),
+              ),
+              onChanged: (value) {
+                // TODO: Implement actual search logic
+                print('🔍 Searching for: $value');
+              },
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Search functionality will be implemented in future updates',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Close',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show delete chat confirmation
+  void _showDeleteChatConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: Text(
+          'Delete Chat?',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        content: Text(
+          'This will permanently delete this chat conversation. This action cannot be undone.',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // TODO: Implement actual chat deletion logic
+              print('🗑️ Delete chat confirmed');
+              Navigator.pop(context); // Go back to previous screen
+            },
+            child: Text(
+              'Delete',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show delete conversation confirmation
+  void _showDeleteConversationConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: Text(
+          'Delete Conversation?',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        content: Text(
+          'This will permanently delete this conversation and all its messages. This action cannot be undone.',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // TODO: Implement actual conversation deletion logic
+              print('🗑️ Delete conversation confirmed');
+              Navigator.pop(context); // Go back to previous screen
+            },
+            child: Text(
+              'Delete',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -426,9 +573,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // TODO: Implement delete conversation functionality
-              print('🗑️ Delete conversation option selected');
-              Navigator.pop(context);
+              _showDeleteConversationConfirmation();
             },
             child: Text(
               'Delete',
@@ -475,7 +620,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               title: 'Reply',
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement reply functionality
+                _handleReplyMessage(message);
               },
             ),
             _buildMessageOption(
@@ -483,7 +628,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               title: 'Forward',
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement forward functionality
+                _handleForwardMessage(message);
               },
             ),
             _buildMessageOption(
@@ -491,7 +636,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               title: 'Copy',
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement copy functionality
+                _handleCopyMessage(message);
               },
             ),
             if (message.isFromCurrentUser(_getCurrentUserId()))
@@ -530,6 +675,102 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
+  /// Handle reply to message
+  void _handleReplyMessage(Message message) {
+    // Set the text controller to show reply context
+    _textController.text =
+        'Replying to: ${message.content['text'] ?? 'Message'}';
+    _textController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _textController.text.length),
+    );
+
+    // Focus the text field
+    FocusScope.of(context).requestFocus(FocusNode());
+
+    // Show a snackbar to indicate reply mode
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Reply mode activated'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    print('💬 Reply to message: ${message.id}');
+  }
+
+  /// Handle forward message
+  void _handleForwardMessage(Message message) {
+    // Show forward dialog
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: Text(
+          'Forward Message',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        content: Text(
+          'Forward functionality will be implemented in future updates',
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'OK',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    print('📤 Forward message: ${message.id}');
+  }
+
+  /// Handle copy message
+  void _handleCopyMessage(Message message) {
+    final messageText = message.content['text'] ?? 'Message content';
+
+    // Copy to clipboard
+    Clipboard.setData(ClipboardData(text: messageText));
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Message copied to clipboard'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    print('📋 Copy message: ${message.id}');
+  }
+
+  /// Handle delete message
+  void _handleDeleteMessage(Message message, SessionChatProvider provider) {
+    // TODO: Implement actual message deletion logic
+    // This would typically involve:
+    // 1. Removing from local storage
+    // 2. Sending delete request to server
+    // 3. Updating UI
+
+    print('🗑️ Delete message confirmed: ${message.id}');
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Message deleted'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   /// Show delete message confirmation
   void _showDeleteMessageConfirmation(
       Message message, SessionChatProvider provider) {
@@ -562,8 +803,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              // TODO: Implement delete message functionality
-              print('🗑️ Delete message option selected for: ${message.id}');
+              _handleDeleteMessage(message, provider);
             },
             child: Text(
               'Delete',

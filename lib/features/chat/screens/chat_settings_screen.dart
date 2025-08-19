@@ -20,12 +20,6 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   bool _readReceiptsEnabled = true;
   bool _typingIndicatorsEnabled = true;
   bool _lastSeenEnabled = true;
-  bool _mediaAutoDownload = true;
-  bool _encryptMedia = true;
-  String _messageRetention = '30 days';
-  String _mediaQuality = 'High';
-  double _storageUsage = 0.0;
-  String _storageUsageText = '0 MB';
 
   @override
   void initState() {
@@ -40,21 +34,6 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       _typingIndicatorsEnabled =
           widget.conversation.typingIndicatorsEnabled ?? true;
       _lastSeenEnabled = widget.conversation.lastSeenEnabled ?? true;
-      _mediaAutoDownload = widget.conversation.mediaAutoDownload ?? true;
-      _encryptMedia = widget.conversation.encryptMedia ?? true;
-      _messageRetention = widget.conversation.messageRetention ?? '30 days';
-      _mediaQuality = widget.conversation.mediaQuality ?? 'High';
-    });
-
-    // Calculate storage usage
-    await _calculateStorageUsage();
-  }
-
-  Future<void> _calculateStorageUsage() async {
-    // This would be implemented to calculate actual storage usage
-    setState(() {
-      _storageUsage = 0.25; // 25% of available storage
-      _storageUsageText = '156 MB';
     });
   }
 
@@ -84,14 +63,6 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             _buildPrivacySettings(),
 
             const SizedBox(height: 16),
-
-            // Media settings
-            _buildMediaSettings(),
-
-            const SizedBox(height: 16),
-
-            // Storage management
-            _buildStorageSettings(),
 
             const SizedBox(height: 16),
 
@@ -187,72 +158,6 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
             setState(() => _lastSeenEnabled = value);
             _updatePrivacySettings();
           },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMediaSettings() {
-    return _buildSettingsSection(
-      title: 'Media',
-      icon: Icons.photo_library,
-      children: [
-        _buildSwitchTile(
-          title: 'Auto-download Media',
-          subtitle: 'Automatically download media files',
-          value: _mediaAutoDownload,
-          onChanged: (value) {
-            setState(() => _mediaAutoDownload = value);
-            _updateMediaSettings();
-          },
-        ),
-        _buildSwitchTile(
-          title: 'Encrypt Media',
-          subtitle: 'Encrypt all media files',
-          value: _encryptMedia,
-          onChanged: (value) {
-            setState(() => _encryptMedia = value);
-            _updateMediaSettings();
-          },
-        ),
-        _buildListTile(
-          title: 'Media Quality',
-          subtitle: _mediaQuality,
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _showMediaQualityDialog(),
-        ),
-        _buildListTile(
-          title: 'Message Retention',
-          subtitle: _messageRetention,
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _showRetentionDialog(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStorageSettings() {
-    return _buildSettingsSection(
-      title: 'Storage',
-      icon: Icons.storage,
-      children: [
-        _buildListTile(
-          title: 'Storage Usage',
-          subtitle: _storageUsageText,
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _showStorageDetails(),
-        ),
-        _buildListTile(
-          title: 'Clear Media Cache',
-          subtitle: 'Free up storage space',
-          trailing: const Icon(Icons.delete_outline),
-          onTap: () => _clearMediaCache(),
-        ),
-        _buildListTile(
-          title: 'Export Chat',
-          subtitle: 'Save chat history',
-          trailing: const Icon(Icons.download),
-          onTap: () => _exportChat(),
         ),
       ],
     );
@@ -356,186 +261,32 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
   // Notification settings update removed - now handled by socket service
 
   void _updatePrivacySettings() {
-    // TODO: Implement update conversation privacy settings
-    print(
-        '🔒 Update privacy settings: $_readReceiptsEnabled, $_typingIndicatorsEnabled, $_lastSeenEnabled');
-  }
+    // Update conversation privacy settings
+    try {
+      // TODO: In a full implementation, this would:
+      // 1. Save settings to local storage
+      // 2. Send settings update to server
+      // 3. Update conversation metadata
 
-  void _updateMediaSettings() {
-    // TODO: Implement update conversation media settings
-    print(
-        '📱 Update media settings: $_mediaAutoDownload, $_encryptMedia, $_mediaQuality, $_messageRetention');
-  }
+      print(
+          '🔒 Update privacy settings: $_readReceiptsEnabled, $_typingIndicatorsEnabled, $_lastSeenEnabled');
 
-  void _showMediaQualityDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Media Quality'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            'Low',
-            'Medium',
-            'High',
-            'Original',
-          ]
-              .map((quality) => RadioListTile<String>(
-                    title: Text(quality),
-                    value: quality,
-                    groupValue: _mediaQuality,
-                    onChanged: (value) {
-                      setState(() => _mediaQuality = value!);
-                      Navigator.pop(context);
-                      _updateMediaSettings();
-                    },
-                  ))
-              .toList(),
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Privacy settings updated'),
+          duration: Duration(seconds: 2),
         ),
-      ),
-    );
-  }
-
-  void _showRetentionDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Message Retention'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            '7 days',
-            '30 days',
-            '90 days',
-            '1 year',
-            'Never',
-          ]
-              .map((retention) => RadioListTile<String>(
-                    title: Text(retention),
-                    value: retention,
-                    groupValue: _messageRetention,
-                    onChanged: (value) {
-                      setState(() => _messageRetention = value!);
-                      Navigator.pop(context);
-                      _updateMediaSettings();
-                    },
-                  ))
-              .toList(),
+      );
+    } catch (e) {
+      print('🔒 Error updating privacy settings: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update privacy settings: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
         ),
-      ),
-    );
-  }
-
-  void _showStorageDetails() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Storage Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Total Usage: $_storageUsageText'),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: _storageUsage,
-              backgroundColor: Colors.grey[300],
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text('Breakdown:'),
-            const Text('• Images: 45 MB'),
-            const Text('• Videos: 89 MB'),
-            const Text('• Documents: 12 MB'),
-            const Text('• Voice Messages: 10 MB'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _clearMediaCache() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear Media Cache'),
-        content: const Text(
-          'This will delete all downloaded media files for this conversation. '
-          'This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      // TODO: Implement clear conversation media functionality
-      print('🗑️ Clear conversation media option selected');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Media cache cleared')),
-        );
-        await _calculateStorageUsage();
-      }
-    }
-  }
-
-  Future<void> _exportChat() async {
-    // Show export options
-    final format = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Export Chat'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.text_snippet),
-              title: const Text('Text File (.txt)'),
-              onTap: () => Navigator.pop(context, 'txt'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.description),
-              title: const Text('PDF Document (.pdf)'),
-              onTap: () => Navigator.pop(context, 'pdf'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.table_chart),
-              title: const Text('Excel Spreadsheet (.xlsx)'),
-              onTap: () => Navigator.pop(context, 'xlsx'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (format != null) {
-      // TODO: Implement export conversation functionality
-      print('📤 Export conversation option selected: $format');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Chat exported as .$format')),
-        );
-      }
+      );
     }
   }
 

@@ -8,6 +8,7 @@ import '../../../core/services/indicator_service.dart';
 import '../../../core/services/se_socket_service.dart';
 import '../../../shared/models/user.dart';
 import '../../../shared/widgets/connection_status_widget.dart';
+import '../../../shared/widgets/socket_connection_status_widget.dart';
 import '../../../shared/widgets/socket_status_button.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../shared/widgets/key_exchange_request_dialog.dart';
@@ -99,7 +100,7 @@ Download now and let's chat securely!
   void _setupBadgeCountUpdates() {
     // Get the indicator service
     final indicatorService = context.read<IndicatorService>();
-    
+
     // Set up periodic badge count updates
     Timer.periodic(const Duration(seconds: 5), (timer) {
       if (mounted) {
@@ -108,7 +109,7 @@ Download now and let's chat securely!
         timer.cancel();
       }
     });
-    
+
     // Initial update
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateBadgeCounts();
@@ -118,28 +119,29 @@ Download now and let's chat securely!
   void _updateBadgeCounts() async {
     try {
       final indicatorService = context.read<IndicatorService>();
-      
+
       // Update chat count from ChatListProvider
       final chatListProvider = context.read<ChatListProvider>();
       final unreadChatsCount = chatListProvider.conversations
           .where((conv) => conv.unreadCount > 0)
           .length;
-      
+
       // Update key exchange count from KeyExchangeRequestProvider
       final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
-      final pendingKeyExchangeCount = keyExchangeProvider.receivedRequests.length;
-      
+      final pendingKeyExchangeCount =
+          keyExchangeProvider.receivedRequests.length;
+
       // Update notification count from NotificationManagerService
       final notificationManager = NotificationManagerService();
-      final unreadNotificationsCount = await notificationManager.getUnreadCount();
-      
+      final unreadNotificationsCount =
+          await notificationManager.getUnreadCount();
+
       // Update indicator service
       indicatorService.updateCounts(
         unreadChats: unreadChatsCount,
         pendingKeyExchange: pendingKeyExchangeCount,
         unreadNotifications: unreadNotificationsCount,
       );
-      
     } catch (e) {
       print('🔔 MainNavScreen: ❌ Error updating badge counts: $e');
     }
@@ -233,7 +235,9 @@ Download now and let's chat securely!
             bottomNavigationBar: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Connection status banner
+                // Socket connection status banner
+                SocketConnectionStatusWidget(),
+                // Network connection status banner
                 ConnectionStatusWidget(),
                 // Bottom navigation bar
                 Container(
@@ -277,11 +281,10 @@ Download now and let's chat securely!
     );
   }
 
-  Widget _buildNavItem(
-      int index, IconData icon, String label, int count) {
+  Widget _buildNavItem(int index, IconData icon, String label, int count) {
     final isSelected = _selectedIndex == index;
     final hasBadge = count > 0;
-    
+
     return Expanded(
       child: Material(
         color: Colors.transparent,
@@ -305,8 +308,10 @@ Download now and let's chat securely!
                         right: -2,
                         top: -2,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 2),
+                          constraints:
+                              const BoxConstraints(minWidth: 16, minHeight: 16),
                           decoration: const BoxDecoration(
                             color: Color(0xFFFF6B35),
                             shape: BoxShape.circle,

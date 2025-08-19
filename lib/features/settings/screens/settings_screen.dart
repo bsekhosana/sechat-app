@@ -9,6 +9,7 @@ import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/se_socket_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/services/se_session_service.dart';
+import 'queue_statistics_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -281,6 +282,15 @@ Download now and let's chat securely!
     );
   }
 
+  void _showQueueStatistics(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const QueueStatisticsScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -305,6 +315,11 @@ Download now and let's chat securely!
                         title: 'General Chat Settings',
                         subtitle: 'Manage your chat settings',
                         onTap: () => _showGeneralChatSettings(context),
+                      ),
+                      _buildSettingsItem(
+                        title: 'Queue Statistics',
+                        subtitle: 'View and manage message queues',
+                        onTap: () => _showQueueStatistics(context),
                       ),
                       _buildSettingsItem(
                         title: 'Logout',
@@ -354,6 +369,20 @@ Download now and let's chat securely!
     required VoidCallback onTap,
     bool isDestructive = false,
   }) {
+    // Determine icon based on title
+    IconData icon;
+    if (isDestructive) {
+      icon = Icons.logout;
+    } else if (title.contains('Storage')) {
+      icon = Icons.storage;
+    } else if (title.contains('Chat Settings')) {
+      icon = Icons.chat;
+    } else if (title.contains('Queue Statistics')) {
+      icon = Icons.queue;
+    } else {
+      icon = Icons.settings;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -379,7 +408,7 @@ Download now and let's chat securely!
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    isDestructive ? Icons.logout : Icons.settings,
+                    icon,
                     color: isDestructive ? Colors.red : const Color(0xFFFF6B35),
                     size: 20,
                   ),
@@ -803,8 +832,6 @@ class _GeneralChatSettingsScreenState extends State<GeneralChatSettingsScreen> {
   bool _readReceiptsEnabled = true;
   bool _typingIndicatorsEnabled = true;
   bool _lastSeenEnabled = true;
-  bool _mediaAutoDownload = true;
-  bool _encryptMedia = true;
 
   @override
   Widget build(BuildContext context) {
@@ -896,30 +923,6 @@ class _GeneralChatSettingsScreenState extends State<GeneralChatSettingsScreen> {
               ),
 
               const SizedBox(height: 24),
-
-              // Media settings
-              _buildSettingsSection(
-                'Media',
-                Icons.photo_library,
-                [
-                  SwitchListTile(
-                    title: const Text('Auto-download media'),
-                    subtitle:
-                        const Text('Automatically download images and videos'),
-                    value: _mediaAutoDownload,
-                    onChanged: (value) =>
-                        setState(() => _mediaAutoDownload = value),
-                    activeColor: const Color(0xFFFF6B35),
-                  ),
-                  SwitchListTile(
-                    title: const Text('Encrypt media'),
-                    subtitle: const Text('Encrypt media files for security'),
-                    value: _encryptMedia,
-                    onChanged: (value) => setState(() => _encryptMedia = value),
-                    activeColor: const Color(0xFFFF6B35),
-                  ),
-                ],
-              ),
             ],
           ),
         ),

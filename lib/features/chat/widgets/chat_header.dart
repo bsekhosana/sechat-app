@@ -7,6 +7,7 @@ class ChatHeader extends StatelessWidget {
   final DateTime? lastSeen;
   final VoidCallback onBackPressed;
   final VoidCallback onMorePressed;
+  final GlobalKey<NavigatorState>? navigatorKey;
 
   const ChatHeader({
     super.key,
@@ -15,6 +16,7 @@ class ChatHeader extends StatelessWidget {
     this.lastSeen,
     required this.onBackPressed,
     required this.onMorePressed,
+    this.navigatorKey,
   });
 
   @override
@@ -150,8 +152,99 @@ class ChatHeader extends StatelessWidget {
 
   /// Show recipient information
   void _showRecipientInfo() {
-    // TODO: Implement recipient info display
-    // This could show a profile modal or navigate to a profile screen
-    print('Show recipient info for: $recipientName');
+    // Show recipient info in a bottom sheet
+    final context = navigatorKey?.currentContext;
+    if (context == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    child: Text(
+                      recipientName.isNotEmpty
+                          ? recipientName[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          recipientName,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        _buildStatusIndicator(context),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildInfoRow(context, 'Status', isOnline ? 'Online' : 'Offline'),
+              if (lastSeen != null)
+                _buildInfoRow(context, 'Last seen', _formatLastSeen(lastSeen!)),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // TODO: Navigate to full profile screen when implemented
+                  },
+                  child: const Text('View Full Profile'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build info row for recipient info
+  Widget _buildInfoRow(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Text(
+            '$label: ',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+          ),
+        ],
+      ),
+    );
   }
 }

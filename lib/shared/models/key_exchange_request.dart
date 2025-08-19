@@ -28,17 +28,37 @@ class KeyExchangeRequest {
 
   /// Create from JSON
   factory KeyExchangeRequest.fromJson(Map<String, dynamic> json) {
+    // Helper function to safely parse timestamp
+    DateTime parseTimestamp(dynamic timestampValue) {
+      if (timestampValue is int) {
+        return DateTime.fromMillisecondsSinceEpoch(timestampValue);
+      } else if (timestampValue is String) {
+        try {
+          final intValue = int.parse(timestampValue);
+          return DateTime.fromMillisecondsSinceEpoch(intValue);
+        } catch (e) {
+          print(
+              'KeyExchangeRequest: Invalid timestamp string: $timestampValue, using current time');
+          return DateTime.now();
+        }
+      } else {
+        print(
+            'KeyExchangeRequest: Invalid timestamp type: ${timestampValue.runtimeType}, using current time');
+        return DateTime.now();
+      }
+    }
+
     return KeyExchangeRequest(
       id: json['id'] as String,
       fromSessionId: json['fromSessionId'] as String,
       toSessionId: json['toSessionId'] as String,
       requestPhrase: json['requestPhrase'] as String,
       status: json['status'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int),
+      timestamp: parseTimestamp(json['timestamp']),
       type: json['type'] as String,
       version: json['version'] as String?, // Added: parse version
       respondedAt: json['respondedAt'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(json['respondedAt'] as int)
+          ? parseTimestamp(json['respondedAt'])
           : null,
       errorMessage: json['errorMessage'] as String?,
       displayName: json['displayName'] as String?, // Added: parse display name

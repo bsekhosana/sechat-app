@@ -32,10 +32,6 @@ class ChatConversation {
   final bool? readReceiptsEnabled;
   final bool? typingIndicatorsEnabled;
   final bool? lastSeenEnabled;
-  final bool? mediaAutoDownload;
-  final bool? encryptMedia;
-  final String? mediaQuality;
-  final String? messageRetention;
   final bool? isBlocked;
   final DateTime? blockedAt;
 
@@ -69,10 +65,6 @@ class ChatConversation {
     this.readReceiptsEnabled,
     this.typingIndicatorsEnabled,
     this.lastSeenEnabled,
-    this.mediaAutoDownload,
-    this.encryptMedia,
-    this.mediaQuality,
-    this.messageRetention,
     this.isBlocked,
     this.blockedAt,
     this.recipientId,
@@ -124,10 +116,6 @@ class ChatConversation {
     bool? readReceiptsEnabled,
     bool? typingIndicatorsEnabled,
     bool? lastSeenEnabled,
-    bool? mediaAutoDownload,
-    bool? encryptMedia,
-    String? mediaQuality,
-    String? messageRetention,
     bool? isBlocked,
     DateTime? blockedAt,
     String? recipientId,
@@ -160,10 +148,7 @@ class ChatConversation {
       typingIndicatorsEnabled:
           typingIndicatorsEnabled ?? this.typingIndicatorsEnabled,
       lastSeenEnabled: lastSeenEnabled ?? this.lastSeenEnabled,
-      mediaAutoDownload: mediaAutoDownload ?? this.mediaAutoDownload,
-      encryptMedia: encryptMedia ?? this.encryptMedia,
-      mediaQuality: mediaQuality ?? this.mediaQuality,
-      messageRetention: messageRetention ?? this.messageRetention,
+
       isBlocked: isBlocked ?? this.isBlocked,
       blockedAt: blockedAt ?? this.blockedAt,
       recipientId: recipientId ?? this.recipientId,
@@ -311,10 +296,6 @@ class ChatConversation {
       'read_receipts_enabled': readReceiptsEnabled ?? true ? 1 : 0,
       'typing_indicators_enabled': typingIndicatorsEnabled ?? true ? 1 : 0,
       'last_seen_enabled': lastSeenEnabled ?? true ? 1 : 0,
-      'media_auto_download': mediaAutoDownload ?? true ? 1 : 0,
-      'encrypt_media': encryptMedia ?? true ? 1 : 0,
-      'media_quality': mediaQuality,
-      'message_retention': messageRetention,
       'is_blocked': isBlocked ?? false ? 1 : 0,
       'blocked_at': blockedAt?.toIso8601String(),
       'recipient_id': recipientId,
@@ -360,10 +341,6 @@ class ChatConversation {
       readReceiptsEnabled: _parseBool(json['read_receipts_enabled']),
       typingIndicatorsEnabled: _parseBool(json['typing_indicators_enabled']),
       lastSeenEnabled: _parseBool(json['last_seen_enabled']),
-      mediaAutoDownload: _parseBool(json['media_auto_download']),
-      encryptMedia: _parseBool(json['encrypt_media']),
-      mediaQuality: json['media_quality'] as String?,
-      messageRetention: json['message_retention'] as String?,
       isBlocked: _parseBool(json['is_blocked']),
       blockedAt: json['blocked_at'] != null
           ? DateTime.parse(json['blocked_at'] as String)

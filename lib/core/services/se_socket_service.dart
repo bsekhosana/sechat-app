@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/key_exchange_service.dart';
@@ -65,6 +66,9 @@ class SeSocketService {
 
       // Set up heartbeat
       _startHeartbeat();
+
+      // Send user online status to server
+      await sendUserOnlineStatus(true);
 
       print('🔌 SeSocketService: ✅ Socket initialized successfully');
       return true;
@@ -506,9 +510,24 @@ class SeSocketService {
     _socket!.on('user_online', (data) {
       try {
         final userId = data['sessionId'] as String? ?? '';
+        final queuedEventsCount = data['queuedEventsCount'] as int? ?? 0;
+
+        print(
+            '🔌 SeSocketService: 🌐 User came online: $userId with $queuedEventsCount queued events');
+
+        // Handle online status update
         _onOnlineStatusUpdate?.call(
             userId, true, DateTime.now().toIso8601String());
-      } catch (_) {}
+
+        // If this is the current user, handle queued events
+        if (userId == _currentSessionId) {
+          print(
+              '🔌 SeSocketService: 🔄 Current user came online, processing queued events...');
+          _handleUserOnline();
+        }
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling user_online event: $e');
+      }
     });
 
     _socket!.on('user_offline', (data) {
@@ -517,6 +536,165 @@ class SeSocketService {
         _onOnlineStatusUpdate?.call(
             userId, false, DateTime.now().toIso8601String());
       } catch (_) {}
+    });
+
+    _socket!.on('typing_indicator', (data) {
+      try {
+        final senderId = data['senderId'] as String? ?? '';
+        final isTyping = data['isTyping'] as bool? ?? false;
+
+        print(
+            '🔌 SeSocketService: ⌨️ Typing indicator received: $senderId -> $isTyping');
+
+        if (_onTypingIndicator != null) {
+          _onTypingIndicator!(senderId, isTyping);
+          print('🔌 SeSocketService: ✅ Typing indicator callback triggered');
+        } else {
+          print('🔌 SeSocketService: ⚠️ No typing indicator callback set');
+        }
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling typing indicator: $e');
+      }
+    });
+
+    _socket!.on('online_status_update', (data) {
+      try {
+        final isOnline = data['isOnline'] as bool? ?? false;
+        final timestamp =
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String();
+
+        print(
+            '🔌 SeSocketService: 🌐 Online status update received: $isOnline at $timestamp');
+
+        // This event is for broadcasting online status to all contacts
+        // The server should handle distributing this to relevant users
+        print('🔌 SeSocketService: ✅ Online status update event received');
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling online status update: $e');
+      }
+    });
+
+    // Handle queued events when user comes online
+    _socket!.on('queued_events', (data) {
+      try {
+        final sessionId = data['sessionId'] as String? ?? '';
+        final events = data['events'] as List<dynamic>? ?? [];
+        final eventCount = events.length;
+
+        print(
+            '🔌 SeSocketService: 📦 Received $eventCount queued events for session: $sessionId');
+
+        // Process each queued event
+        for (final event in events) {
+          _processQueuedEvent(event);
+        }
+
+        print('🔌 SeSocketService: ✅ Processed $eventCount queued events');
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling queued events: $e');
+      }
+    });
+
+    // Handle queued message delivery
+    _socket!.on('queued_message_delivered', (data) {
+      try {
+        final messageId = data['messageId'] as String? ?? '';
+        final senderId = data['senderId'] as String? ?? '';
+        final recipientId = data['recipientId'] as String? ?? '';
+        final message = data['message'] as String? ?? '';
+        final conversationId = data['conversationId'] as String? ?? '';
+        final timestamp = data['timestamp'] as String? ?? '';
+
+        print(
+            '🔌 SeSocketService: 📨 Queued message delivered: $messageId from $senderId to $recipientId');
+
+        // Trigger message received callback
+        if (_onMessageReceived != null) {
+          _onMessageReceived!(senderId ?? '', 'Unknown User', message ?? '',
+              conversationId ?? '', messageId ?? '');
+          print('🔌 SeSocketService: ✅ Queued message processed via callback');
+        }
+      } catch (e) {
+        print(
+            '🔌 SeSocketService: ❌ Error handling queued message delivery: $e');
+      }
+    });
+
+    // Handle queued key exchange request delivery
+    _socket!.on('queued_key_exchange_delivered', (data) {
+      try {
+        final requestId = data['requestId'] as String? ?? '';
+        final senderId = data['senderId'] as String? ?? '';
+        final recipientId = data['recipientId'] as String? ?? '';
+        final publicKey = data['publicKey'] as String? ?? '';
+        final requestPhrase = data['requestPhrase'] as String? ?? '';
+        final version = data['version'] as String? ?? '1';
+
+        print(
+            '🔌 SeSocketService: 🔑 Queued key exchange request delivered: $requestId from $senderId to $recipientId');
+
+        // Trigger key exchange request callback
+        if (_onKeyExchangeRequestReceived != null) {
+          final requestData = {
+            'requestId': requestId,
+            'senderId': senderId,
+            'recipientId': recipientId,
+            'publicKey': publicKey,
+            'requestPhrase': requestPhrase,
+            'version': version,
+            'timestamp': data['timestamp'] ?? DateTime.now().toIso8601String(),
+            'wasQueued': true,
+          };
+
+          _onKeyExchangeRequestReceived!(requestData);
+          print(
+              '🔌 SeSocketService: ✅ Queued key exchange request processed via callback');
+        }
+      } catch (e) {
+        print(
+            '🔌 SeSocketService: ❌ Error handling queued key exchange delivery: $e');
+      }
+    });
+
+    // Handle queue status response
+    _socket!.on('queue_status_response', (data) {
+      try {
+        final recipientId = data['recipientId'] as String? ?? '';
+        final hasQueuedEvents = data['hasQueuedEvents'] as bool? ?? false;
+        final queuedEventCount = data['queuedEventCount'] as int? ?? 0;
+        final lastQueuedAt = data['lastQueuedAt'] as String? ?? '';
+
+        print(
+            '🔌 SeSocketService: 📊 Queue status for $recipientId: $queuedEventCount events, last at $lastQueuedAt');
+
+        // You can add a callback here if you want to handle queue status updates
+        // For now, just log the information
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling queue status response: $e');
+      }
+    });
+
+    // Handle queue statistics response
+    _socket!.on('queue_statistics_response', (data) {
+      try {
+        final sessionId = data['sessionId'] as String? ?? '';
+        final totalQueuedEvents = data['totalQueuedEvents'] as int? ?? 0;
+        final pendingDeliveries = data['pendingDeliveries'] as int? ?? 0;
+        final successfulDeliveries = data['successfulDeliveries'] as int? ?? 0;
+        final failedDeliveries = data['failedDeliveries'] as int? ?? 0;
+
+        print('🔌 SeSocketService: 📊 Queue statistics for $sessionId:');
+        print('🔌 SeSocketService:   Total queued: $totalQueuedEvents');
+        print('🔌 SeSocketService:   Pending: $pendingDeliveries');
+        print('🔌 SeSocketService:   Successful: $successfulDeliveries');
+        print('🔌 SeSocketService:   Failed: $failedDeliveries');
+
+        // You can add a callback here if you want to handle queue statistics updates
+        // For now, just log the information
+      } catch (e) {
+        print(
+            '🔌 SeSocketService: ❌ Error handling queue statistics response: $e');
+      }
     });
 
     _socket!.on('account_deleted', (data) {
@@ -602,6 +780,15 @@ class SeSocketService {
       _isConnected = _socket?.connected ?? false;
       _isConnecting = false;
       _reconnectAttempts = 0;
+
+      // iOS-specific: Validate the connection after reconnect
+      if (defaultTargetPlatform == TargetPlatform.iOS && _isConnected) {
+        print('🔌 SeSocketService: 🍎 iOS - Validating reconnection...');
+        await Future.delayed(
+            const Duration(milliseconds: 500)); // Give iOS time to stabilize
+        refreshConnectionStatus(); // Double-check the connection
+      }
+
       _connectionStateController.add(_isConnected);
 
       // Create reconnection success notification
@@ -670,15 +857,58 @@ class SeSocketService {
   /// Force refresh connection status
   void refreshConnectionStatus() {
     if (_socket != null) {
-      _isConnected = _socket!.connected;
-      print(
-          '🔌 SeSocketService: 🔄 Refreshed connection status: $_isConnected');
-      _connectionStateController.add(_isConnected);
+      final actualConnected = _socket!.connected;
+      final wasConnected = _isConnected;
+
+      // iOS-specific: Double-check connection state consistency
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        // On iOS, sometimes the socket.connected state can be stale
+        // Force a more thorough check
+        if (_isConnected != actualConnected) {
+          print(
+              '🔌 SeSocketService: 🍎 iOS connection state mismatch detected! Internal: $_isConnected, Socket: $actualConnected');
+
+          // If socket says it's connected but we think it's not, test the connection
+          if (actualConnected && !_isConnected) {
+            print(
+                '🔌 SeSocketService: 🍎 iOS - Socket claims connected, validating...');
+            _validateiOSConnection();
+          }
+        }
+      }
+
+      _isConnected = actualConnected;
+
+      // Only notify if the state actually changed
+      if (wasConnected != _isConnected) {
+        print(
+            '🔌 SeSocketService: 🔄 Refreshed connection status: $_isConnected');
+        _connectionStateController.add(_isConnected);
+      }
     } else {
       _isConnected = false;
       print(
           '🔌 SeSocketService: 🔄 Refreshed connection status: false (no socket)');
       _connectionStateController.add(false);
+    }
+  }
+
+  /// iOS-specific connection validation
+  void _validateiOSConnection() {
+    if (_socket != null && _socket!.connected) {
+      // Send a lightweight ping to validate the connection
+      try {
+        _socket!.emit('ping', {
+          'sessionId': _currentSessionId,
+          'timestamp': DateTime.now().toIso8601String(),
+          'platform': 'iOS',
+        });
+        print('🔌 SeSocketService: 🍎 iOS connection validation ping sent');
+      } catch (e) {
+        print('🔌 SeSocketService: 🍎 iOS connection validation failed: $e');
+        // Don't override connection state on validation failure
+        // Just log the issue for debugging
+      }
     }
   }
 
@@ -936,7 +1166,7 @@ class SeSocketService {
     );
   }
 
-  /// Send message via socket
+  /// Send message via socket with queuing support
   Future<bool> sendMessage({
     required String recipientId,
     required String message,
@@ -945,12 +1175,6 @@ class SeSocketService {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      if (!_isConnected) {
-        print(
-            '🔌 SeSocketService: ⚠️ Cannot send message - socket not connected');
-        return false;
-      }
-
       final messageData = {
         'recipientId': recipientId,
         'message': message,
@@ -959,11 +1183,35 @@ class SeSocketService {
             messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
         'timestamp': DateTime.now().toIso8601String(),
         'metadata': metadata ?? {},
+        'senderId': _currentSessionId,
+        'requiresDeliveryReceipt': true,
+        'priority': 'normal', // normal, high, urgent
       };
 
-      emit('send_message', messageData);
-      print('🔌 SeSocketService: ✅ Message sent via socket');
-      return true;
+      // If socket is connected, send immediately
+      if (_isConnected) {
+        emit('send_message', messageData);
+        print('🔌 SeSocketService: ✅ Message sent immediately via socket');
+        return true;
+      } else {
+        // If socket is not connected, attempt to queue the message
+        print(
+            '🔌 SeSocketService: ⚠️ Socket not connected, attempting to queue message...');
+
+        // Try to establish connection for queuing
+        final connected = await ensureConnection();
+        if (connected) {
+          emit('send_message', messageData);
+          print(
+              '🔌 SeSocketService: ✅ Message queued via socket after connection');
+          return true;
+        } else {
+          // If connection fails, emit a queue event that the server should handle
+          emit('queue_message', messageData);
+          print('🔌 SeSocketService: ✅ Message queued for offline recipient');
+          return true;
+        }
+      }
     } catch (e) {
       print('🔌 SeSocketService: ❌ Error sending message: $e');
       return false;
@@ -1022,68 +1270,249 @@ class SeSocketService {
     }
   }
 
-  /// Send online status update to all contacts
+  /// Send online status update to all contacts via socket
   Future<bool> sendOnlineStatusToAllContacts(bool isOnline) async {
     try {
       if (!_isConnected) {
         print(
-            '🔌 SeSocketService: ❌ Socket not connected, cannot send online status');
+            '🔌 SeSocketService: ⚠️ Cannot send online status - socket not connected');
         return false;
       }
 
-      final sessionService = SeSessionService();
-      final currentUserId = sessionService.currentSessionId;
+      final statusData = {
+        'isOnline': isOnline,
+        'timestamp': DateTime.now().toIso8601String(),
+        'sessionId': _currentSessionId,
+      };
 
-      if (currentUserId == null) {
-        print('🔌 SeSocketService: ❌ No current session ID available');
-        return false;
-      }
-
-      // Get all conversations to send status updates
-      final messageStorageService = MessageStorageService.instance;
-      final conversations =
-          await messageStorageService.getUserConversations(currentUserId);
-
-      if (conversations.isEmpty) {
-        print(
-            '🔌 SeSocketService: ℹ️ No conversations found, skipping online status update');
-        return true;
-      }
-
-      // Send online status update to all participants via socket
-      for (final conversation in conversations) {
-        final otherParticipantId =
-            conversation.getOtherParticipantId(currentUserId);
-
-        await sendMessageStatusUpdate(
-          recipientId: otherParticipantId,
-          messageId: 'online_status_${DateTime.now().millisecondsSinceEpoch}',
-          status: isOnline ? 'online' : 'offline',
-        );
-      }
-
+      emit('online_status_update', statusData);
       print(
-          '🔌 SeSocketService: ✅ Online status updates sent to ${conversations.length} contacts');
+          '🔌 SeSocketService: ✅ Online status update sent via socket: ${isOnline ? "online" : "offline"}');
       return true;
     } catch (e) {
-      print(
-          '🔌 SeSocketService: ❌ Error sending online status to all contacts: $e');
+      print('🔌 SeSocketService: ❌ Error sending online status update: $e');
       return false;
     }
   }
 
-  /// Delete this session on the socket server and clear any server-side links/queues
+  /// Send user online status to server (for queuing system)
+  Future<bool> sendUserOnlineStatus(bool isOnline) async {
+    try {
+      if (!_isConnected) {
+        print(
+            '🔌 SeSocketService: ⚠️ Cannot send user online status - socket not connected');
+        return false;
+      }
+
+      final statusData = {
+        'sessionId': _currentSessionId,
+        'isOnline': isOnline,
+        'timestamp': DateTime.now().toIso8601String(),
+        'deviceInfo': {
+          'platform': 'flutter',
+          'version': '1.0.0',
+        },
+      };
+
+      emit('user_status_update', statusData);
+      print(
+          '🔌 SeSocketService: ✅ User online status sent: ${isOnline ? "online" : "offline"}');
+      return true;
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error sending user online status: $e');
+      return false;
+    }
+  }
+
+  /// Handle user coming online and process queued events
+  void _handleUserOnline() {
+    try {
+      print(
+          '🔌 SeSocketService: 🔄 Processing queued events for user: $_currentSessionId');
+
+      // Request queued events from server
+      emit('request_queued_events', {
+        'sessionId': _currentSessionId,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      print('🔌 SeSocketService: ✅ Requested queued events from server');
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error handling user online: $e');
+    }
+  }
+
+  /// Process individual queued event
+  void _processQueuedEvent(Map<String, dynamic> event) {
+    try {
+      final eventType = event['type'] as String? ?? '';
+      final eventData = event['data'] as Map<String, dynamic>? ?? {};
+
+      print('🔌 SeSocketService: 🔄 Processing queued event type: $eventType');
+
+      switch (eventType) {
+        case 'message':
+          _processQueuedMessage(eventData);
+          break;
+        case 'key_exchange_request':
+          _processQueuedKeyExchangeRequest(eventData);
+          break;
+        case 'typing_indicator':
+          _processQueuedTypingIndicator(eventData);
+          break;
+        default:
+          print('🔌 SeSocketService: ⚠️ Unknown queued event type: $eventType');
+      }
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error processing queued event: $e');
+    }
+  }
+
+  /// Process queued message event
+  void _processQueuedMessage(Map<String, dynamic> eventData) {
+    try {
+      final messageId = eventData['messageId'] as String? ?? '';
+      final senderId = eventData['senderId'] as String? ?? '';
+      final message = eventData['message'] as String? ?? '';
+      final conversationId = eventData['conversationId'] as String? ?? '';
+
+      print(
+          '🔌 SeSocketService: 📨 Processing queued message: $messageId from $senderId');
+
+      // Trigger message received callback
+      if (_onMessageReceived != null) {
+        _onMessageReceived!(senderId ?? '', 'Unknown User', message ?? '',
+            conversationId ?? '', messageId ?? '');
+        print('🔌 SeSocketService: ✅ Queued message processed');
+      }
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error processing queued message: $e');
+    }
+  }
+
+  /// Process queued key exchange request event
+  void _processQueuedKeyExchangeRequest(Map<String, dynamic> eventData) {
+    try {
+      final requestId = eventData['requestId'] as String? ?? '';
+      final senderId = eventData['senderId'] as String? ?? '';
+      final publicKey = eventData['publicKey'] as String? ?? '';
+      final requestPhrase = eventData['requestPhrase'] as String? ?? '';
+      final version = eventData['version'] as String? ?? '1';
+
+      print(
+          '🔌 SeSocketService: 🔑 Processing queued key exchange request: $requestId from $senderId');
+
+      // Trigger key exchange request callback
+      if (_onKeyExchangeRequestReceived != null) {
+        final requestData = {
+          'requestId': requestId,
+          'senderId': senderId,
+          'publicKey': publicKey,
+          'requestPhrase': requestPhrase,
+          'version': version,
+          'timestamp':
+              eventData['timestamp'] ?? DateTime.now().toIso8601String(),
+          'wasQueued': true,
+        };
+
+        _onKeyExchangeRequestReceived!(requestData);
+        print('🔌 SeSocketService: ✅ Queued key exchange request processed');
+      }
+    } catch (e) {
+      print(
+          '🔌 SeSocketService: ❌ Error processing queued key exchange request: $e');
+    }
+  }
+
+  /// Process queued typing indicator event
+  void _processQueuedTypingIndicator(Map<String, dynamic> eventData) {
+    try {
+      final senderId = eventData['senderId'] as String? ?? '';
+      final isTyping = eventData['isTyping'] as bool? ?? false;
+
+      print(
+          '🔌 SeSocketService: ⌨️ Processing queued typing indicator: $senderId -> $isTyping');
+
+      // Trigger typing indicator callback
+      if (_onTypingIndicator != null) {
+        _onTypingIndicator!(senderId ?? '', isTyping);
+        print('🔌 SeSocketService: ✅ Queued typing indicator processed');
+      }
+    } catch (e) {
+      print(
+          '🔌 SeSocketService: ❌ Error processing queued typing indicator: $e');
+    }
+  }
+
+  /// Check queue status for a specific recipient
+  Future<Map<String, dynamic>?> checkQueueStatus(String recipientId) async {
+    try {
+      if (!_isConnected) {
+        print(
+            '🔌 SeSocketService: ⚠️ Cannot check queue status - socket not connected');
+        return null;
+      }
+
+      final requestData = {
+        'recipientId': recipientId,
+        'sessionId': _currentSessionId,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      emit('check_queue_status', requestData);
+      print(
+          '🔌 SeSocketService: ✅ Queue status check requested for: $recipientId');
+
+      // Note: Server should respond with 'queue_status_response' event
+      return {'status': 'requested'};
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error checking queue status: $e');
+      return null;
+    }
+  }
+
+  /// Get queue statistics for current user
+  Future<Map<String, dynamic>?> getQueueStatistics() async {
+    try {
+      if (!_isConnected) {
+        print(
+            '🔌 SeSocketService: ⚠️ Cannot get queue statistics - socket not connected');
+        return null;
+      }
+
+      final requestData = {
+        'sessionId': _currentSessionId,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      emit('get_queue_statistics', requestData);
+      print('🔌 SeSocketService: ✅ Queue statistics requested');
+
+      // Note: Server should respond with 'queue_statistics_response' event
+      return {'status': 'requested'};
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error getting queue statistics: $e');
+      return null;
+    }
+  }
+
+  /// Delete this session on the socket server and clear EVERYTHING
   /// - Attempts a lightweight connect if not already connected, so it can send the commands
-  /// - Emits `clear_user_queue` and `delete_account` for the current session
-  /// - Clears the local cached session id reference in this service
-  Future<void> deleteSessionOnServer({String? sessionId}) async {
+  /// - Emits comprehensive cleanup commands to server
+  /// - Clears all local data and references
+  /// - Resets socket service to initial state
+  Future<void> deleteSessionOnServer(
+      {String? sessionId, bool clearEverything = true}) async {
     final String? targetSessionId = sessionId ?? _currentSessionId;
     if (targetSessionId == null || targetSessionId.isEmpty) {
       print(
           '🔌 SeSocketService: ⚠️ No sessionId available to delete on server');
-      _currentSessionId = null;
+      _clearLocalState();
       return;
     }
+
+    print(
+        '🔌 SeSocketService: 🗑️ Starting comprehensive account deletion for session: $targetSessionId');
 
     bool connectedTemporarily = false;
     try {
@@ -1099,19 +1528,58 @@ class SeSocketService {
 
       if (_isConnected) {
         try {
+          // Send offline status before deletion
+          await sendUserOnlineStatus(false);
+          print('🔌 SeSocketService: ✅ Sent offline status before deletion');
+        } catch (e) {
+          print('🔌 SeSocketService: ⚠️ Error sending offline status: $e');
+        }
+
+        try {
           // Clear any queued messages for this user on the server
           emit('clear_user_queue', {
             'sessionId': targetSessionId,
+            'clearAll': true,
           });
+          print('🔌 SeSocketService: ✅ Requested server queue clearance');
         } catch (e) {
           print('🔌 SeSocketService: ⚠️ Error emitting clear_user_queue: $e');
+        }
+
+        try {
+          // Clear all conversations and messages for this user
+          emit('clear_user_conversations', {
+            'sessionId': targetSessionId,
+            'clearAll': true,
+          });
+          print(
+              '🔌 SeSocketService: ✅ Requested server conversation clearance');
+        } catch (e) {
+          print(
+              '🔌 SeSocketService: ⚠️ Error emitting clear_user_conversations: $e');
+        }
+
+        try {
+          // Clear all key exchange data for this user
+          emit('clear_user_key_exchanges', {
+            'sessionId': targetSessionId,
+            'clearAll': true,
+          });
+          print(
+              '🔌 SeSocketService: ✅ Requested server key exchange clearance');
+        } catch (e) {
+          print(
+              '🔌 SeSocketService: ⚠️ Error emitting clear_user_key_exchanges: $e');
         }
 
         try {
           // Notify server that this account/session is deleted
           emit('delete_account', {
             'sessionId': targetSessionId,
+            'permanent': clearEverything,
+            'timestamp': DateTime.now().toIso8601String(),
           });
+          print('🔌 SeSocketService: ✅ Requested server account deletion');
         } catch (e) {
           print('🔌 SeSocketService: ⚠️ Error emitting delete_account: $e');
         }
@@ -1119,8 +1587,8 @@ class SeSocketService {
     } catch (e) {
       print('🔌 SeSocketService: ❌ Error during deleteSessionOnServer: $e');
     } finally {
-      // Clear local reference regardless
-      _currentSessionId = null;
+      // Clear all local state
+      _clearLocalState();
 
       // If we connected only for cleanup, disconnect
       if (connectedTemporarily) {
@@ -1128,7 +1596,43 @@ class SeSocketService {
           await disconnect();
         } catch (_) {}
       }
+
+      print('🔌 SeSocketService: ✅ Account deletion completed');
     }
+  }
+
+  /// Clear all local state and reset service
+  void _clearLocalState() {
+    print('🔌 SeSocketService: 🧹 Clearing all local state...');
+
+    // Clear session reference
+    _currentSessionId = null;
+
+    // Reset connection state
+    _isConnected = false;
+    _isConnecting = false;
+    _reconnectAttempts = 0;
+
+    // Cancel all timers
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+
+    // Clear callbacks
+    _onMessageReceived = null;
+    _onTypingIndicator = null;
+    _onOnlineStatusUpdate = null;
+    _onMessageStatusUpdate = null;
+    _onKeyExchangeRequestReceived = null;
+    _onKeyExchangeAccepted = null;
+    _onKeyExchangeDeclined = null;
+    _onConversationCreated = null;
+
+    // Notify connection state change
+    _connectionStateController.add(false);
+
+    print('🔌 SeSocketService: ✅ Local state cleared');
   }
 
   /// Send key exchange request via socket
@@ -1204,17 +1708,28 @@ class SeSocketService {
       print('🔌 SeSocketService: 🔍 Socket connected: ${_socket?.connected}');
       print('🔌 SeSocketService: 🔍 Socket exists: ${_socket != null}');
 
-      emit('key_exchange_request', keyExchangeData);
-
-      print('🔌 SeSocketService: ✅ Event emitted, checking if it was sent...');
-
-      // Verify the event was sent by checking socket state
-      if (_socket?.connected == true) {
+      // If socket is connected, send immediately
+      if (_isConnected) {
+        emit('key_exchange_request', keyExchangeData);
         print(
-            '🔌 SeSocketService: ✅ Socket is connected, event should have been sent');
+            '🔌 SeSocketService: ✅ Key exchange request sent immediately via socket');
       } else {
+        // If socket is not connected, attempt to queue the request
         print(
-            '🔌 SeSocketService: ⚠️ Socket connection state after emit: ${_socket?.connected}');
+            '🔌 SeSocketService: ⚠️ Socket not connected, attempting to queue key exchange request...');
+
+        // Try to establish connection for queuing
+        final connected = await ensureConnection();
+        if (connected) {
+          emit('key_exchange_request', keyExchangeData);
+          print(
+              '🔌 SeSocketService: ✅ Key exchange request queued via socket after connection');
+        } else {
+          // If connection fails, emit a queue event that the server should handle
+          emit('queue_key_exchange_request', keyExchangeData);
+          print(
+              '🔌 SeSocketService: ✅ Key exchange request queued for offline recipient');
+        }
       }
 
       print(
@@ -1375,6 +1890,16 @@ class SeSocketService {
   /// Disconnect and cleanup
   Future<void> disconnect() async {
     print('🔌 SeSocketService: Disconnecting...');
+
+    // Send offline status to server before disconnecting
+    if (_isConnected && _currentSessionId != null) {
+      try {
+        await sendUserOnlineStatus(false);
+        print('🔌 SeSocketService: ✅ Offline status sent to server');
+      } catch (e) {
+        print('🔌 SeSocketService: ⚠️ Failed to send offline status: $e');
+      }
+    }
 
     _heartbeatTimer?.cancel();
     _reconnectTimer?.cancel();

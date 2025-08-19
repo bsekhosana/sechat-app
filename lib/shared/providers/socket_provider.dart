@@ -13,6 +13,12 @@ class SocketProvider extends ChangeNotifier {
   String? _connectionError;
   int _reconnectAttempts = 0;
 
+  // iOS validation throttling
+  DateTime? _lastiOSValidation;
+
+  // Connection state logging throttling
+  DateTime? _lastConnectionStateLog;
+
   // Getters
   SeSocketService get socketService => _socketService;
   bool get isConnected => _isConnected;
@@ -61,18 +67,84 @@ class SocketProvider extends ChangeNotifier {
   void _setupConnectionStateListener() {
     print('🔌 SocketProvider: Setting up connection state listener...');
     _socketService.connectionStateStream.listen((isConnected) {
-      print('🔌 SocketProvider: Connection state changed: $isConnected');
-      _isConnected = isConnected;
-      if (isConnected) {
-        _currentSessionId = _socketService.currentSessionId;
-        _connectionError = null;
-        _reconnectAttempts = 0;
+      // Throttle logging to prevent spam
+      final now = DateTime.now();
+      if (_lastConnectionStateLog == null ||
+          now.difference(_lastConnectionStateLog!).inSeconds >= 2) {
+        print('🔌 SocketProvider: Connection state changed: $isConnected');
+        _lastConnectionStateLog = now;
       }
+
+      // Force sync all state from socket service to ensure consistency
+      _syncAllStateFromSocketService();
+
+      // Additional iOS-specific state validation
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        _validateiOSConnectionState();
+      }
+
+      // Always notify listeners when state changes
       notifyListeners();
+
+      // Log the final state after sync
       print(
-          '🔌 SocketProvider: Notified listeners, new state - Connected: $_isConnected, Connecting: $_isConnecting');
+          '🔌 SocketProvider: Final state after sync - Connected: $_isConnected, Connecting: $_isConnecting');
     });
     print('🔌 SocketProvider: Connection state listener set up successfully');
+  }
+
+  /// Sync all state from socket service to ensure consistency
+  void _syncAllStateFromSocketService() {
+    final wasConnected = _isConnected;
+    final wasConnecting = _isConnecting;
+
+    _isConnected = _socketService.isConnected;
+    _isConnecting = _socketService.isConnecting;
+    _currentSessionId = _socketService.currentSessionId;
+
+    if (_isConnected) {
+      _connectionError = null;
+      _reconnectAttempts = 0;
+    }
+
+    // Always log state changes, but throttle repeated identical states
+    final now = DateTime.now();
+    if (_lastConnectionStateLog == null ||
+        now.difference(_lastConnectionStateLog!).inSeconds >= 2 ||
+        wasConnected != _isConnected ||
+        wasConnecting != _isConnecting) {
+      print(
+          '🔌 SocketProvider: State synced from socket service - Connected: $_isConnected, Connecting: $_isConnecting');
+      _lastConnectionStateLog = now;
+    }
+  }
+
+  /// iOS-specific connection state validation
+  void _validateiOSConnectionState() {
+    // Only validate if we haven't done so recently (throttle to prevent spam)
+    final now = DateTime.now();
+    if (_lastiOSValidation != null &&
+        now.difference(_lastiOSValidation!).inSeconds < 10) {
+      return; // Skip validation if done recently
+    }
+
+    // On iOS, socket state can sometimes be inconsistent
+    // Force a status refresh from the socket service
+    _socketService.refreshConnectionStatus();
+
+    // Double-check the actual socket connection state
+    final actualSocketState = _socketService.getSocketStatus();
+    final actualConnected =
+        actualSocketState['socketConnected'] as bool? ?? false;
+
+    if (_isConnected != actualConnected) {
+      print(
+          '🔌 SocketProvider: iOS state mismatch detected! Provider: $_isConnected, Socket: $actualConnected');
+      _isConnected = actualConnected;
+    }
+
+    _lastiOSValidation = now;
+    print('🔌 SocketProvider: iOS connection state validated');
   }
 
   /// Disconnect socket
@@ -153,9 +225,13 @@ class SocketProvider extends ChangeNotifier {
 
   /// Sync connection state with socket service
   void syncConnectionState() {
-    _isConnected = _socketService.isConnected;
-    _isConnecting = _socketService.isConnecting;
-    _currentSessionId = _socketService.currentSessionId;
+    _syncAllStateFromSocketService();
+
+    // Additional iOS-specific validation
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      _validateiOSConnectionState();
+    }
+
     notifyListeners();
     print(
         '🔌 SocketProvider: Synced connection state - Connected: $_isConnected, Connecting: $_isConnecting');
@@ -164,6 +240,11 @@ class SocketProvider extends ChangeNotifier {
   /// Force refresh connection state
   void refreshConnectionState() {
     print('🔌 SocketProvider: Refreshing connection state...');
+
+    // Force the socket service to refresh its status first
+    _socketService.refreshConnectionStatus();
+
+    // Then sync our state
     syncConnectionState();
 
     // Also check if we need to set up the listener
@@ -221,7 +302,19 @@ class SocketProvider extends ChangeNotifier {
     try {
       print('🔌 SocketProvider: Emergency reconnect requested...');
       await _socketService.emergencyReconnect();
+
+      // Wait a bit for the socket to stabilize
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Force a complete state refresh
       syncConnectionState();
+
+      // Double-check the state after a delay
+      Future.delayed(const Duration(seconds: 1), () {
+        print('🔌 SocketProvider: Double-checking state after reconnect...');
+        syncConnectionState();
+      });
+
       notifyListeners();
     } catch (e) {
       print('🔌 SocketProvider: ❌ Emergency reconnect error: $e');

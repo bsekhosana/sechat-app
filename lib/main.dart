@@ -141,10 +141,61 @@ void _setupSocketCallbacks(SeSocketService socketService) {
 
   socketService.setOnTypingIndicator((senderId, isTyping) {
     print('🔌 Main: Typing indicator from socket: $senderId: $isTyping');
+
+    // Forward typing indicator to both SessionChatProvider and ChatListProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        // Update ChatListProvider for chat list items
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Find conversation by participant ID and update typing indicator
+        chatListProvider.updateTypingIndicatorByParticipant(senderId, isTyping);
+
+        // Also notify SessionChatProvider if there's an active chat with this user
+        try {
+          final sessionChatProvider = Provider.of<SessionChatProvider>(
+              navigatorKey.currentContext!,
+              listen: false);
+
+          // Check if this is the current recipient in the active chat
+          if (sessionChatProvider.currentRecipientId == senderId) {
+            // Update the typing state directly
+            sessionChatProvider.updateRecipientTypingState(isTyping);
+            print(
+                '🔌 Main: ✅ Typing indicator forwarded to SessionChatProvider for active chat');
+          }
+        } catch (e) {
+          print('🔌 Main: ⚠️ SessionChatProvider not available: $e');
+        }
+
+        print('🔌 Main: ✅ Typing indicator forwarded to ChatListProvider');
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to forward typing indicator: $e');
+      }
+    });
   });
 
   socketService.setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
     print('🔌 Main: Online status update from socket: $senderId: $isOnline');
+
+    // Update online status in ChatListProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Update the conversation's online status directly
+        chatListProvider.updateConversationOnlineStatus(
+            senderId, isOnline, lastSeen);
+        print(
+            '🔌 Main: ✅ Online status update processed: $senderId -> $isOnline');
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to process online status update: $e');
+      }
+    });
   });
 
   socketService.setOnMessageStatusUpdate((senderId, messageId, status) {
