@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/global_user_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/se_socket_service.dart';
-import '../../../core/services/se_socket_service.dart';
+import '../../../realtime/realtime_service_manager.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -125,7 +125,17 @@ class ProfileScreen extends StatelessWidget {
               // Send offline status and disconnect socket before logout
               try {
                 final socketService = SeSocketService();
-                await socketService.sendOnlineStatusToAllContacts(false);
+                // Send offline status via realtime service
+                try {
+                  final realtimeManager = RealtimeServiceManager.instance;
+                  if (realtimeManager.isInitialized) {
+                    realtimeManager.presence.forcePresenceUpdate(false);
+                  } else {
+                    await socketService.sendUserOnlineStatus(false);
+                  }
+                } catch (e) {
+                  await socketService.sendUserOnlineStatus(false);
+                }
                 await socketService.disconnect();
                 print('🔌 ProfileScreen: ✅ Socket disconnected during logout');
               } catch (e) {

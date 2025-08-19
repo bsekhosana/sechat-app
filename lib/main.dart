@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'dart:io' show Platform;
 
 // Import models for message status updates
@@ -34,6 +34,8 @@ import 'core/services/se_socket_service.dart';
 import 'core/services/key_exchange_service.dart';
 import 'core/services/ui_service.dart';
 import 'features/notifications/services/notification_manager_service.dart';
+import 'realtime/realtime_service_manager.dart';
+import 'realtime/realtime_test.dart';
 
 // Global navigator key to access context from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -57,6 +59,24 @@ Future<void> main() async {
     MessageStorageService.instance.initialize(),
     NotificationManagerService().initialize(),
   ]);
+
+  // Initialize realtime services
+  try {
+    await RealtimeServiceManager.instance.initialize();
+    print('🔌 Main: ✅ Realtime services initialized successfully');
+
+    // Run basic tests in debug mode
+    if (kDebugMode) {
+      try {
+        await RealtimeTest.runBasicTests();
+        print('🔌 Main: ✅ Realtime service tests passed');
+      } catch (e) {
+        print('🔌 Main: ⚠️ Realtime service tests failed: $e');
+      }
+    }
+  } catch (e) {
+    print('🔌 Main: ❌ Failed to initialize realtime services: $e');
+  }
 
   // Initialize SeSessionService
   final seSessionService = SeSessionService();

@@ -10,6 +10,7 @@ import '../../../core/services/se_socket_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/services/se_session_service.dart';
 import 'queue_statistics_screen.dart';
+import '../../../realtime/realtime_service_manager.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -209,8 +210,22 @@ Download now and let's chat securely!
       // Send offline status to all contacts and disconnect socket
       try {
         final socketService = SeSocketService();
-        await socketService.sendOnlineStatusToAllContacts(false);
-        print('🔌 Settings: ✅ Offline status sent to all contacts');
+        // Send offline status via realtime service
+        try {
+          final realtimeManager = RealtimeServiceManager.instance;
+          if (realtimeManager.isInitialized) {
+            realtimeManager.presence.forcePresenceUpdate(false);
+            print('🔌 Settings: ✅ Offline status sent via realtime service');
+          } else {
+            // Fallback to direct socket service
+            await socketService.sendUserOnlineStatus(false);
+            print('🔌 Settings: ✅ Offline status sent via fallback');
+          }
+        } catch (e) {
+          // Fallback to direct socket service
+          await socketService.sendUserOnlineStatus(false);
+          print('🔌 Settings: ✅ Offline status sent via fallback');
+        }
 
         // Best effort: remove session on server
         final sessionId = SeSessionService().currentSessionId;

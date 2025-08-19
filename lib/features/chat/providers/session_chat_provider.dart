@@ -10,11 +10,16 @@ import '../../../shared/models/user.dart';
 import '../models/chat_conversation.dart';
 import '../providers/chat_list_provider.dart';
 import '../models/message.dart';
+import '../../../realtime/realtime_service_manager.dart';
+import '../../../realtime/typing_service.dart';
 import 'dart:async';
 import 'dart:convert';
 
 class SessionChatProvider extends ChangeNotifier {
   final SeSocketService _socketService = SeSocketService();
+
+  // Realtime services
+  TypingService? _typingService;
 
   // State
   final List<Chat> _chats = [];
@@ -475,11 +480,25 @@ class SessionChatProvider extends ChangeNotifier {
       // Use the consistent conversation ID from the getter
       final consistentConversationId = currentConversationId;
 
-      final success = await _socketService.sendTypingIndicator(
-        recipientId: recipientId,
-        conversationId: consistentConversationId,
-        isTyping: isTyping,
-      );
+      // Use realtime typing service instead of old socket method
+      bool success = false;
+      try {
+        if (_typingService != null) {
+          if (isTyping) {
+            _typingService!
+                .startTyping(consistentConversationId, [recipientId]);
+          } else {
+            _typingService!.stopTyping(consistentConversationId);
+          }
+          success = true;
+        } else {
+          print('📱 SessionChatProvider: ⚠️ Typing service not available');
+          success = false;
+        }
+      } catch (e) {
+        print('📱 SessionChatProvider: ❌ Error using typing service: $e');
+        success = false;
+      }
 
       if (success) {
         print(
@@ -824,6 +843,9 @@ class SessionChatProvider extends ChangeNotifier {
       // Load recipient user data
       await _loadRecipientUserData(recipientId);
 
+      // Initialize realtime typing service
+      _setupTypingService();
+
       _isLoading = false;
       notifyListeners();
 
@@ -988,4 +1010,56 @@ class SessionChatProvider extends ChangeNotifier {
       print('📱 SessionChatProvider: ❌ Error toggling mute notifications: $e');
     }
   }
+
+  /// Setup realtime typing service
+  void _setupTypingService() {
+    try {
+      // Check if already initialized
+      if (_typingService != null) {
+        print('📱 SessionChatProvider: ℹ️ Typing service already initialized');
+        return;
+      }
+
+      // Initialize typing service
+      _typingService = RealtimeServiceManager.instance.typing;
+
+      // Listen for typing updates from peers
+      _typingService!.typingStream.listen((update) {
+        if (update.source == 'peer' &&
+            update.conversationId == _currentConversationId) {
+          _isRecipientTyping = update.isTyping;
+          notifyListeners();
+
+          print(
+              '📱 SessionChatProvider: ✅ Typing indicator updated via realtime service: ${update.isTyping}');
+        }
+      });
+
+      print('📱 SessionChatProvider: ✅ Typing service set up successfully');
+    } catch (e) {
+      print('📱 SessionChatProvider: ❌ Failed to set up typing service: $e');
+    }
+  }
+
+  /// Handle text input for typing indicators
+  void onTextInput(String text) {
+    if (_currentConversationId != null &&
+        _currentRecipientId != null &&
+        _typingService != null) {
+      _typingService!.onTextInput(
+        _currentConversationId!,
+        [_currentRecipientId!],
+      );
+    }
+  }
+
+  /// Stop typing when message sent or focus lost
+  void stopTyping() {
+    if (_currentConversationId != null && _typingService != null) {
+      _typingService!.stopTyping(_currentConversationId!);
+    }
+  }
+
+  /// Check if typing service is available
+  bool get isTypingServiceAvailable => _typingService != null;
 }

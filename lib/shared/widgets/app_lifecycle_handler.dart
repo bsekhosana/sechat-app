@@ -8,6 +8,7 @@ import '../../core/services/app_state_service.dart';
 import '../providers/socket_provider.dart';
 import '../../features/notifications/services/notification_manager_service.dart';
 import '../../core/services/ui_service.dart';
+import '../../realtime/realtime_service_manager.dart';
 
 class AppLifecycleHandler extends StatefulWidget {
   final Widget child;
@@ -138,23 +139,32 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     }
   }
 
-  /// Send online status update via socket
+  /// Send online status update via realtime presence service
   Future<void> _sendOnlineStatusUpdate(bool isOnline) async {
     try {
       print(
-          '🔌 AppLifecycleHandler: Sending online status update via socket: $isOnline');
+          '🔌 AppLifecycleHandler: Sending online status update via realtime service: $isOnline');
 
-      // Use SeSocketService to send online status to all contacts
-      final socketService = SeSocketService();
-      final success =
-          await socketService.sendOnlineStatusToAllContacts(isOnline);
-
-      if (success) {
+      // Use RealtimeServiceManager to send presence update
+      try {
+        final realtimeManager = RealtimeServiceManager.instance;
+        if (realtimeManager.isInitialized) {
+          realtimeManager.presence.forcePresenceUpdate(isOnline);
+          print(
+              '🔌 AppLifecycleHandler: ✅ Online status update sent via realtime service');
+        } else {
+          print(
+              '🔌 AppLifecycleHandler: ⚠️ Realtime service not initialized, using fallback');
+          // Fallback to direct socket service
+          final socketService = SeSocketService();
+          await socketService.sendUserOnlineStatus(isOnline);
+        }
+      } catch (e) {
         print(
-            '🔌 AppLifecycleHandler: ✅ Online status updates sent via socket to all contacts');
-      } else {
-        print(
-            '🔌 AppLifecycleHandler: ⚠️ Failed to send online status updates via socket');
+            '🔌 AppLifecycleHandler: ⚠️ Realtime service failed, using fallback: $e');
+        // Fallback to direct socket service
+        final socketService = SeSocketService();
+        await socketService.sendUserOnlineStatus(isOnline);
       }
     } catch (e) {
       print(

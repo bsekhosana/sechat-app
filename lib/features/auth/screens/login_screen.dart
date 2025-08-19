@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/features/auth/screens/register_screen.dart';
+import 'package:sechat_app/realtime/realtime_service_manager.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
 import 'package:sechat_app/features/auth/screens/main_nav_screen.dart';
 import 'package:sechat_app/features/chat/screens/chat_screen.dart';
@@ -399,9 +400,23 @@ class _LoginScreenState extends State<LoginScreen> {
             if (socketInitialized) {
               print('🔌 LoginScreen: ✅ Socket connected successfully');
 
-              // Send online status to all contacts
-              await socketService.sendOnlineStatusToAllContacts(true);
-              print('🔌 LoginScreen: ✅ Online status sent to all contacts');
+              // Send online status via realtime service
+              try {
+                final realtimeManager = RealtimeServiceManager.instance;
+                if (realtimeManager.isInitialized) {
+                  realtimeManager.presence.forcePresenceUpdate(true);
+                  print(
+                      '🔌 LoginScreen: ✅ Online status sent via realtime service');
+                } else {
+                  // Fallback to direct socket service
+                  await socketService.sendUserOnlineStatus(true);
+                  print('🔌 LoginScreen: ✅ Online status sent via fallback');
+                }
+              } catch (e) {
+                // Fallback to direct socket service
+                await socketService.sendUserOnlineStatus(true);
+                print('🔌 LoginScreen: ✅ Online status sent via fallback');
+              }
             } else {
               print(
                   '🔌 LoginScreen: ⚠️ Socket connection failed, but continuing with login');

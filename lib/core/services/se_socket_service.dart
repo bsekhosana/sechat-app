@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:sechat_app/core/services/se_session_service.dart';
@@ -7,6 +8,7 @@ import 'package:sechat_app/features/notifications/services/notification_manager_
 import 'package:sechat_app/core/services/app_state_service.dart';
 import 'package:sechat_app/core/services/ui_service.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
+import 'package:sechat_app/realtime/realtime_service_manager.dart';
 
 /// SeSocket Service
 /// Core socket functionality for real-time communication
@@ -507,70 +509,148 @@ class SeSocketService {
       }
     });
 
-    _socket!.on('user_online', (data) {
+    // REMOVED: Old user_online/user_offline events - replaced by presence:update
+    // These events are now handled by the new realtime protocol
+
+    // REMOVED: Old typing_indicator event - replaced by typing:update
+    // This event is now handled by the new realtime protocol
+
+    // NEW: Listen for typing:update events (new protocol)
+    _socket!.on('typing:update', (data) {
       try {
-        final userId = data['sessionId'] as String? ?? '';
-        final queuedEventsCount = data['queuedEventsCount'] as int? ?? 0;
-
-        print(
-            '🔌 SeSocketService: 🌐 User came online: $userId with $queuedEventsCount queued events');
-
-        // Handle online status update
-        _onOnlineStatusUpdate?.call(
-            userId, true, DateTime.now().toIso8601String());
-
-        // If this is the current user, handle queued events
-        if (userId == _currentSessionId) {
-          print(
-              '🔌 SeSocketService: 🔄 Current user came online, processing queued events...');
-          _handleUserOnline();
-        }
-      } catch (e) {
-        print('🔌 SeSocketService: ❌ Error handling user_online event: $e');
-      }
-    });
-
-    _socket!.on('user_offline', (data) {
-      try {
-        final userId = data['sessionId'] as String? ?? '';
-        _onOnlineStatusUpdate?.call(
-            userId, false, DateTime.now().toIso8601String());
-      } catch (_) {}
-    });
-
-    _socket!.on('typing_indicator', (data) {
-      try {
-        final senderId = data['senderId'] as String? ?? '';
+        final conversationId = data['conversationId'] as String? ?? '';
+        final fromUserId = data['fromUserId'] as String? ?? '';
         final isTyping = data['isTyping'] as bool? ?? false;
+        final timestamp =
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String();
 
         print(
-            '🔌 SeSocketService: ⌨️ Typing indicator received: $senderId -> $isTyping');
+            '🔌 SeSocketService: ⌨️ Typing update received: $fromUserId -> $isTyping in conversation $conversationId');
 
+        // Trigger the typing indicator callback
         if (_onTypingIndicator != null) {
-          _onTypingIndicator!(senderId, isTyping);
-          print('🔌 SeSocketService: ✅ Typing indicator callback triggered');
+          _onTypingIndicator!(fromUserId, isTyping);
+          print(
+              '🔌 SeSocketService: ✅ Typing update callback triggered for $fromUserId');
         } else {
           print('🔌 SeSocketService: ⚠️ No typing indicator callback set');
         }
       } catch (e) {
-        print('🔌 SeSocketService: ❌ Error handling typing indicator: $e');
+        print('🔌 SeSocketService: ❌ Error handling typing update: $e');
       }
     });
 
-    _socket!.on('online_status_update', (data) {
+    // NEW: Listen for message:acked events (new protocol)
+    _socket!.on('message:acked', (data) {
       try {
+        final messageId = data['messageId'] as String? ?? '';
+        final timestamp =
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String();
+
+        print(
+            '🔌 SeSocketService: 📨 Message acknowledged by server: $messageId at $timestamp');
+
+        // Update message delivery state via realtime service
+        try {
+          final realtimeManager = RealtimeServiceManager.instance;
+          if (realtimeManager.isInitialized) {
+            realtimeManager.messages.handleServerAck(messageId);
+            print(
+                '🔌 SeSocketService: ✅ Message ack forwarded to realtime service');
+          }
+        } catch (e) {
+          print(
+              '🔌 SeSocketService: ⚠️ Could not forward message ack to realtime service: $e');
+        }
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling message ack: $e');
+      }
+    });
+
+    // NEW: Listen for message:delivered events (new protocol)
+    _socket!.on('message:delivered', (data) {
+      try {
+        final messageId = data['messageId'] as String? ?? '';
+        final timestamp =
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String();
+
+        print(
+            '🔌 SeSocketService: 📨 Message delivered: $messageId at $timestamp');
+
+        // Update message delivery state via realtime service
+        try {
+          final realtimeManager = RealtimeServiceManager.instance;
+          if (realtimeManager.isInitialized) {
+            realtimeManager.messages.handleDeliveryConfirmation(messageId);
+            print(
+                '🔌 SeSocketService: ✅ Message delivery forwarded to realtime service');
+          }
+        } catch (e) {
+          print(
+              '🔌 SeSocketService: ⚠️ Could not forward message delivery to realtime service: $e');
+        }
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling message delivery: $e');
+      }
+    });
+
+    // NEW: Listen for message:read events (new protocol)
+    _socket!.on('message:read', (data) {
+      try {
+        final messageId = data['messageId'] as String? ?? '';
+        final timestamp =
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String();
+
+        print('🔌 SeSocketService: 📨 Message read: $messageId at $timestamp');
+
+        // Update message delivery state via realtime service
+        try {
+          final realtimeManager = RealtimeServiceManager.instance;
+          if (realtimeManager.isInitialized) {
+            realtimeManager.messages.handleReadReceipt(messageId);
+            print(
+                '🔌 SeSocketService: ✅ Message read receipt forwarded to realtime service');
+          }
+        } catch (e) {
+          print(
+              '🔌 SeSocketService: ⚠️ Could not forward message read receipt to realtime service: $e');
+        }
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling message read receipt: $e');
+      }
+    });
+
+    // REMOVED: Old online_status_update event - replaced by presence:update
+    // This event is now handled by the new realtime protocol
+
+    // NEW: Listen for presence:update events (new protocol)
+    _socket!.on('presence:update', (data) {
+      try {
+        final sessionId = data['sessionId'] as String? ?? '';
         final isOnline = data['isOnline'] as bool? ?? false;
         final timestamp =
             data['timestamp'] as String? ?? DateTime.now().toIso8601String();
 
         print(
-            '🔌 SeSocketService: 🌐 Online status update received: $isOnline at $timestamp');
+            '🔌 SeSocketService: 🟢 Presence update received: $sessionId -> ${isOnline ? 'online' : 'offline'} at $timestamp');
 
-        // This event is for broadcasting online status to all contacts
-        // The server should handle distributing this to relevant users
-        print('🔌 SeSocketService: ✅ Online status update event received');
+        // Trigger the online status update callback
+        if (_onOnlineStatusUpdate != null) {
+          _onOnlineStatusUpdate!(sessionId, isOnline, timestamp);
+          print(
+              '🔌 SeSocketService: ✅ Presence update callback triggered for $sessionId');
+        } else {
+          print('🔌 SeSocketService: ⚠️ No online status update callback set');
+        }
+
+        // If this is the current user coming online, handle queued events
+        if (isOnline && sessionId == _currentSessionId) {
+          print(
+              '🔌 SeSocketService: 🔄 Current user came online, processing queued events...');
+          _handleUserOnline();
+        }
       } catch (e) {
-        print('🔌 SeSocketService: ❌ Error handling online status update: $e');
+        print('🔌 SeSocketService: ❌ Error handling presence update: $e');
       }
     });
 
@@ -617,6 +697,102 @@ class SeSocketService {
       } catch (e) {
         print(
             '🔌 SeSocketService: ❌ Error handling queued message delivery: $e');
+      }
+    });
+
+    // NEW: Listen for receipt:delivered events (new protocol)
+    _socket!.on('receipt:delivered', (data) {
+      try {
+        final messageId = data['messageId'] as String? ?? '';
+        final fromUserId = data['fromUserId'] as String? ?? '';
+        final toUserId = data['toUserId'] as String? ?? '';
+        final timestamp =
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String();
+
+        print(
+            '🔌 SeSocketService: 📨 Receipt delivered: $messageId from $fromUserId to $toUserId');
+
+        // Update message delivery state via realtime service
+        try {
+          final realtimeManager = RealtimeServiceManager.instance;
+          if (realtimeManager.isInitialized) {
+            realtimeManager.messages.handleDeliveryConfirmation(messageId);
+            print(
+                '🔌 SeSocketService: ✅ Receipt delivered forwarded to realtime service');
+          }
+        } catch (e) {
+          print(
+              '🔌 SeSocketService: ⚠️ Could not forward receipt delivered to realtime service: $e');
+        }
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling receipt delivered: $e');
+      }
+    });
+
+    // NEW: Listen for receipt:read events (new protocol)
+    _socket!.on('receipt:read', (data) {
+      try {
+        final messageId = data['messageId'] as String? ?? '';
+        final fromUserId = data['fromUserId'] as String? ?? '';
+        final toUserId = data['toUserId'] as String? ?? '';
+        final timestamp =
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String();
+
+        print(
+            '🔌 SeSocketService: 📨 Receipt read: $messageId from $fromUserId to $toUserId');
+
+        // Update message delivery state via realtime service
+        try {
+          final realtimeManager = RealtimeServiceManager.instance;
+          if (realtimeManager.isInitialized) {
+            realtimeManager.messages.handleReadReceipt(messageId);
+            print(
+                '🔌 SeSocketService: ✅ Receipt read forwarded to realtime service');
+          }
+        } catch (e) {
+          print(
+              '🔌 SeSocketService: ⚠️ Could not forward receipt read to realtime service: $e');
+        }
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling receipt read: $e');
+      }
+    });
+
+    // NEW: Listen for message:received events (new protocol)
+    _socket!.on('message:received', (data) {
+      try {
+        final messageId = data['messageId'] as String? ?? '';
+        final fromUserId = data['fromUserId'] as String? ?? '';
+        final conversationId = data['conversationId'] as String? ?? '';
+        final body = data['body'] as String? ?? '';
+        final timestamp =
+            data['timestamp'] as String? ?? DateTime.now().toIso8601String();
+
+        print(
+            '🔌 SeSocketService: 📨 Message received via new protocol: $messageId from $fromUserId');
+
+        // Trigger message received callback
+        if (_onMessageReceived != null) {
+          _onMessageReceived!(fromUserId ?? '', 'Unknown User', body ?? '',
+              conversationId ?? '', messageId ?? '');
+          print(
+              '🔌 SeSocketService: ✅ New protocol message processed via callback');
+        }
+
+        // Send delivery receipt
+        try {
+          final realtimeManager = RealtimeServiceManager.instance;
+          if (realtimeManager.isInitialized) {
+            realtimeManager.messages
+                .sendDeliveryReceipt(messageId, fromUserId ?? '');
+            print(
+                '🔌 SeSocketService: ✅ Delivery receipt sent via realtime service');
+          }
+        } catch (e) {
+          print('🔌 SeSocketService: ⚠️ Could not send delivery receipt: $e');
+        }
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error handling new protocol message: $e');
       }
     });
 
@@ -1176,22 +1352,22 @@ class SeSocketService {
   }) async {
     try {
       final messageData = {
-        'recipientId': recipientId,
-        'message': message,
-        'conversationId': conversationId,
+        'type': 'message:send',
         'messageId':
             messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        'conversationId': conversationId,
+        'fromUserId': _currentSessionId,
+        'toUserIds': [recipientId],
+        'body': message,
         'timestamp': DateTime.now().toIso8601String(),
         'metadata': metadata ?? {},
-        'senderId': _currentSessionId,
-        'requiresDeliveryReceipt': true,
-        'priority': 'normal', // normal, high, urgent
       };
 
       // If socket is connected, send immediately
       if (_isConnected) {
-        emit('send_message', messageData);
-        print('🔌 SeSocketService: ✅ Message sent immediately via socket');
+        emit('message:send', messageData);
+        print(
+            '🔌 SeSocketService: ✅ Message sent immediately via new protocol');
         return true;
       } else {
         // If socket is not connected, attempt to queue the message
@@ -1201,7 +1377,7 @@ class SeSocketService {
         // Try to establish connection for queuing
         final connected = await ensureConnection();
         if (connected) {
-          emit('send_message', messageData);
+          emit('message:send', messageData);
           print(
               '🔌 SeSocketService: ✅ Message queued via socket after connection');
           return true;
@@ -1218,31 +1394,8 @@ class SeSocketService {
     }
   }
 
-  /// Send typing indicator via socket
-  Future<bool> sendTypingIndicator({
-    required String recipientId,
-    required bool isTyping,
-    String? conversationId,
-  }) async {
-    try {
-      if (!_isConnected) {
-        return false;
-      }
-
-      final typingData = {
-        'recipientId': recipientId,
-        'isTyping': isTyping,
-        'conversationId': conversationId,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-
-      emit('typing_indicator', typingData);
-      return true;
-    } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending typing indicator: $e');
-      return false;
-    }
-  }
+  // REMOVED: Old sendTypingIndicator method - replaced by realtime typing service
+  // This functionality is now handled by the new realtime protocol
 
   /// Send message status update via socket
   Future<bool> sendMessageStatusUpdate({
@@ -1270,30 +1423,8 @@ class SeSocketService {
     }
   }
 
-  /// Send online status update to all contacts via socket
-  Future<bool> sendOnlineStatusToAllContacts(bool isOnline) async {
-    try {
-      if (!_isConnected) {
-        print(
-            '🔌 SeSocketService: ⚠️ Cannot send online status - socket not connected');
-        return false;
-      }
-
-      final statusData = {
-        'isOnline': isOnline,
-        'timestamp': DateTime.now().toIso8601String(),
-        'sessionId': _currentSessionId,
-      };
-
-      emit('online_status_update', statusData);
-      print(
-          '🔌 SeSocketService: ✅ Online status update sent via socket: ${isOnline ? "online" : "offline"}');
-      return true;
-    } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending online status update: $e');
-      return false;
-    }
-  }
+  // REMOVED: Old sendOnlineStatusToAllContacts method - replaced by realtime presence service
+  // This functionality is now handled by the new realtime protocol
 
   /// Send user online status to server (for queuing system)
   Future<bool> sendUserOnlineStatus(bool isOnline) async {
@@ -1305,18 +1436,19 @@ class SeSocketService {
       }
 
       final statusData = {
+        'type': 'presence:update',
         'sessionId': _currentSessionId,
         'isOnline': isOnline,
         'timestamp': DateTime.now().toIso8601String(),
         'deviceInfo': {
-          'platform': 'flutter',
+          'platform': Platform.isIOS ? 'ios' : 'android',
           'version': '1.0.0',
         },
       };
 
-      emit('user_status_update', statusData);
+      emit('presence:update', statusData);
       print(
-          '🔌 SeSocketService: ✅ User online status sent: ${isOnline ? "online" : "offline"}');
+          '🔌 SeSocketService: ✅ User presence update sent: ${isOnline ? "online" : "offline"}');
       return true;
     } catch (e) {
       print('🔌 SeSocketService: ❌ Error sending user online status: $e');

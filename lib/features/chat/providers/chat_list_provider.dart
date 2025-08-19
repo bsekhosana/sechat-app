@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/se_socket_service.dart';
+import '../../../realtime/realtime_service_manager.dart';
+import '../../../realtime/presence_service.dart';
 
 import '../services/message_storage_service.dart';
 import '../services/message_status_tracking_service.dart';
@@ -14,6 +16,9 @@ class ChatListProvider extends ChangeNotifier {
   final MessageStorageService _storageService = MessageStorageService.instance;
   final MessageStatusTrackingService _statusTrackingService =
       MessageStatusTrackingService.instance;
+
+  // Realtime services
+  PresenceService? _presenceService;
 
   // Callback for online status updates to notify other providers
   Function(String, bool, DateTime?)? _onOnlineStatusChanged;
@@ -98,6 +103,7 @@ class ChatListProvider extends ChangeNotifier {
           '📱 ChatListProvider: ✅ Conversations loaded, setting up services...');
       _setupStatusTracking();
       _setupConversationCreationListener();
+      _setupRealtimeServices();
       _setupOnlineStatusCallback();
       print('📱 ChatListProvider: ✅ Initialization complete');
       _setLoading(false);
@@ -328,6 +334,28 @@ class ChatListProvider extends ChangeNotifier {
     } catch (e) {
       print(
           '🔌 ChatListProvider: ❌ Failed to set up conversation creation listener: $e');
+    }
+  }
+
+  /// Setup realtime services for presence and typing
+  void _setupRealtimeServices() {
+    try {
+      // Check if already initialized
+      if (_presenceService != null) {
+        print('📱 ChatListProvider: ℹ️ Presence service already initialized');
+        return;
+      }
+
+      // Initialize presence service
+      _presenceService = RealtimeServiceManager.instance.presence;
+
+      // Note: Presence updates are handled through the existing socket service
+      // The realtime presence service will be used for local presence management
+      // and peer presence updates will come through the socket service callbacks
+
+      print('📱 ChatListProvider: ✅ Realtime services set up successfully');
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Failed to set up realtime services: $e');
     }
   }
 
