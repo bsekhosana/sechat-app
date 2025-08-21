@@ -163,6 +163,9 @@ class SeSocketService {
   Function(Map<String, dynamic> data)? onUserDataExchange;
   Function(Map<String, dynamic> data)? onConversationCreated;
   Function(Map<String, dynamic> data)? onUserDeleted;
+  Function(Map<String, dynamic> data)? onContactAdded;
+  Function(Map<String, dynamic> data)? onContactRemoved;
+  Function(Map<String, dynamic> data)? onSessionRegistered;
 
   Future<void> connect(String sessionId) async {
     // If instance was destroyed, reset it for new connection
@@ -276,6 +279,9 @@ class SeSocketService {
             _ready = true;
             _startClientHeartbeat();
             _addConnectionStateEvent(true);
+
+            // Send presence update after session is confirmed
+            _sendOnlinePresence();
           }
         });
       }
@@ -287,6 +293,14 @@ class SeSocketService {
       _ready = true;
       _startClientHeartbeat();
       _addConnectionStateEvent(true);
+
+      // Send presence update after session is confirmed
+      _sendOnlinePresence();
+
+      // Notify callback if set
+      if (onSessionRegistered != null) {
+        onSessionRegistered!(data);
+      }
     });
 
     _socket!.on('disconnect', (reason) {
@@ -294,6 +308,16 @@ class SeSocketService {
       _ready = false;
       _isConnecting = false;
       _addConnectionStateEvent(false);
+
+      // Send offline presence before disconnecting
+      if (_sessionId != null) {
+        try {
+          sendPresence(false, []); // Empty array means broadcast to all users
+          print('🔌 SeSocketService: ✅ Offline presence sent on disconnect');
+        } catch (e) {
+          print('🔌 SeSocketService: ⚠️ Failed to send offline presence: $e');
+        }
+      }
 
       // Stop all timers
       _heartbeatTimer?.cancel();
@@ -517,25 +541,64 @@ class SeSocketService {
 
     // Presence events
     _socket!.on('presence:update', (data) {
-      print('👤 SeSocketService: Presence update received');
+      print('🟢 SeSocketService: Presence update received');
+      print('🟢 SeSocketService: 🔍 Presence data: $data');
+
       if (onPresence != null) {
         onPresence!(
           data['sessionId'] ?? '',
           data['isOnline'] ?? false,
           data['timestamp'] ?? '',
         );
+      } else {
+        print('🟢 SeSocketService: ⚠️ onPresence callback is null');
+      }
+    });
+
+    // Contact management events
+    _socket!.on('contacts:added', (data) {
+      print('🔗 SeSocketService: Contact added event received');
+      print('🔗 SeSocketService: 🔍 Contact data: $data');
+
+      // This event is sent when a contact is successfully added
+      // The client should update their local contact list
+      if (onContactAdded != null) {
+        onContactAdded!(data);
+      } else {
+        print('🔗 SeSocketService: ⚠️ onContactAdded callback is null');
+      }
+    });
+
+    _socket!.on('contacts:removed', (data) {
+      print('🔗 SeSocketService: Contact removed event received');
+      print('🔗 SeSocketService: 🔍 Contact data: $data');
+
+      // This event is sent when a contact is successfully removed
+      // The client should update their local contact list
+      if (onContactRemoved != null) {
+        onContactRemoved!(data);
+      } else {
+        print('🔗 SeSocketService: ⚠️ onContactRemoved callback is null');
       }
     });
 
     // Typing events
-    _socket!.on('typing:indicator', (data) {
+    _socket!.on('typing:update', (data) {
       print('⌨️ SeSocketService: Typing indicator received');
+      print('⌨️ SeSocketService: 🔍 Typing data: $data');
+      print(
+          '⌨️ SeSocketService: 🔍 onTyping callback: ${onTyping != null ? 'SET' : 'NULL'}');
+
       if (onTyping != null) {
         onTyping!(
           data['fromUserId'] ?? '',
           data['conversationId'] ?? '',
           data['isTyping'] ?? false,
         );
+        print('⌨️ SeSocketService: ✅ Typing callback executed');
+      } else {
+        print(
+            '⌨️ SeSocketService: ❌ onTyping callback is NULL - typing indicator not processed!');
       }
     });
 
@@ -653,43 +716,102 @@ class SeSocketService {
     return 'Disconnected';
   }
 
+  /// Send presence update to specific users
   void sendPresence(bool isOnline, List<String> toUserIds) {
-    if (!isConnected || _sessionId == null) return;
-    _socket!.emit('presence:update', {
-      'fromUserId': _sessionId,
-      'isOnline': isOnline,
-      'toUserIds': toUserIds
-    });
+    if (!isConnected || _sessionId == null) {
+      print(
+          '🔌 SeSocketService: ❌ Cannot send presence update - not connected or no session');
+      return;
+    }
+
+    try {
+      final payload = {
+        'fromUserId': _sessionId,
+        'isOnline': isOnline,
+        'toUserIds': toUserIds, // Array of user IDs to notify
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      print(
+          '🔌 SeSocketService: 🟢 Sending presence update: ${isOnline ? 'online' : 'offline'} to ${toUserIds.length} users');
+      print('🔌 SeSocketService: 🔍 Payload: $payload');
+
+      _socket!.emit('presence:update', payload);
+      print('🔌 SeSocketService: ✅ Presence update sent successfully');
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error sending presence update: $e');
+      _scheduleReconnect();
+    }
   }
 
-  void sendTyping(String toUserId, String conversationId, bool isTyping) {
-    if (!isConnected || _sessionId == null) return;
-    _socket!.emit('typing:update', {
-      'fromUserId': _sessionId,
-      'toUserId': toUserId,
-      'conversationId': conversationId,
-      'isTyping': isTyping
-    });
+  /// Send typing indicator to a specific user
+  void sendTyping(String recipientId, String conversationId, bool isTyping) {
+    if (!isConnected || _sessionId == null) {
+      print(
+          '🔌 SeSocketService: ❌ Cannot send typing indicator - not connected or no session');
+      return;
+    }
+
+    try {
+      // Use recipientId as conversationId for simplicity
+      final actualConversationId = conversationId == 'default_conversation'
+          ? recipientId
+          : conversationId;
+
+      final payload = {
+        'fromUserId': _sessionId,
+        'conversationId': actualConversationId, // Use recipient's sessionId
+        'isTyping': isTyping,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      print(
+          '🔌 SeSocketService: ⌨️ Sending typing indicator: ${isTyping ? 'started' : 'stopped'} to $recipientId');
+      print('🔌 SeSocketService: 🔍 Payload: $payload');
+
+      _socket!.emit('typing:update', payload);
+      print('🔌 SeSocketService: ✅ Typing indicator sent successfully');
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error sending typing indicator: $e');
+      _scheduleReconnect();
+    }
   }
 
-  void sendMessage(String toUserId, String body,
-      {String? messageId, String? conversationId}) {
-    if (!isConnected || _sessionId == null) return;
+  /// Send a message to a specific user
+  void sendMessage({
+    required String messageId,
+    required String recipientId,
+    required String body,
+    String? conversationId, // This will be the recipient's sessionId
+  }) {
+    if (!isConnected || _sessionId == null) {
+      print(
+          '🔌 SeSocketService: ❌ Cannot send message - not connected or no session');
+      return;
+    }
 
-    final mid = messageId ?? DateTime.now().millisecondsSinceEpoch.toString();
-    final convId = conversationId ??
-        toUserId; // Use recipient ID as fallback conversation ID
+    try {
+      // Use recipientId as conversationId for simplicity
+      final actualConversationId = conversationId ?? recipientId;
 
-    _socket!.emit('message:send', {
-      'messageId': mid,
-      'conversationId': convId,
-      'fromUserId': _sessionId,
-      'toUserIds': [toUserId],
-      'body': body,
-      'timestamp': DateTime.now().toIso8601String()
-    });
+      final payload = {
+        'messageId': messageId,
+        'fromUserId': _sessionId,
+        'conversationId': actualConversationId, // Use recipient's sessionId
+        'body': body,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
 
-    print('🔌 SeSocketService: Message sent: $mid to $toUserId');
+      print(
+          '🔌 SeSocketService: 📤 Sending message: $messageId to $recipientId');
+      print('🔌 SeSocketService: 🔍 Payload: $payload');
+
+      _socket!.emit('message:send', payload);
+      print('🔌 SeSocketService: ✅ Message sent successfully');
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error sending message: $e');
+      _scheduleReconnect();
+    }
   }
 
   void sendReadReceipt(String toUserId, String messageId) {
@@ -840,11 +962,20 @@ class SeSocketService {
 
   void setOnTypingIndicator(
       Function(String senderId, bool isTyping)? callback) {
+    print(
+        '🔌 SeSocketService: 🔧 Setting typing indicator callback: ${callback != null ? 'SET' : 'NULL'}');
+
     // Map the existing callback to the new format
     if (callback != null) {
       onTyping = (fromUserId, conversationId, isTyping) {
+        print(
+            '🔌 SeSocketService: 🔧 onTyping callback mapped: $fromUserId -> $isTyping');
         callback(fromUserId, isTyping);
       };
+      print('🔌 SeSocketService: ✅ Typing indicator callback set successfully');
+    } else {
+      print('🔌 SeSocketService: ⚠️ Typing indicator callback is null');
+      onTyping = null;
     }
   }
 
@@ -944,6 +1075,24 @@ class SeSocketService {
   void setOnUserDeleted(Function(Map<String, dynamic> data)? callback) {
     if (callback != null) {
       onUserDeleted = callback;
+    }
+  }
+
+  void setOnContactAdded(Function(Map<String, dynamic> data)? callback) {
+    if (callback != null) {
+      onContactAdded = callback;
+    }
+  }
+
+  void setOnContactRemoved(Function(Map<String, dynamic> data)? callback) {
+    if (callback != null) {
+      onContactRemoved = callback;
+    }
+  }
+
+  void setOnSessionRegistered(Function(Map<String, dynamic> data)? callback) {
+    if (callback != null) {
+      onSessionRegistered = callback;
     }
   }
 
@@ -1296,6 +1445,8 @@ class SeSocketService {
       'onKeyExchangeRequest': onKeyExchangeRequest != null,
       'onKeyExchangeRevoked': onKeyExchangeRevoked != null,
       'onUserDeleted': onUserDeleted != null,
+      'onContactAdded': onContactAdded != null,
+      'onContactRemoved': onContactRemoved != null,
       'timestamp': DateTime.now().toIso8601String(),
     };
   }
@@ -1358,8 +1509,8 @@ class SeSocketService {
 
   // Method for sending typing indicators (used by typing_service)
   void sendTypingIndicator(String recipientId, bool isTyping) {
-    // Use a default conversation ID since typing_service doesn't provide one
-    sendTyping(recipientId, 'default_conversation', isTyping);
+    // Use recipient's session ID as conversation ID for simplicity
+    sendTyping(recipientId, recipientId, isTyping);
   }
 
   // Method for sending user online status (used by auth screens)
@@ -1389,6 +1540,185 @@ class SeSocketService {
 
     for (final contactId in contactSessionIds) {
       print('🔌 SeSocketService: ✅ Listener ready for contact: $contactId');
+    }
+  }
+
+  // Test method to verify socket connection and send test events
+  Future<bool> testSocketConnection() async {
+    try {
+      print('🔌 SeSocketService: 🧪 Testing socket connection...');
+
+      if (!isConnected) {
+        print('🔌 SeSocketService: ❌ Socket not connected');
+        return false;
+      }
+
+      if (_sessionId == null) {
+        print('🔌 SeSocketService: ❌ No session ID');
+        return false;
+      }
+
+      print('🔌 SeSocketService: ✅ Socket connected with session: $_sessionId');
+
+      // Test sending a presence update to ourselves
+      try {
+        sendPresence(true, [_sessionId!]);
+        print('🔌 SeSocketService: ✅ Test presence update sent successfully');
+        return true;
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Test presence update failed: $e');
+        return false;
+      }
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Test connection failed: $e');
+      return false;
+    }
+  }
+
+  void _onSocketConnected() {
+    print('🔌 SeSocketService: ✅ Connected to server');
+    _isConnecting = false;
+    _ready = false;
+    _addConnectionStateEvent(true);
+
+    // Send presence update to indicate we're online
+    if (_sessionId != null) {
+      try {
+        sendPresence(true, []); // Empty array means broadcast to all users
+        print('🔌 SeSocketService: ✅ Online presence sent on connection');
+      } catch (e) {
+        print('🔌 SeSocketService: ⚠️ Failed to send online presence: $e');
+      }
+    }
+  }
+
+  // Helper method to send online presence to all users
+  void _sendOnlinePresence() {
+    if (_sessionId != null) {
+      sendPresence(true, []); // Empty array means broadcast to all users
+      print(
+          '🔌 SeSocketService: ✅ Online presence sent on session confirmation');
+    }
+  }
+
+  /// Send session deletion request to server
+  void sendSessionDeletionRequest(String sessionToDelete) {
+    if (_socket != null && _sessionId != null) {
+      try {
+        // Send session deletion request to server
+        _socket!.emit('user:deleted', {
+          'fromUserId': sessionToDelete,
+          'toUserIds': [], // Empty list means notify all users
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+
+        print(
+            '🔌 SeSocketService: ✅ Session deletion request sent for: $sessionToDelete');
+      } catch (e) {
+        print(
+            '🔌 SeSocketService: ❌ Error sending session deletion request: $e');
+      }
+    } else {
+      print(
+          '🔌 SeSocketService: ❌ Cannot add contact - not connected or no session');
+    }
+  }
+
+  // ===== CONTACT MANAGEMENT METHODS =====
+
+  /// Add a new contact to the server
+  void addContact(String contactSessionId) {
+    if (_socket != null && _sessionId != null) {
+      try {
+        _socket!.emit('contacts:add', {
+          'sessionId': _sessionId,
+          'contactSessionId': contactSessionId,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+
+        print('🔗 SeSocketService: ✅ Contact added: $contactSessionId');
+      } catch (e) {
+        print('🔗 SeSocketService: ❌ Error adding contact: $e');
+      }
+    } else {
+      print(
+          '🔗 SeSocketService: ❌ Cannot add contact - not connected or no session');
+    }
+  }
+
+  /// Remove a contact from the server
+  void removeContact(String contactSessionId) {
+    if (_socket != null && _sessionId != null) {
+      try {
+        _socket!.emit('contacts:remove', {
+          'sessionId': _sessionId,
+          'contactSessionId': contactSessionId,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+
+        print('🔗 SeSocketService: ✅ Contact removed: $contactSessionId');
+      } catch (e) {
+        print('🔗 SeSocketService: ❌ Error removing contact: $e');
+      }
+    } else {
+      print(
+          '🔗 SeSocketService: ❌ Cannot remove contact - not connected or no session');
+    }
+  }
+
+  /// Broadcast presence to all contacts
+  void broadcastPresenceToContacts() {
+    if (_socket != null && _sessionId != null) {
+      try {
+        // Send to all contacts (empty toUserIds = broadcast to all contacts)
+        _socket!.emit('presence:update', {
+          'fromUserId': _sessionId,
+          'isOnline': true,
+          'toUserIds': [], // Empty array = broadcast to all contacts
+          'timestamp': DateTime.now().toIso8601String(),
+        });
+
+        print('📡 SeSocketService: ✅ Broadcasting presence to all contacts');
+      } catch (e) {
+        print('📡 SeSocketService: ❌ Error broadcasting presence: $e');
+      }
+    } else {
+      print(
+          '📡 SeSocketService: ❌ Cannot broadcast presence - not connected or no session');
+    }
+  }
+
+  /// Update presence for specific users or broadcast to all contacts
+  void updatePresence(bool isOnline, {List<String>? specificUsers}) {
+    if (_socket != null && _sessionId != null) {
+      try {
+        final payload = {
+          'fromUserId': _sessionId,
+          'isOnline': isOnline,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+
+        // If specific users provided, send to them; otherwise broadcast to all contacts
+        if (specificUsers != null && specificUsers.isNotEmpty) {
+          payload['toUserIds'] = specificUsers;
+          print(
+              '📡 SeSocketService: 🟢 Sending presence update: ${isOnline ? 'online' : 'offline'} to ${specificUsers.length} specific users');
+        } else {
+          payload['toUserIds'] = []; // Empty array = broadcast to all contacts
+          print(
+              '📡 SeSocketService: 🟢 Broadcasting presence update: ${isOnline ? 'online' : 'offline'} to all contacts');
+        }
+
+        print('📡 SeSocketService: 🔍 Presence payload: $payload');
+        _socket!.emit('presence:update', payload);
+        print('📡 SeSocketService: ✅ Presence update sent successfully');
+      } catch (e) {
+        print('📡 SeSocketService: ❌ Error sending presence update: $e');
+        _scheduleReconnect();
+      }
+    } else {
+      print(
+          '📡 SeSocketService: ❌ Cannot send presence update - not connected or no session');
     }
   }
 }

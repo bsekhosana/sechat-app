@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/message.dart';
 
-/// Widget for displaying text message bubbles
+/// Widget for displaying text message bubbles with modern Material 3 design
 class TextMessageBubble extends StatelessWidget {
   final Message message;
   final bool isFromCurrentUser;
@@ -37,14 +37,15 @@ class TextMessageBubble extends StatelessWidget {
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(isFromCurrentUser ? 20 : 4),
-            bottomRight: Radius.circular(isFromCurrentUser ? 4 : 20),
+            bottomLeft: Radius.circular(isFromCurrentUser ? 20 : 8),
+            bottomRight: Radius.circular(isFromCurrentUser ? 8 : 20),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 4,
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 8,
               offset: const Offset(0, 2),
+              spreadRadius: 0,
             ),
           ],
         ),
@@ -54,7 +55,7 @@ class TextMessageBubble extends StatelessWidget {
             // Reply preview (if this is a reply)
             if (message.replyToMessageId != null) ...[
               _buildReplyPreview(context),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
             ],
 
             // Main text content
@@ -64,7 +65,8 @@ class TextMessageBubble extends StatelessWidget {
                     color: isFromCurrentUser
                         ? Theme.of(context).colorScheme.onPrimary
                         : Theme.of(context).colorScheme.onSurfaceVariant,
-                    height: 1.4,
+                    height: 1.5,
+                    fontSize: 15,
                   ),
             ),
           ],
@@ -73,22 +75,23 @@ class TextMessageBubble extends StatelessWidget {
     );
   }
 
-  /// Build reply preview
+  /// Build reply preview with modern design
   Widget _buildReplyPreview(BuildContext context) {
     final replyText =
         message.content['replyText'] as String? ?? 'Reply to message';
 
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isFromCurrentUser
-            ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.2)
-            : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(8),
+            ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.15)
+            : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isFromCurrentUser
-              ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.3)
-              : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.3),
+              ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.25)
+              : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.2),
+          width: 1,
         ),
       ),
       child: Row(
@@ -98,16 +101,14 @@ class TextMessageBubble extends StatelessWidget {
             Icons.reply,
             size: 16,
             color: isFromCurrentUser
-                ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)
+                ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.8)
                 : Theme.of(context)
                     .colorScheme
                     .onSurfaceVariant
                     .withOpacity(0.7),
           ),
-
-          const SizedBox(width: 8),
-
-          // Reply text preview
+          const SizedBox(width: 6),
+          // Reply text
           Expanded(
             child: Text(
               replyText,
@@ -120,8 +121,9 @@ class TextMessageBubble extends StatelessWidget {
                         : Theme.of(context)
                             .colorScheme
                             .onSurfaceVariant
-                            .withOpacity(0.8),
-                    fontStyle: FontStyle.italic,
+                            .withOpacity(0.7),
+                    fontSize: 13,
+                    height: 1.3,
                   ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

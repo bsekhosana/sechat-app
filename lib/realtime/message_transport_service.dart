@@ -38,9 +38,9 @@ class MessageTransportService {
 
       // Send message via channel socket
       _socketService.sendMessage(
-        recipientId,
-        message.content['text'] ?? '',
         messageId: message.id,
+        recipientId: recipientId,
+        body: message.content['text'] ?? '',
         conversationId: message.conversationId,
       );
 

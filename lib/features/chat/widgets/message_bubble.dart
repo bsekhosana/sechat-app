@@ -26,10 +26,10 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.only(
-        left: isFromCurrentUser ? 48 : 16,
-        right: isFromCurrentUser ? 16 : 48,
-        bottom: isLast ? 16 : 8,
-        top: 8,
+        left: isFromCurrentUser ? 56 : 20,
+        right: isFromCurrentUser ? 20 : 56,
+        bottom: isLast ? 20 : 12,
+        top: 12,
       ),
       child: Column(
         crossAxisAlignment: isFromCurrentUser
@@ -39,7 +39,7 @@ class MessageBubble extends StatelessWidget {
           // Message content
           _buildMessageContent(context),
 
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
 
           // Message metadata (time, status, etc.)
           _buildMessageMetadata(context),
@@ -84,15 +84,26 @@ class MessageBubble extends StatelessWidget {
           isFromCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
       children: [
         // Time
-        Text(
-          _formatTimestamp(message.timestamp),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurfaceVariant
-                    .withOpacity(0.7),
-                fontSize: 11,
-              ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Theme.of(context)
+                .colorScheme
+                .onSurfaceVariant
+                .withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            _formatTimestamp(message.timestamp),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurfaceVariant
+                      .withOpacity(0.6),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
         ),
 
         // Status indicators (only for current user's messages)
@@ -104,7 +115,7 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  /// Build status indicator (ticks)
+  /// Build status indicator (ticks) with modern styling
   Widget _buildStatusIndicator(BuildContext context) {
     IconData icon;
     Color color;
@@ -112,19 +123,20 @@ class MessageBubble extends StatelessWidget {
     switch (message.status) {
       case MessageStatus.sending:
         icon = Icons.schedule;
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5);
+        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4);
         break;
       case MessageStatus.sent:
         icon = Icons.check; // Single tick
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7);
+        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6);
         break;
       case MessageStatus.delivered:
         icon = Icons.done_all; // Double ticks
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.7);
+        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6);
         break;
       case MessageStatus.read:
         icon = Icons.done_all; // Double blue ticks
-        color = Colors.blue; // Using blue color explicitly for read receipts
+        color =
+            Theme.of(context).colorScheme.primary; // Use theme primary color
         break;
       case MessageStatus.failed:
         icon = Icons.error_outline;
@@ -132,14 +144,21 @@ class MessageBubble extends StatelessWidget {
         break;
       case MessageStatus.deleted:
         icon = Icons.delete_outline;
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5);
+        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4);
         break;
     }
 
-    return Icon(
-      icon,
-      size: 16,
-      color: color,
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Icon(
+        icon,
+        size: 14,
+        color: color,
+      ),
     );
   }
 

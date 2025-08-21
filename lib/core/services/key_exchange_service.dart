@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:sechat_app/core/services/encryption_service.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
@@ -8,9 +7,7 @@ import 'package:uuid/uuid.dart';
 import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import 'package:sechat_app/features/chat/models/chat_conversation.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
-import 'package:sechat_app/features/notifications/services/notification_manager_service.dart';
-import 'package:sechat_app/core/utils/conversation_id_generator.dart';
-import 'package:sechat_app/core/services/se_socket_service.dart';
+import 'package:sechat_app/core/services/presence_manager.dart';
 
 /// Service to handle secure key exchange between users
 class KeyExchangeService {
@@ -19,7 +16,6 @@ class KeyExchangeService {
       _instance ??= KeyExchangeService._();
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
-  static const String _keyExchangePrefix = 'key_exchange_';
   static const String _pendingExchangesKey = 'pending_key_exchanges';
 
   // Callback for when conversations are created
@@ -30,6 +26,12 @@ class KeyExchangeService {
 
   // Private constructor
   KeyExchangeService._();
+
+  // Store decrypted user data for conversation creation
+  Map<String, dynamic>? _decryptedUserData;
+
+  // Track processed user data exchanges to prevent duplicates
+  final Set<String> _processedUserDataExchanges = {};
 
   /// Set callback for when conversations are created
   void setOnConversationCreated(Function(ChatConversation) callback) {
@@ -108,7 +110,7 @@ class KeyExchangeService {
       final requestId = const Uuid().v4();
 
       // Create the key exchange request data
-      final keyExchangeRequestData = {
+      final _ = {
         'type': 'key_exchange_request',
         'senderId': currentUserId,
         'publicKey': ourKeys['publicKey'],
@@ -564,9 +566,9 @@ class KeyExchangeService {
 
       // Send key rotation notice via socket
       SeSocketService.instance.sendMessage(
-        contactId,
-        'Encryption keys have been updated',
         messageId: 'key_rotation_${DateTime.now().millisecondsSinceEpoch}',
+        recipientId: contactId,
+        body: 'Encryption keys have been updated',
       );
 
       print('🔑 KeyExchangeService: ✅ Key rotation notice sent to $contactId');
@@ -619,37 +621,24 @@ class KeyExchangeService {
         print(
             '🔑 KeyExchangeService: 📋 Received conversation ID: $receivedConversationId');
 
-        final conversation = await _createConversation(
+        await _createConversation(
           recipientId: receivedConversationId,
         );
 
-        if (conversation != null) {
-          print(
-              '🔑 KeyExchangeService: ✅ Matching conversation created: ${conversation.id}');
-          return true;
-        } else {
-          print(
-              '🔑 KeyExchangeService: ❌ Failed to create matching conversation');
-          return false;
-        }
+        print('🔑 KeyExchangeService: ✅ Matching conversation created');
+        return true;
       } else {
         // This is the initial user data from the sender, create conversation and send response
-        final conversation = await _createConversation(
+        await _createConversation(
           recipientId: userSessionId,
         );
 
-        if (conversation != null) {
-          print(
-              '🔑 KeyExchangeService: ✅ Conversation created: ${conversation.id}');
+        print('🔑 KeyExchangeService: ✅ Conversation created');
 
-          // Send our user data back to complete the exchange
-          await _sendUserDataResponse(senderId, conversation.id);
+        // Send our user data back to complete the exchange
+        await _sendUserDataResponse(senderId, userSessionId);
 
-          return true;
-        } else {
-          print('🔑 KeyExchangeService: ❌ Failed to create conversation');
-          return false;
-        }
+        return true;
       }
     } catch (e) {
       print('🔑 KeyExchangeService: Error processing user data exchange: $e');
@@ -657,53 +646,59 @@ class KeyExchangeService {
     }
   }
 
-  /// Create a new conversation after successful key exchange
-  Future<ChatConversation?> _createConversation({
-    required String recipientId,
-  }) async {
+  /// Create conversation after successful key exchange
+  Future<void> _createConversation({required String recipientId}) async {
     try {
-      // Use recipient ID as conversation ID
-      final conversationId = recipientId;
+      print('🔑 KeyExchangeService: Creating conversation: $recipientId');
 
-      print('🔑 KeyExchangeService: Creating conversation: $conversationId');
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId == null) {
+        print('🔑 KeyExchangeService: ❌ No current session ID');
+        return;
+      }
 
-      // Create conversation object
+      // Get display name from decrypted user data if available
+      String? displayName;
+      if (_decryptedUserData != null) {
+        displayName = _decryptedUserData!['userName'] as String?;
+        print(
+            '🔑 KeyExchangeService: 🔍 Using display name from user data: $displayName');
+      }
+
+      // Create conversation with proper display name and ID
       final conversation = ChatConversation(
-        id: conversationId,
-        participant1Id: SeSessionService().currentSessionId ?? '',
+        id: recipientId, // Use recipient's session ID as conversation ID
+        participant1Id: currentUserId,
         participant2Id: recipientId,
-        displayName: recipientId, // Will be updated when user data is loaded
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        lastMessageAt: null,
-        lastMessageId: null,
-        lastMessagePreview: null,
-        lastMessageType: null,
-        unreadCount: 0,
-        isArchived: false,
-        isMuted: false,
-        isPinned: false,
-        metadata: null,
-        lastSeen: null,
-        isOnline: false,
-        isTyping: false,
-        typingStartedAt: null,
-        notificationsEnabled: true,
-        soundEnabled: true,
-        vibrationEnabled: true,
-        readReceiptsEnabled: true,
-        typingIndicatorsEnabled: true,
-        lastSeenEnabled: true,
+        displayName: displayName, // Set the display name from user data
+        metadata: {
+          'user_names': {
+            recipientId: displayName ?? 'Unknown User',
+            currentUserId:
+                SeSessionService().currentSession?.displayName ?? 'You',
+          },
+          'key_exchange_completed': true,
+          'created_at': DateTime.now().toIso8601String(),
+        },
       );
 
-      // Save conversation to storage
+      // Save to storage
       await MessageStorageService.instance.saveConversation(conversation);
+      print('🔑 KeyExchangeService: ✅ Conversation created: $recipientId');
 
-      print('🔑 KeyExchangeService: ✅ Conversation created: $conversationId');
-      return conversation;
+      // Notify UI that conversation was created
+      if (_onConversationCreated != null) {
+        _onConversationCreated!(conversation);
+        print('🔑 KeyExchangeService: ✅ UI notified of conversation creation');
+      } else {
+        print(
+            '🔑 KeyExchangeService: ⚠️ No conversation creation callback set');
+      }
+
+      print(
+          '🔑 KeyExchangeService: ✅ Conversation created and saved to storage');
     } catch (e) {
-      print('🔑 KeyExchangeService: ❌ Failed to create conversation: $e');
-      return null;
+      print('🔑 KeyExchangeService: ❌ Error creating conversation: $e');
     }
   }
 
@@ -752,20 +747,16 @@ class KeyExchangeService {
         print('🔑 KeyExchangeService: 📤 Sending payload via socket: $payload');
 
         // Check if socket is ready before sending
-        if (SeSocketService.instance.isReadyToSend) {
+        if (SeSocketService.instance.isConnected) {
           print(
-              '🔑 KeyExchangeService: 🔍 Socket ready, sending user_data_exchange event');
+              '🔑 KeyExchangeService: 🔍 Socket connected, sending user_data_exchange event');
 
-          // CRITICAL FIX: Use channel-based event format and set up listeners
+          // Use SeSocketService for user data exchange
           try {
-            // Use SeSocketService for user data exchange
             SeSocketService.instance.sendUserDataExchange(
               recipientId: recipientId,
               encryptedData: encryptedData,
             );
-            print(
-                '🔑 KeyExchangeService: ✅ Initial user data sent to $recipientId using ChannelSocketService');
-
             print(
                 '🔑 KeyExchangeService: ✅ Initial user data sent to $recipientId using SeSocketService');
           } catch (e) {
@@ -778,7 +769,7 @@ class KeyExchangeService {
           print(
               '🔑 KeyExchangeService: ⏱️ Event sent, waiting for processing...');
         } else {
-          print('🔑 KeyExchangeService: ❌ Socket not ready to send');
+          print('🔑 KeyExchangeService: ❌ Socket not connected');
           print(
               '🔑 KeyExchangeService: 🔍 Socket status: ${SeSocketService.instance.getSocketStatus()}');
         }
@@ -817,20 +808,26 @@ class KeyExchangeService {
       );
 
       if (encryptedData != null) {
-        // CRITICAL: Use the correct server event format: user_data_exchange:send
-        try {
-          SeSocketService.instance.emit('user_data_exchange:send', {
-            'recipientId': recipientId,
-            'senderId': currentUserId,
-            'encryptedData': encryptedData,
-            'conversationId': conversationId,
-            'timestamp': DateTime.now().toIso8601String(),
-          });
+        // Check socket connection before sending
+        if (SeSocketService.instance.isConnected) {
+          // Use the correct server event format: user_data_exchange:send
+          try {
+            SeSocketService.instance.emit('user_data_exchange:send', {
+              'recipientId': recipientId,
+              'senderId': currentUserId,
+              'encryptedData': encryptedData,
+              'conversationId': conversationId,
+              'timestamp': DateTime.now().toIso8601String(),
+            });
+            print(
+                '🔑 KeyExchangeService: ✅ User data response sent to $recipientId using user_data_exchange:send');
+          } catch (e) {
+            print(
+                '🔑 KeyExchangeService: ❌ Error sending user data response: $e');
+          }
+        } else {
           print(
-              '🔑 KeyExchangeService: ✅ User data response sent to $recipientId using user_data_exchange:send');
-        } catch (e) {
-          print(
-              '🔑 KeyExchangeService: ❌ Error sending user data response: $e');
+              '🔑 KeyExchangeService: ⚠️ Socket not connected, cannot send user data response');
         }
       } else {
         print('🔑 KeyExchangeService: ❌ Failed to encrypt user data');
@@ -840,79 +837,104 @@ class KeyExchangeService {
     }
   }
 
-  /// Handle user data exchange from other users
+  /// Handle user data exchange data received from socket
   Future<void> handleUserDataExchange(Map<String, dynamic> data) async {
     try {
+      print('🔑 KeyExchangeService: 🔍 User data exchange received: $data');
+
       final senderId = data['senderId'] as String?;
       final encryptedData = data['encryptedData'] as String?;
+      final conversationId = data['conversationId'] as String?;
 
       if (senderId == null || encryptedData == null) {
-        print('🔑 KeyExchangeService: ❌ Invalid user data exchange data');
+        print(
+            '🔑 KeyExchangeService: ❌ Missing senderId or encryptedData in user data exchange');
         return;
       }
 
-      print(
-          '🔑 KeyExchangeService: 🔍 Processing user data exchange from $senderId');
+      // Create a unique key for this exchange to prevent duplicates
+      final exchangeKey = '$senderId:$encryptedData';
+      if (_processedUserDataExchanges.contains(exchangeKey)) {
+        print(
+            '🔑 KeyExchangeService: ℹ️ User data exchange already processed for $senderId, skipping');
+        return;
+      }
+
+      // Check if we already have a conversation with this user to prevent duplicates
+      final existingConversations =
+          await MessageStorageService.instance.getUserConversations(senderId);
+
+      if (existingConversations.isNotEmpty) {
+        print(
+            '🔑 KeyExchangeService: ℹ️ Conversation already exists with $senderId, skipping creation');
+        return;
+      }
 
       // Decrypt the user data
-      final decryptedData = await EncryptionService.decryptData(encryptedData);
+      final decryptedData = await _decryptUserData(encryptedData, senderId);
       if (decryptedData == null) {
         print('🔑 KeyExchangeService: ❌ Failed to decrypt user data');
         return;
       }
 
-      // Parse the decrypted data
-      final userData = Map<String, dynamic>.from(decryptedData);
-      final userName = userData['userName']?.toString() ?? 'Unknown User';
-      final userSessionId = userData['sessionId']?.toString() ?? senderId;
+      // Store decrypted data for conversation creation
+      _decryptedUserData = decryptedData;
 
-      print(
-          '🔑 KeyExchangeService: ✅ User data decrypted: $userName ($userSessionId)');
+      print('🔑 KeyExchangeService: ✅ User data decrypted successfully');
 
-      // Create conversation locally
-      final conversationId =
-          await _createConversationLocally(senderId, userName);
-      print(
-          '🔑 KeyExchangeService: ✅ Conversation created locally: $conversationId');
+      // Create conversation
+      await _createConversation(recipientId: senderId);
 
-      // CRITICAL: Store the sender's public key for future encryption
-      // This should have been received in key_exchange:response, but let's ensure it's stored
-      final senderPublicKey = await _getSenderPublicKey(senderId);
-      if (senderPublicKey != null) {
-        print('🔑 KeyExchangeService: ✅ Sender public key found and stored');
-      } else {
-        print(
-            '🔑 KeyExchangeService: ⚠️ Warning: Sender public key not found, will try to retrieve from storage');
-      }
+      // Send response user data
+      await _sendUserDataResponse(senderId, encryptedData);
 
-      // Send conversation:created response with our encrypted display name
-      if (conversationId != null) {
-        await _sendConversationCreatedResponse(senderId, conversationId);
-      }
+      // CRITICAL: Add contact after successful key exchange
+      _addContactAfterKeyExchange(senderId, decryptedData);
 
-      // Notify UI that conversation was created
-      if (_onConversationCreated != null) {
-        final conversation = ChatConversation(
-          id: conversationId,
-          participant1Id: SeSessionService().currentSessionId!,
-          participant2Id: senderId,
-          displayName: userName,
-          unreadCount: 0,
-          isOnline: false,
-          lastSeen: null,
-        );
-        _onConversationCreated!(conversation);
-      }
-
-      // CRITICAL: Notify UI that user data was exchanged so conversation display name can be updated
-      if (_onUserDataExchange != null) {
-        _onUserDataExchange!(senderId, userName);
-        print(
-            '🔑 KeyExchangeService: ✅ User data exchange callback triggered: $senderId -> $userName');
-      }
+      // Mark this exchange as processed to prevent duplicates
+      _processedUserDataExchanges.add(exchangeKey);
+      print('🔑 KeyExchangeService: ✅ User data exchange marked as processed');
     } catch (e) {
       print('🔑 KeyExchangeService: ❌ Error handling user data exchange: $e');
-      rethrow;
+    }
+  }
+
+  /// Decrypt user data received from another user
+  Future<Map<String, dynamic>?> _decryptUserData(
+      String encryptedData, String senderId) async {
+    try {
+      final decryptedData = await EncryptionService.decryptData(encryptedData);
+      if (decryptedData != null) {
+        return Map<String, dynamic>.from(decryptedData);
+      }
+      return null;
+    } catch (e) {
+      print('🔑 KeyExchangeService: ❌ Error decrypting user data: $e');
+      return null;
+    }
+  }
+
+  /// Add contact after successful key exchange
+  void _addContactAfterKeyExchange(
+      String contactSessionId, Map<String, dynamic> userData) {
+    try {
+      print(
+          '🔑 KeyExchangeService: 🔗 Adding contact after successful key exchange: $contactSessionId');
+
+      // Get display name from user data - check both userName and displayName fields
+      final displayName = userData['userName'] as String? ??
+          userData['displayName'] as String? ??
+          contactSessionId;
+
+      // Add contact via PresenceManager
+      final presenceManager = PresenceManager.instance;
+      presenceManager.addNewContact(contactSessionId, displayName);
+
+      print(
+          '🔑 KeyExchangeService: ✅ Contact added successfully: $displayName');
+    } catch (e) {
+      print(
+          '🔑 KeyExchangeService: ❌ Error adding contact after key exchange: $e');
     }
   }
 
@@ -976,17 +998,23 @@ class KeyExchangeService {
         return;
       }
 
-      // Send conversation:created event with our encrypted data
-      SeSocketService.instance.emit('conversation:created', {
-        'recipientId': recipientId,
-        'senderId': currentUserId,
-        'conversation_id_local': conversationIdLocal,
-        'encryptedUserData': encryptedData,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
+      // Check socket connection before sending
+      if (SeSocketService.instance.isConnected) {
+        // Send conversation:created event with our encrypted data
+        SeSocketService.instance.emit('conversation:created', {
+          'recipientId': recipientId,
+          'senderId': currentUserId,
+          'conversation_id_local': conversationIdLocal,
+          'encryptedUserData': encryptedData,
+          'timestamp': DateTime.now().toIso8601String(),
+        });
 
-      print(
-          '🔑 KeyExchangeService: ✅ Conversation created response sent with encrypted user data');
+        print(
+            '🔑 KeyExchangeService: ✅ Conversation created response sent with encrypted user data');
+      } else {
+        print(
+            '🔑 KeyExchangeService: ⚠️ Socket not connected, cannot send conversation created response');
+      }
     } catch (e) {
       print(
           '🔑 KeyExchangeService: ❌ Error sending conversation created response: $e');

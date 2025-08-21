@@ -34,6 +34,9 @@ import 'features/chat/services/message_storage_service.dart';
 import 'core/services/se_socket_service.dart';
 import 'core/services/key_exchange_service.dart';
 import 'core/services/ui_service.dart';
+import 'core/services/presence_manager.dart';
+import 'core/services/contact_service.dart';
+import 'core/services/app_lifecycle_manager.dart';
 import 'features/notifications/services/notification_manager_service.dart';
 import 'realtime/realtime_service_manager.dart';
 import 'realtime/realtime_test.dart';
@@ -107,6 +110,15 @@ Future<void> main() async {
     NotificationManagerService().initialize(),
   ]);
 
+  // Initialize presence management system
+  try {
+    final presenceManager = PresenceManager.instance;
+    await presenceManager.initialize();
+    print('🔌 Main: ✅ Presence management system initialized successfully');
+  } catch (e) {
+    print('🔌 Main: ❌ Failed to initialize presence management system: $e');
+  }
+
   // Initialize realtime services
   try {
     final realtimeManager = RealtimeServiceManager();
@@ -175,6 +187,8 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => IndicatorService()),
         ChangeNotifierProvider(create: (_) => SessionChatProvider()),
         ChangeNotifierProvider(create: (_) => KeyExchangeRequestProvider()),
+        ChangeNotifierProvider(create: (_) => ContactService.instance),
+        ChangeNotifierProvider(create: (_) => PresenceManager.instance),
         ChangeNotifierProvider(create: (_) {
           final provider = SocketProvider();
           // Initialize in the next frame to avoid blocking the UI
@@ -215,7 +229,10 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => LocalStorageService.instance),
         ChangeNotifierProvider(create: (_) => SocketStatusProvider.instance),
       ],
-      child: const SeChatApp(),
+      child: AppLifecycleManager(
+        presenceManager: PresenceManager.instance,
+        child: const SeChatApp(),
+      ),
     ),
   );
 }
@@ -253,8 +270,17 @@ void _setupSocketCallbacks(SeSocketService socketService) {
     });
   });
 
+  print('🔌 Main: 🔧 Setting up typing indicator callback...');
   socketService.setOnTypingIndicator((senderId, isTyping) {
-    print('🔌 Main: Typing indicator from socket: $senderId: $isTyping');
+    print(
+        '🔌 Main: 🔔 Typing indicator callback EXECUTED: $senderId -> $isTyping');
+
+    // CRITICAL: Filter out own typing indicators
+    final currentUserId = SeSessionService().currentSessionId;
+    if (currentUserId != null && senderId == currentUserId) {
+      print('🔌 Main: ⚠️ Ignoring own typing indicator from: $senderId');
+      return; // Don't process own typing indicator
+    }
 
     // Forward typing indicator to both SessionChatProvider and ChatListProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -273,79 +299,87 @@ void _setupSocketCallbacks(SeSocketService socketService) {
               navigatorKey.currentContext!,
               listen: false);
 
-          // FIXED: Forward ALL typing indicators to SessionChatProvider for bidirectional communication
-          // This allows both users to see typing indicators from each other
+          // Check if this typing indicator is for the current conversation
           if (sessionChatProvider.currentRecipientId != null) {
             // If the sender is the current recipient, update their typing state
             if (sessionChatProvider.currentRecipientId == senderId) {
               sessionChatProvider.updateRecipientTypingState(isTyping);
               print(
-                  '🔌 Main: ✅ Typing indicator forwarded to SessionChatProvider for current recipient: $senderId');
+                  '🔌 Main: ✅ Typing indicator updated for current recipient: $senderId -> $isTyping');
             } else {
-              // If the sender is someone else (e.g., current user typing), still process it
-              // This allows the current user to see their own typing state in the UI if needed
               print(
                   '🔌 Main: ℹ️ Typing indicator from different user: $senderId (current recipient: ${sessionChatProvider.currentRecipientId})');
             }
-
-            // CRITICAL: Forward typing indicator to realtime typing service for proper UI updates
-            try {
-              final realtimeManager = RealtimeServiceManager();
-              print(
-                  '🔌 Main: 🔍 Realtime manager initialized: ${realtimeManager.isInitialized}');
-              print(
-                  '🔌 Main: 🔍 Current conversation ID: ${sessionChatProvider.currentConversationId}');
-
-              if (realtimeManager.isInitialized &&
-                  sessionChatProvider.currentConversationId != null) {
-                final typingService = realtimeManager.typing;
-                print(
-                    '🔌 Main: 🔍 Typing service available: ${typingService != null}');
-
-                typingService.handleIncomingTypingIndicator(
-                  sessionChatProvider.currentConversationId!,
-                  senderId,
-                  isTyping,
-                );
-                print(
-                    '🔌 Main: ✅ Typing indicator forwarded to realtime typing service');
-              } else {
-                print(
-                    '🔌 Main: ⚠️ Cannot forward to realtime service: manager=${realtimeManager.isInitialized}, conversationId=${sessionChatProvider.currentConversationId}');
-              }
-            } catch (e) {
-              print(
-                  '🔌 Main: ❌ Error forwarding to realtime typing service: $e');
-            }
+          } else {
+            print('🔌 Main: ℹ️ No active chat conversation');
           }
         } catch (e) {
           print('🔌 Main: ⚠️ SessionChatProvider not available: $e');
         }
 
-        print('🔌 Main: ✅ Typing indicator forwarded to ChatListProvider');
+        print('🔌 Main: ✅ Typing indicator processed successfully');
       } catch (e) {
-        print('🔌 Main: ❌ Failed to forward typing indicator: $e');
+        print('🔌 Main: ❌ Failed to process typing indicator: $e');
       }
     });
   });
+  print('🔌 Main: ✅ Typing indicator callback setup complete');
 
+  // Handle presence updates (online/offline status)
   socketService.setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
-    print('🔌 Main: Online status update from socket: $senderId: $isOnline');
+    print(
+        '🔌 Main: Presence update received: $senderId -> ${isOnline ? 'online' : 'offline'}');
 
-    // Update online status in ChatListProvider
+    // Update ChatListProvider for chat list items
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
+        // Update ContactService for presence management
+        try {
+          final contactService = Provider.of<ContactService>(
+              navigatorKey.currentContext!,
+              listen: false);
+
+          final lastSeenDateTime =
+              lastSeen != null ? DateTime.parse(lastSeen) : DateTime.now();
+          contactService.updateContactPresence(
+              senderId, isOnline, lastSeenDateTime);
+          print(
+              '🔌 Main: ✅ Presence update sent to ContactService for: $senderId');
+        } catch (e) {
+          print('🔌 Main: ⚠️ ContactService not available: $e');
+        }
+
         final chatListProvider = Provider.of<ChatListProvider>(
             navigatorKey.currentContext!,
             listen: false);
 
-        // Update the conversation's online status directly
+        // Update conversation online status
         chatListProvider.updateConversationOnlineStatus(
             senderId, isOnline, lastSeen);
-        print(
-            '🔌 Main: ✅ Online status update processed: $senderId -> $isOnline');
+
+        // Also notify SessionChatProvider if there's an active chat
+        try {
+          final sessionChatProvider = Provider.of<SessionChatProvider>(
+              navigatorKey.currentContext!,
+              listen: false);
+
+          // If the sender is the current recipient, update their online state
+          if (sessionChatProvider.currentRecipientId == senderId) {
+            sessionChatProvider.updateRecipientStatus(
+              recipientId: senderId,
+              isOnline: isOnline,
+              lastSeen: lastSeen != null ? DateTime.parse(lastSeen) : null,
+            );
+            print(
+                '🔌 Main: ✅ Presence update forwarded to SessionChatProvider for current recipient: $senderId');
+          }
+        } catch (e) {
+          print('🔌 Main: ⚠️ SessionChatProvider not available: $e');
+        }
+
+        print('🔌 Main: ✅ Presence update processed successfully');
       } catch (e) {
-        print('🔌 Main: ❌ Failed to process online status update: $e');
+        print('🔌 Main: ❌ Failed to process presence update: $e');
       }
     });
   });
@@ -789,6 +823,27 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         print('🗑️ Main: User deletion event processed successfully');
       } catch (e) {
         print('❌ Main: Failed to process user deletion event: $e');
+      }
+    });
+  });
+
+  // Handle session registration confirmation
+  socketService.setOnSessionRegistered((data) {
+    print('🔌 Main: ✅ Session registered: ${data['sessionId']}');
+
+    // Initialize presence management system for the new session
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final presenceManager = Provider.of<PresenceManager>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Set up presence system for the new session
+        presenceManager.onSessionRegistered();
+
+        print('🔌 Main: ✅ Presence system initialized for new session');
+      } catch (e) {
+        print('🔌 Main: ⚠️ Failed to initialize presence system: $e');
       }
     });
   });

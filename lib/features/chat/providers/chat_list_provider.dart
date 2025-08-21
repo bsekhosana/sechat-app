@@ -502,20 +502,22 @@ class ChatListProvider extends ChangeNotifier {
   void _handleTypingIndicatorFromSocket(String senderId, bool isTyping) {
     try {
       print(
-          '📱 ChatListProvider: 🔔 Typing indicator from notification: $senderId -> $isTyping');
+          '📱 ChatListProvider: 🔔 Typing indicator from socket: $senderId -> $isTyping');
 
-      // Find conversation by participant ID
-      final index = _conversations.indexWhere((conv) =>
-          conv.participant1Id == senderId || conv.participant2Id == senderId);
+      // Find conversation with this sender and update typing status
+      final conversationIndex = _conversations.indexWhere(
+        (conv) =>
+            conv.participant1Id == senderId || conv.participant2Id == senderId,
+      );
 
-      if (index != -1) {
-        final conversation = _conversations[index];
+      if (conversationIndex != -1) {
+        final conversation = _conversations[conversationIndex];
         final updatedConversation = conversation.copyWith(
           isTyping: isTyping,
           typingStartedAt: isTyping ? DateTime.now() : null,
         );
 
-        _conversations[index] = updatedConversation;
+        _conversations[conversationIndex] = updatedConversation;
         _applySearchFilter();
         notifyListeners();
 
@@ -527,7 +529,7 @@ class ChatListProvider extends ChangeNotifier {
       }
     } catch (e) {
       print(
-          '📱 ChatListProvider: ❌ Error handling typing indicator from notification: $e');
+          '📱 ChatListProvider: ❌ Error handling typing indicator from socket: $e');
     }
   }
 
@@ -577,6 +579,25 @@ class ChatListProvider extends ChangeNotifier {
         _conversations[index] = updatedConversation;
         _applySearchFilter();
         notifyListeners();
+
+        // Auto-clear typing indicator after 7 seconds (as per server behavior)
+        if (isTyping) {
+          Timer(const Duration(seconds: 7), () {
+            // Only clear if it's still the same typing state
+            if (_conversations[index].isTyping == true) {
+              final conversation = _conversations[index];
+              final clearedConversation = conversation.copyWith(
+                isTyping: false,
+                typingStartedAt: null,
+              );
+              _conversations[index] = clearedConversation;
+              _applySearchFilter();
+              notifyListeners();
+              print(
+                  '📱 ChatListProvider: ✅ Auto-cleared typing indicator for conversation: ${conversation.id}');
+            }
+          });
+        }
 
         print(
             '📱 ChatListProvider: ✅ Updated typing indicator for conversation: ${conversation.id}');

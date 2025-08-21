@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/message.dart';
 
-/// Widget for displaying reply message bubbles
+/// Widget for displaying reply message bubbles with modern Material 3 design
 class ReplyMessageBubble extends StatelessWidget {
   final Message message;
   final bool isFromCurrentUser;
@@ -39,14 +39,15 @@ class ReplyMessageBubble extends StatelessWidget {
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(isFromCurrentUser ? 20 : 4),
-            bottomRight: Radius.circular(isFromCurrentUser ? 4 : 20),
+            bottomLeft: Radius.circular(isFromCurrentUser ? 20 : 8),
+            bottomRight: Radius.circular(isFromCurrentUser ? 8 : 20),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 4,
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 8,
               offset: const Offset(0, 2),
+              spreadRadius: 0,
             ),
           ],
         ),
@@ -57,7 +58,7 @@ class ReplyMessageBubble extends StatelessWidget {
             _buildReplyPreview(
                 context, replyText, replySenderName, replyMessageType),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
 
             // Main message content
             _buildMainMessageContent(context, content),
@@ -67,20 +68,21 @@ class ReplyMessageBubble extends StatelessWidget {
     );
   }
 
-  /// Build reply preview section
+  /// Build reply preview section with modern design
   Widget _buildReplyPreview(BuildContext context, String replyText,
       String replySenderName, String replyMessageType) {
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isFromCurrentUser
-            ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.2)
-            : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(8),
+            ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.15)
+            : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isFromCurrentUser
-              ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.3)
-              : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.3),
+              ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.25)
+              : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.2),
+          width: 1,
         ),
       ),
       child: Column(
@@ -93,15 +95,13 @@ class ReplyMessageBubble extends StatelessWidget {
                 Icons.reply,
                 size: 16,
                 color: isFromCurrentUser
-                    ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.7)
+                    ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.8)
                     : Theme.of(context)
                         .colorScheme
                         .onSurfaceVariant
                         .withOpacity(0.7),
               ),
-
-              const SizedBox(width: 8),
-
+              const SizedBox(width: 6),
               Text(
                 replySenderName,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -113,47 +113,14 @@ class ReplyMessageBubble extends StatelessWidget {
                           : Theme.of(context)
                               .colorScheme
                               .onSurfaceVariant
-                              .withOpacity(0.8),
+                              .withOpacity(0.7),
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
               ),
-
-              const SizedBox(width: 8),
-
-              // Message type indicator
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isFromCurrentUser
-                      ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.3)
-                      : Theme.of(context)
-                          .colorScheme
-                          .onSurfaceVariant
-                          .withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  _getMessageTypeLabel(replyMessageType),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: isFromCurrentUser
-                            ? Theme.of(context)
-                                .colorScheme
-                                .onPrimary
-                                .withOpacity(0.8)
-                            : Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant
-                                .withOpacity(0.8),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                      ),
-                ),
-              ),
             ],
           ),
-
-          const SizedBox(height: 4),
-
+          const SizedBox(height: 6),
           // Reply text preview
           Text(
             replyText,
@@ -163,8 +130,9 @@ class ReplyMessageBubble extends StatelessWidget {
                       : Theme.of(context)
                           .colorScheme
                           .onSurfaceVariant
-                          .withOpacity(0.8),
-                  fontStyle: FontStyle.italic,
+                          .withOpacity(0.7),
+                  fontSize: 13,
+                  height: 1.3,
                 ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,

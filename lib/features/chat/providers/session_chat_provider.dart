@@ -53,14 +53,14 @@ class SessionChatProvider extends ChangeNotifier {
 
   /// Get the current conversation ID
   String? get currentConversationId {
-    // Since conversation IDs are now just recipient IDs, return the current recipient ID
+    // Conversation ID is simply the recipient's session ID
     return _currentRecipientId;
   }
 
   /// Ensure conversation ID is set
   void _ensureConversationId() {
     if (_currentConversationId == null && _currentRecipientId != null) {
-      // Set conversation ID to recipient ID
+      // Set conversation ID to recipient ID for simplicity
       _currentConversationId = _currentRecipientId;
       print(
           '📱 SessionChatProvider: ✅ Set conversation ID to recipient ID: $_currentConversationId');
@@ -401,8 +401,23 @@ class SessionChatProvider extends ChangeNotifier {
         print('📱 SessionChatProvider: ⚠️ Error updating chat list: $e');
       }
 
-      print(
-          '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $conversationId');
+      // Send message via socket service
+      if (_socketService.isConnected) {
+        _socketService.sendMessage(
+          messageId: messageId,
+          recipientId: recipientId,
+          body: content,
+          conversationId:
+              conversationId, // Use recipient's session ID as conversation ID
+        );
+
+        print(
+            '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $conversationId');
+      } else {
+        print(
+            '📱 SessionChatProvider: ⚠️ Socket not connected, cannot send message');
+        throw Exception('Socket not connected');
+      }
 
       _isLoading = false;
       _error = null;
@@ -416,7 +431,7 @@ class SessionChatProvider extends ChangeNotifier {
     }
   }
 
-  // Send typing indicator using AirNotifier silent notifications
+  // Send typing indicator using socket service
   Future<void> sendTypingIndicator(String recipientId, bool isTyping) async {
     try {
       // Ensure conversation ID is available
@@ -432,35 +447,34 @@ class SessionChatProvider extends ChangeNotifier {
       print(
           '📱 SessionChatProvider: 🔍 Sending typing indicator to: $recipientId (isTyping: $isTyping)');
 
-      // Use the recipient ID as the conversation ID
+      // Check socket connection first
+      if (!_socketService.isConnected) {
+        print(
+            '📱 SessionChatProvider: ⚠️ Socket not connected, cannot send typing indicator');
+
+        // Try to test the connection
+        final testResult = await _socketService.testSocketConnection();
+        if (testResult) {
+          print(
+              '📱 SessionChatProvider: ✅ Socket connection test passed, retrying...');
+        } else {
+          print('📱 SessionChatProvider: ❌ Socket connection test failed');
+          return;
+        }
+      }
+
+      // Use the recipient ID as the conversation ID (as per API docs)
       final conversationId = recipientId;
 
-      // Use realtime typing service instead of old socket method
-      bool success = false;
-      try {
-        if (_typingService != null) {
-          if (isTyping) {
-            _typingService!.startTyping(conversationId, [recipientId]);
-          } else {
-            _typingService!.stopTyping(conversationId);
-          }
-          success = true;
-        } else {
-          print('📱 SessionChatProvider: ⚠️ Typing service not available');
-          success = false;
-        }
-      } catch (e) {
-        print('📱 SessionChatProvider: ❌ Error using typing service: $e');
-        success = false;
-      }
+      // Send typing indicator via socket service
+      _socketService.sendTyping(
+        recipientId,
+        recipientId, // Use recipient's session ID as conversation ID (per API docs)
+        isTyping,
+      );
 
-      if (success) {
-        print(
-            '📱 SessionChatProvider: ✅ Typing indicator sent via silent notification: $recipientId - $isTyping');
-      } else {
-        print(
-            '📱 SessionChatProvider: ❌ Failed to send typing indicator to: $recipientId');
-      }
+      print(
+          '📱 SessionChatProvider: ✅ Typing indicator sent via socket: $recipientId - $isTyping');
     } catch (e) {
       print(
           '📱 SessionChatProvider: ❌ Error sending typing indicator to $recipientId: $e');
@@ -915,10 +929,10 @@ class SessionChatProvider extends ChangeNotifier {
       // Ensure conversation ID is available
       _ensureConversationId();
 
-      // CRITICAL: Only update local typing state, don't send to self
+      // CRITICAL: Only send typing indicator to recipient, don't update local state
       final currentUserId = SeSessionService().currentSessionId;
       if (_currentRecipientId != null && _currentRecipientId != currentUserId) {
-        // Send typing indicator to other user via silent notification
+        // Send typing indicator to other user via socket
         await sendTypingIndicator(_currentRecipientId!, isTyping);
         print(
             '📱 SessionChatProvider: ✅ Typing indicator sent to recipient: $_currentRecipientId');
@@ -927,25 +941,167 @@ class SessionChatProvider extends ChangeNotifier {
             '📱 SessionChatProvider: ⚠️ No valid recipient for typing indicator');
       }
 
-      // Update local typing state for UI
-      _isRecipientTyping = isTyping;
+      // DON'T update _isRecipientTyping here - that should only be updated
+      // when we receive typing indicators from the recipient via socket
+      // _isRecipientTyping = isTyping; // REMOVED - This was wrong!
+
+      // Only notify listeners for UI updates (like input field state)
       notifyListeners();
-      print('📱 SessionChatProvider: Typing indicator updated: $isTyping');
+      print('📱 SessionChatProvider: Typing indicator sent: $isTyping');
     } catch (e) {
       print('📱 SessionChatProvider: ❌ Error updating typing indicator: $e');
     }
   }
 
-  /// Send text message (alias for sendMessage)
-  Future<void> sendTextMessage(String text) async {
-    if (_currentRecipientId != null) {
-      await sendMessage(
-        recipientId: _currentRecipientId!,
-        content: text,
-        messageType: 'text',
+  /// Send text message
+  Future<void> sendTextMessage(String content) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      // Ensure conversation ID is available
+      _ensureConversationId();
+
+      // Validate content
+      if (content.trim().isEmpty) {
+        throw Exception('Message content cannot be empty');
+      }
+
+      // Validate recipient ID
+      if (_currentRecipientId == null || _currentRecipientId!.isEmpty) {
+        throw Exception('No recipient selected');
+      }
+
+      final recipientId = _currentRecipientId!;
+      final conversationId = currentConversationId;
+
+      if (conversationId == null) {
+        throw Exception('No conversation ID available');
+      }
+
+      print(
+          '📱 SessionChatProvider: 🚀 Sending text message to $recipientId in conversation $conversationId');
+
+      // Generate message ID
+      final messageId =
+          'msg_${DateTime.now().millisecondsSinceEpoch}_${SeSessionService().currentSessionId}';
+
+      // Create message object
+      final message = Message(
+        id: messageId,
+        conversationId: conversationId,
+        senderId: SeSessionService().currentSessionId ?? '',
+        recipientId: recipientId,
+        type: MessageType.text,
+        content: {'text': content},
+        status: MessageStatus.sending,
+        timestamp: DateTime.now(),
       );
-    } else {
-      throw Exception('No recipient set. Call initialize() first.');
+
+      // Add message to local list first for immediate UI feedback
+      _messages.add(message);
+      notifyListeners();
+
+      // Update chat list
+      try {
+        _updateChatListWithMessage(recipientId, content, messageId);
+      } catch (e) {
+        print('📱 SessionChatProvider: ⚠️ Error updating chat list: $e');
+      }
+
+      // Check socket connection before sending
+      if (!_socketService.isConnected) {
+        print(
+            '📱 SessionChatProvider: ⚠️ Socket not connected, attempting to reconnect...');
+
+        // Try to test the connection first
+        final testResult = await _socketService.testSocketConnection();
+        if (testResult) {
+          print(
+              '📱 SessionChatProvider: ✅ Socket connection test passed, retrying...');
+        } else {
+          print('📱 SessionChatProvider: ❌ Socket connection test failed');
+          throw Exception(
+              'Socket not connected. Please check your internet connection and try again.');
+        }
+      }
+
+      // Send message via socket service
+      if (_socketService.isConnected) {
+        _socketService.sendMessage(
+          messageId: messageId,
+          recipientId: recipientId,
+          body: content,
+          conversationId:
+              recipientId, // Use recipient's session ID as conversation ID (per API docs)
+        );
+
+        print(
+            '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $recipientId');
+      } else {
+        print(
+            '📱 SessionChatProvider: ❌ Socket still not connected after retry attempt');
+        throw Exception(
+            'Unable to connect to chat server. Please check your internet connection and try again.');
+      }
+
+      _isLoading = false;
+      _error = null;
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to send message: $e';
+      _isLoading = false;
+      notifyListeners();
+      print('📱 SessionChatProvider: ❌ Failed to send message: $e');
+      rethrow;
+    }
+  }
+
+  /// Update chat list with new message
+  void _updateChatListWithMessage(
+      String recipientId, String content, String messageId) {
+    try {
+      // Find existing chat
+      final existingChatIndex =
+          _chats.indexWhere((chat) => chat.id == recipientId);
+
+      if (existingChatIndex != -1) {
+        // Update existing chat
+        final existingChat = _chats[existingChatIndex];
+        _chats[existingChatIndex] = existingChat.copyWith(
+          lastMessage: {'text': content, 'id': messageId},
+          lastMessageAt: DateTime.now(),
+        );
+        print(
+            '📱 SessionChatProvider: ✅ Updated existing chat with new message');
+      } else {
+        // Create new chat
+        final currentUserId = SeSessionService().currentSessionId ?? 'unknown';
+        final newChat = Chat(
+          id: recipientId,
+          user1Id: currentUserId,
+          user2Id: recipientId,
+          user1DisplayName: currentUserId,
+          user2DisplayName: recipientId,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          otherUser: {
+            'id': recipientId,
+            'name': recipientId, // Will be updated when user data is loaded
+            'is_online': false,
+          },
+          lastMessage: {'text': content, 'id': messageId},
+          lastMessageAt: DateTime.now(),
+        );
+        _chats.add(newChat);
+        print('📱 SessionChatProvider: ✅ Added new chat to chat list');
+      }
+
+      // Notify listeners to update UI
+      notifyListeners();
+    } catch (e) {
+      print('📱 SessionChatProvider: ⚠️ Error updating chat list: $e');
     }
   }
 
@@ -1070,6 +1226,24 @@ class SessionChatProvider extends ChangeNotifier {
       }
     } catch (e) {
       print('📱 SessionChatProvider: 🧪 Error testing typing indicator: $e');
+    }
+  }
+
+  /// Send presence update to specific users
+  void sendPresenceUpdate(bool isOnline, List<String> toUserIds) {
+    try {
+      _socketService.sendPresence(isOnline, toUserIds);
+      print(
+          '📱 SessionChatProvider: ✅ Presence update sent: ${isOnline ? 'online' : 'offline'} to ${toUserIds.length} users');
+    } catch (e) {
+      print('📱 SessionChatProvider: ❌ Error sending presence update: $e');
+    }
+  }
+
+  /// Send presence update to current recipient
+  void sendPresenceToCurrentRecipient(bool isOnline) {
+    if (_currentRecipientId != null) {
+      sendPresenceUpdate(isOnline, [_currentRecipientId!]);
     }
   }
 }

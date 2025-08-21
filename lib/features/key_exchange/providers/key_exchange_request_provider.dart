@@ -2008,10 +2008,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       if (request.status == 'sent' || request.status == 'pending') {
         try {
           _socketService.sendMessage(
-            request.toSessionId,
-            'Key exchange request revoked',
             messageId:
                 'key_exchange_revoke_${DateTime.now().millisecondsSinceEpoch}',
+            recipientId: request.toSessionId,
+            body: 'Key exchange request revoked',
           );
           print(
               '🔑 KeyExchangeRequestProvider: ✅ Revoke notification sent to server');
