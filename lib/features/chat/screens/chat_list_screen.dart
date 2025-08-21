@@ -8,6 +8,7 @@ import '../widgets/chat_search_bar.dart';
 import '../../../shared/widgets/connection_status_widget.dart';
 import '../../../shared/widgets/key_exchange_request_dialog.dart';
 import '../screens/chat_screen.dart';
+import '../../../core/services/contact_service.dart';
 
 /// Main screen for displaying the list of chat conversations
 class ChatListScreen extends StatefulWidget {
@@ -343,33 +344,37 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   /// Build conversation list
   Widget _buildConversationList(ChatListProvider provider) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: RefreshIndicator(
-          onRefresh: () async {
-            await provider.refreshConversations();
-          },
-          child: ListView.builder(
-            padding:
-                const EdgeInsets.only(bottom: 24, left: 24, right: 24, top: 24),
-            itemCount: provider.filteredConversations.length,
-            itemBuilder: (context, index) {
-              final conversation = provider.filteredConversations[index];
-              final isLast = index == provider.filteredConversations.length - 1;
+    return Consumer2<ChatListProvider, ContactService>(
+      builder: (context, chatProvider, contactService, child) {
+        return FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await provider.refreshConversations();
+              },
+              child: ListView.builder(
+                padding:
+                    const EdgeInsets.only(bottom: 24, left: 24, right: 24, top: 24),
+                itemCount: provider.filteredConversations.length,
+                itemBuilder: (context, index) {
+                  final conversation = provider.filteredConversations[index];
+                  final isLast = index == provider.filteredConversations.length - 1;
 
-              return ChatListItem(
-                conversation: conversation,
-                onTap: () => _openChat(conversation),
-                onLongPress: () => _showConversationOptions(conversation),
-                onDelete: () => _deleteConversation(conversation),
-                isLast: isLast,
-              );
-            },
+                  return ChatListItem(
+                    conversation: conversation,
+                    onTap: () => _openChat(conversation),
+                    onLongPress: () => _showConversationOptions(conversation),
+                    onDelete: () => _deleteConversation(conversation),
+                    isLast: isLast,
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

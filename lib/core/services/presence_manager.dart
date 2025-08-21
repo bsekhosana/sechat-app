@@ -44,25 +44,13 @@ class PresenceManager extends ChangeNotifier {
     }
   }
 
-  /// Set up presence event listeners
+  /// Set up presence event listeners - REMOVED DUPLICATE CALLBACK
   void _setupPresenceListeners() {
     try {
-      // Listen for presence updates from other users
-      _socketService.setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
-        print(
-            '🟢 PresenceManager: 📡 Presence update received: $senderId -> ${isOnline ? 'online' : 'offline'}');
-
-        // Update contact presence in ContactService
-        if (lastSeen != null) {
-          final lastSeenTime = DateTime.parse(lastSeen);
-          _contactService.updateContactPresence(
-              senderId, isOnline, lastSeenTime);
-        } else {
-          final now = DateTime.now();
-          _contactService.updateContactPresence(senderId, isOnline, now);
-        }
-      });
-
+      // REMOVED: Direct callback to avoid conflict with main.dart
+      // Presence updates now handled through main.dart -> ContactService
+      print(
+          '🟢 PresenceManager: ℹ️ Presence updates handled via main.dart callback (no duplicate)');
       print('🟢 PresenceManager: ✅ Presence event listeners set up');
     } catch (e) {
       print('🟢 PresenceManager: ❌ Error setting up presence listeners: $e');
@@ -102,18 +90,54 @@ class PresenceManager extends ChangeNotifier {
       print(
           '🟢 PresenceManager: 🚀 Session registered, setting up presence system...');
 
-      // Step 1: Broadcast online status to all existing contacts
-      _socketService.broadcastPresenceToContacts();
-
-      // Step 2: Update local online status
+      // Step 1: Update local online status first
       _isOnline = true;
       _lastOnlineTime = DateTime.now();
 
-      print(
-          '🟢 PresenceManager: ✅ Online presence broadcasted to all contacts');
+      // Step 2: Broadcast online status to all existing contacts (only if we have contacts)
+      if (_contactService.contacts.isNotEmpty) {
+        _socketService.broadcastPresenceToContacts();
+        print(
+            '🟢 PresenceManager: ✅ Online presence broadcasted to ${_contactService.contacts.length} contacts');
+
+        // Step 3: Request current presence status for all contacts
+        _requestContactsPresenceStatus();
+      } else {
+        print('🟢 PresenceManager: ℹ️ No contacts to broadcast presence to');
+      }
+
       notifyListeners();
     } catch (e) {
       print('🟢 PresenceManager: ❌ Error in onSessionRegistered: $e');
+    }
+  }
+
+  /// Request presence status for all contacts - ENHANCED BIDIRECTIONAL
+  void _requestContactsPresenceStatus() {
+    try {
+      print(
+          '🟢 PresenceManager: 🔍 Requesting presence status for all contacts...');
+
+      final contactIds =
+          _contactService.contacts.map((c) => c.sessionId).toList();
+      if (contactIds.isNotEmpty) {
+        // Method 1: Send a presence request to get current status of all contacts
+        _socketService.requestPresenceStatus(contactIds);
+
+        // Method 2: Also send individual presence updates to trigger responses
+        // This ensures bidirectional presence even if server doesn't handle presence:request
+        for (final contactId in contactIds) {
+          _socketService.updatePresence(true, specificUsers: [contactId]);
+        }
+
+        print(
+            '🟢 PresenceManager: ✅ Presence status requested for ${contactIds.length} contacts (bidirectional)');
+      } else {
+        print('🟢 PresenceManager: ℹ️ No contacts to request presence for');
+      }
+    } catch (e) {
+      print(
+          '🟢 PresenceManager: ❌ Error requesting contacts presence status: $e');
     }
   }
 
@@ -127,10 +151,17 @@ class PresenceManager extends ChangeNotifier {
       // Add to local contact list
       await _contactService.addContact(contactSessionId, displayName);
 
-      // Broadcast your presence to the new contact
-      _socketService.updatePresence(true, specificUsers: [contactSessionId]);
+      // Only broadcast presence if we're currently online
+      if (_isOnline) {
+        _socketService.updatePresence(true, specificUsers: [contactSessionId]);
+        print(
+            '🟢 PresenceManager: ✅ Presence sent to new contact: $displayName');
+      } else {
+        print(
+            '🟢 PresenceManager: ℹ️ User offline, skipping presence broadcast to new contact');
+      }
 
-      print('🟢 PresenceManager: ✅ New contact added and presence broadcasted');
+      print('🟢 PresenceManager: ✅ New contact added successfully');
       notifyListeners();
     } catch (e) {
       print('🟢 PresenceManager: ❌ Error adding new contact: $e');
@@ -164,18 +195,49 @@ class PresenceManager extends ChangeNotifier {
       print(
           '🟢 PresenceManager: 📱 User coming online, broadcasting presence...');
 
-      // Broadcast online status to all contacts
-      _socketService.broadcastPresenceToContacts();
-
-      // Update local online status
+      // Update local online status first
       _isOnline = true;
       _lastOnlineTime = DateTime.now();
 
+      // Broadcast online status to all contacts
+      _socketService.broadcastPresenceToContacts();
+
+      // Also request current presence status of all contacts for bidirectional updates
+      _requestContactsPresenceStatus();
+
       print(
-          '🟢 PresenceManager: ✅ Online presence broadcasted to all contacts');
+          '🟢 PresenceManager: ✅ Online presence broadcasted and requested from all contacts');
       notifyListeners();
     } catch (e) {
       print('🟢 PresenceManager: ❌ Error in onUserComingOnline: $e');
+    }
+  }
+
+  /// Manually refresh presence status for all contacts
+  void refreshAllContactsPresence() {
+    try {
+      print(
+          '🟢 PresenceManager: 🔄 Manually refreshing all contacts presence...');
+      _requestContactsPresenceStatus();
+    } catch (e) {
+      print('🟢 PresenceManager: ❌ Error refreshing contacts presence: $e');
+    }
+  }
+
+  /// Force presence broadcast and request (for testing/debugging)
+  void forcePresenceSync() {
+    try {
+      print('🟢 PresenceManager: 🚀 Force presence sync initiated...');
+
+      // Step 1: Broadcast our presence to all contacts
+      _socketService.broadcastPresenceToContacts();
+
+      // Step 2: Request presence from all contacts
+      _requestContactsPresenceStatus();
+
+      print('🟢 PresenceManager: ✅ Force presence sync completed');
+    } catch (e) {
+      print('🟢 PresenceManager: ❌ Error in force presence sync: $e');
     }
   }
 
@@ -218,5 +280,29 @@ class PresenceManager extends ChangeNotifier {
   void dispose() {
     print('🟢 PresenceManager: 🗑️ Disposing manager...');
     super.dispose();
+  }
+
+  /// Sync presence with a newly added contact (2-way presence update)
+  Future<void> syncPresenceWithNewContact(String contactSessionId) async {
+    try {
+      print('🟢 PresenceManager: 🔄 Syncing presence with new contact: $contactSessionId');
+      
+      // Step 1: Broadcast our presence to the new contact
+      _socketService.updatePresence(true, specificUsers: [contactSessionId]);
+      print('🟢 PresenceManager: ✅ Our presence broadcasted to new contact: $contactSessionId');
+      
+      // Step 2: Request presence status from the new contact
+      _socketService.requestPresenceStatus([contactSessionId]);
+      print('🟢 PresenceManager: ✅ Presence status requested from new contact: $contactSessionId');
+      
+      // Step 3: Also send individual presence update to trigger response
+      _socketService.updatePresence(true, specificUsers: [contactSessionId]);
+      print('🟢 PresenceManager: ✅ Individual presence update sent to new contact: $contactSessionId');
+      
+      print('🟢 PresenceManager: ✅ 2-way presence sync completed for new contact: $contactSessionId');
+    } catch (e) {
+      print('🟢 PresenceManager: ❌ Error syncing presence with new contact: $contactSessionId: $e');
+      rethrow;
+    }
   }
 }

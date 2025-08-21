@@ -328,25 +328,32 @@ void _setupSocketCallbacks(SeSocketService socketService) {
   // Handle presence updates (online/offline status)
   socketService.setOnOnlineStatusUpdate((senderId, isOnline, lastSeen) {
     print(
-        '🔌 Main: Presence update received: $senderId -> ${isOnline ? 'online' : 'offline'}');
+        '🔌 Main: Presence update received: $senderId -> ${isOnline ? 'online' : 'offline'} (lastSeen: $lastSeen)');
 
     // Update ChatListProvider for chat list items
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
+        print('🔌 Main: 🔍 Starting presence update processing...');
+
         // Update ContactService for presence management
         try {
+          print('🔌 Main: 🔍 Attempting to get ContactService from context...');
           final contactService = Provider.of<ContactService>(
               navigatorKey.currentContext!,
               listen: false);
 
+          print('🔌 Main: ✅ ContactService obtained successfully');
           final lastSeenDateTime =
               lastSeen != null ? DateTime.parse(lastSeen) : DateTime.now();
+
+          print('🔌 Main: 🔍 Calling contactService.updateContactPresence...');
           contactService.updateContactPresence(
               senderId, isOnline, lastSeenDateTime);
           print(
-              '🔌 Main: ✅ Presence update sent to ContactService for: $senderId');
+              '🔌 Main: ✅ Presence update sent to ContactService for: $senderId -> ${isOnline ? 'online' : 'offline'}');
         } catch (e) {
-          print('🔌 Main: ⚠️ ContactService not available: $e');
+          print('🔌 Main: ❌ ContactService error: $e');
+          print('🔌 Main: 🔍 Stack trace: ${StackTrace.current}');
         }
 
         final chatListProvider = Provider.of<ChatListProvider>(
@@ -356,15 +363,25 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         // Update conversation online status
         chatListProvider.updateConversationOnlineStatus(
             senderId, isOnline, lastSeen);
+        print(
+            '🔌 Main: ✅ Conversation online status updated for: $senderId -> ${isOnline ? 'online' : 'offline'}');
 
         // Also notify SessionChatProvider if there's an active chat
         try {
+          print('🔌 Main: 🔍 Attempting to get SessionChatProvider...');
           final sessionChatProvider = Provider.of<SessionChatProvider>(
               navigatorKey.currentContext!,
               listen: false);
 
+          print('🔌 Main: ✅ SessionChatProvider obtained');
+          print(
+              '🔌 Main: 🔍 Current recipient ID: ${sessionChatProvider.currentRecipientId}');
+          print('🔌 Main: 🔍 Sender ID: $senderId');
+
           // If the sender is the current recipient, update their online state
           if (sessionChatProvider.currentRecipientId == senderId) {
+            print(
+                '🔌 Main: 🔄 Updating SessionChatProvider recipient status...');
             sessionChatProvider.updateRecipientStatus(
               recipientId: senderId,
               isOnline: isOnline,
@@ -372,20 +389,27 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             );
             print(
                 '🔌 Main: ✅ Presence update forwarded to SessionChatProvider for current recipient: $senderId');
+          } else {
+            print(
+                '🔌 Main: ℹ️ Sender is not current recipient, skipping SessionChatProvider update');
           }
         } catch (e) {
-          print('🔌 Main: ⚠️ SessionChatProvider not available: $e');
+          print('🔌 Main: ❌ SessionChatProvider error: $e');
+          print('🔌 Main: 🔍 Stack trace: ${StackTrace.current}');
         }
 
-        print('🔌 Main: ✅ Presence update processed successfully');
+        print(
+            '🔌 Main: ✅ Presence update processed successfully for: $senderId');
       } catch (e) {
         print('🔌 Main: ❌ Failed to process presence update: $e');
       }
     });
   });
 
-  socketService.setOnMessageStatusUpdate((senderId, messageId, status) {
-    print('🔌 Main: Message status update from socket: $messageId -> $status');
+  socketService.setOnMessageStatusUpdate(
+      (senderId, messageId, status, conversationId, recipientId) {
+    print(
+        '🔌 Main: Message status update from socket: $messageId -> $status (conversationId: $conversationId, recipientId: $recipientId)');
 
     // Update message status in ChatListProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -394,7 +418,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             navigatorKey.currentContext!,
             listen: false);
 
-        // Create a MessageStatusUpdate and process it
+        // Create a MessageStatusUpdate with enhanced data for better conversation lookup
         final statusUpdate = MessageStatusUpdate(
           messageId: messageId,
           status: _parseMessageStatus(status),
@@ -402,8 +426,11 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           senderId: senderId,
         );
 
-        chatListProvider.processMessageStatusUpdate(statusUpdate);
-        print('🔌 Main: ✅ Message status updated in ChatListProvider');
+        // Pass additional data for conversation lookup via a custom method
+        chatListProvider.processMessageStatusUpdateWithContext(statusUpdate,
+            conversationId: conversationId, recipientId: recipientId);
+        print(
+            '🔌 Main: ✅ Message status updated in ChatListProvider with enhanced lookup data');
       } catch (e) {
         print('🔌 Main: ❌ Failed to process message status update: $e');
       }

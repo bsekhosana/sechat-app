@@ -2012,6 +2012,8 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
                 'key_exchange_revoke_${DateTime.now().millisecondsSinceEpoch}',
             recipientId: request.toSessionId,
             body: 'Key exchange request revoked',
+            conversationId: request
+                .toSessionId, // CRITICAL: Use recipient's sessionId as conversationId
           );
           print(
               '🔑 KeyExchangeRequestProvider: ✅ Revoke notification sent to server');

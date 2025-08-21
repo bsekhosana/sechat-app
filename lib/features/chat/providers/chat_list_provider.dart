@@ -45,10 +45,25 @@ class ChatListProvider extends ChangeNotifier {
     _updateMessageStatus(update);
   }
 
+  /// Process message status update with additional context for better conversation lookup
+  void processMessageStatusUpdateWithContext(
+    MessageStatusUpdate update, {
+    String? conversationId,
+    String? recipientId,
+  }) {
+    _updateMessageStatusWithContext(update,
+        conversationId: conversationId, recipientId: recipientId);
+  }
+
   /// Update conversation online status from external source
   void updateConversationOnlineStatus(
       String userId, bool isOnline, String? lastSeen) {
     try {
+      print(
+          '📱 ChatListProvider: 🔍 Updating online status for user: $userId -> ${isOnline ? 'online' : 'offline'}');
+      print(
+          '📱 ChatListProvider: 🔍 Current conversations: ${_conversations.map((c) => '${c.id}:${c.isOnline}').join(', ')}');
+
       // Find conversation with this user and update online status
       final conversationIndex = _conversations.indexWhere(
         (conv) =>
@@ -56,8 +71,8 @@ class ChatListProvider extends ChangeNotifier {
       );
 
       if (conversationIndex != -1) {
-        final conversation = _conversations[conversationIndex];
-        final updatedConversation = conversation.copyWith(
+        final oldConversation = _conversations[conversationIndex];
+        final updatedConversation = oldConversation.copyWith(
           isOnline: isOnline,
           lastSeen: lastSeen != null ? DateTime.tryParse(lastSeen) : null,
         );
@@ -67,10 +82,14 @@ class ChatListProvider extends ChangeNotifier {
         notifyListeners();
 
         print(
-            '📱 ChatListProvider: ✅ Online status updated for conversation: ${conversation.id}');
+            '📱 ChatListProvider: ✅ Online status updated for conversation: ${oldConversation.id} (${oldConversation.displayName}) -> ${oldConversation.isOnline} -> $isOnline');
+        print(
+            '📱 ChatListProvider: 🔔 notifyListeners() called for presence update');
       } else {
         print(
             '📱 ChatListProvider: ⚠️ No conversation found for user: $userId');
+        print(
+            '📱 ChatListProvider: 🔍 Available conversations: ${_conversations.map((c) => '${c.id} (${c.displayName})').join(', ')}');
       }
     } catch (e) {
       print('📱 ChatListProvider: ❌ Error updating online status: $e');
@@ -654,20 +673,43 @@ class ChatListProvider extends ChangeNotifier {
     }
   }
 
-  /// Update message status for a conversation
+  /// Update message status for a conversation - FIXED conversation lookup
   void _updateMessageStatus(MessageStatusUpdate update) {
     try {
       print(
           '📱 ChatListProvider: Message status update received for message: ${update.messageId}');
 
-      // Find conversation by message ID
+      // CRITICAL FIX: Find conversation by multiple methods
       ChatConversation? conversation;
+
+      // Method 1: Try to find by lastMessageId (original method)
       try {
         conversation = _conversations.firstWhere(
           (conv) => conv.lastMessageId == update.messageId,
         );
+        print(
+            '📱 ChatListProvider: ✅ Found conversation by lastMessageId: ${conversation.id}');
       } catch (e) {
         conversation = null;
+        print('📱 ChatListProvider: ⚠️ No conversation found by lastMessageId');
+      }
+
+      // Method 2: If not found by lastMessageId, try to find by sender ID
+      if (conversation == null && update.senderId != null) {
+        try {
+          conversation = _conversations.firstWhere(
+            (conv) =>
+                conv.participant1Id == update.senderId ||
+                conv.participant2Id == update.senderId ||
+                conv.id ==
+                    update.senderId, // Conversation ID might be participant ID
+          );
+          print(
+              '📱 ChatListProvider: ✅ Found conversation by senderId: ${conversation.id}');
+        } catch (e) {
+          print(
+              '📱 ChatListProvider: ⚠️ No conversation found by senderId: ${update.senderId}');
+        }
       }
 
       if (conversation != null) {
@@ -700,9 +742,133 @@ class ChatListProvider extends ChangeNotifier {
       } else {
         print(
             '📱 ChatListProvider: ⚠️ No conversation found for message: ${update.messageId}');
+        print(
+            '📱 ChatListProvider: 🔍 Available conversations: ${_conversations.map((c) => '${c.id} (lastMsg: ${c.lastMessageId})').join(', ')}');
+        print(
+            '📱 ChatListProvider: 🔍 Update details: senderId=${update.senderId}');
       }
     } catch (e) {
       print('📱 ChatListProvider: ❌ Error updating message status: $e');
+    }
+  }
+
+  /// Update message status with additional context for better conversation lookup
+  void _updateMessageStatusWithContext(
+    MessageStatusUpdate update, {
+    String? conversationId,
+    String? recipientId,
+  }) {
+    try {
+      print(
+          '📱 ChatListProvider: Message status update with context for message: ${update.messageId}');
+      print(
+          '📱 ChatListProvider: 🔍 Context: conversationId=$conversationId, recipientId=$recipientId');
+
+      // ENHANCED LOOKUP: Use the additional context for better conversation finding
+      ChatConversation? conversation;
+
+      // Method 1: Try to find by conversationId from context (most reliable)
+      if (conversation == null && conversationId != null) {
+        try {
+          conversation = _conversations.firstWhere(
+            (conv) => conv.id == conversationId,
+          );
+          print(
+              '📱 ChatListProvider: ✅ Found conversation by context conversationId: ${conversation.id}');
+        } catch (e) {
+          print(
+              '📱 ChatListProvider: ⚠️ No conversation found by context conversationId: $conversationId');
+        }
+      }
+
+      // Method 2: Try to find by recipientId from context
+      if (conversation == null && recipientId != null) {
+        try {
+          conversation = _conversations.firstWhere(
+            (conv) =>
+                conv.participant1Id == recipientId ||
+                conv.participant2Id == recipientId ||
+                conv.id ==
+                    recipientId, // Conversation ID might be participant ID
+          );
+          print(
+              '📱 ChatListProvider: ✅ Found conversation by context recipientId: ${conversation.id}');
+        } catch (e) {
+          print(
+              '📱 ChatListProvider: ⚠️ No conversation found by context recipientId: $recipientId');
+        }
+      }
+
+      // Method 3: Fall back to lastMessageId (original method)
+      if (conversation == null) {
+        try {
+          conversation = _conversations.firstWhere(
+            (conv) => conv.lastMessageId == update.messageId,
+          );
+          print(
+              '📱 ChatListProvider: ✅ Found conversation by lastMessageId: ${conversation.id}');
+        } catch (e) {
+          print(
+              '📱 ChatListProvider: ⚠️ No conversation found by lastMessageId');
+        }
+      }
+
+      // Method 4: Try to find by senderId from update
+      if (conversation == null && update.senderId != null) {
+        try {
+          conversation = _conversations.firstWhere(
+            (conv) =>
+                conv.participant1Id == update.senderId ||
+                conv.participant2Id == update.senderId ||
+                conv.id ==
+                    update.senderId, // Conversation ID might be participant ID
+          );
+          print(
+              '📱 ChatListProvider: ✅ Found conversation by update senderId: ${conversation.id}');
+        } catch (e) {
+          print(
+              '📱 ChatListProvider: ⚠️ No conversation found by update senderId: ${update.senderId}');
+        }
+      }
+
+      if (conversation != null) {
+        // Update the conversation's last message status
+        final updatedConversation = conversation.copyWith(
+          updatedAt: DateTime.now(),
+          metadata: {
+            ...?conversation.metadata,
+            'last_message_status': update.status.toString().split('.').last,
+            'last_message_status_updated': update.timestamp.toIso8601String(),
+          },
+        );
+
+        // Update in storage
+        _storageService.saveConversation(updatedConversation);
+
+        // Update local state
+        final index =
+            _conversations.indexWhere((c) => c.id == conversation!.id);
+        if (index != -1) {
+          _conversations[index] = updatedConversation;
+        }
+
+        // Apply search filter and notify listeners
+        _applySearchFilter();
+        notifyListeners();
+
+        print(
+            '📱 ChatListProvider: ✅ Message status updated with context for conversation: ${conversation.id}');
+      } else {
+        print(
+            '📱 ChatListProvider: ⚠️ No conversation found for message with context: ${update.messageId}');
+        print(
+            '📱 ChatListProvider: 🔍 Available conversations: ${_conversations.map((c) => '${c.id} (lastMsg: ${c.lastMessageId})').join(', ')}');
+        print(
+            '📱 ChatListProvider: 🔍 Context details: conversationId=$conversationId, recipientId=$recipientId, senderId=${update.senderId}');
+      }
+    } catch (e) {
+      print(
+          '📱 ChatListProvider: ❌ Error updating message status with context: $e');
     }
   }
 
@@ -1363,16 +1529,13 @@ class ChatListProvider extends ChangeNotifier {
     }
   }
 
-  /// Setup online status callback
+  /// Setup online status callback - REMOVED DUPLICATE
   void _setupOnlineStatusCallback() {
     try {
-      // Set up online status callback from socket service
-      final socketService = SeSocketService.instance;
-      socketService.setOnOnlineStatusUpdate(
-        (senderId, isOnline, lastSeen) {
-          _handleOnlineStatusUpdate(senderId, isOnline, lastSeen);
-        },
-      );
+      // REMOVED: Direct callback to SeSocketService to avoid duplication
+      // Online status updates now come through main.dart -> updateConversationOnlineStatus
+      print(
+          '🔌 ChatListProvider: ℹ️ Online status updates handled via main.dart callback (no duplicate)');
       print('🔌 ChatListProvider: ✅ Online status callback setup complete');
     } catch (e) {
       print(

@@ -21,10 +21,13 @@ class ChatHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print(
+        '🔍 ChatHeader: Building with isOnline=$isOnline, recipientName=$recipientName');
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: Colors.white, // White background
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -40,7 +43,7 @@ class ChatHeader extends StatelessWidget {
             onPressed: onBackPressed,
             icon: Icon(
               Icons.arrow_back,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: Colors.grey[700], // Dark grey back button
             ),
             tooltip: 'Back',
           ),
@@ -59,7 +62,7 @@ class ChatHeader extends StatelessWidget {
                     recipientName.isNotEmpty ? recipientName : 'Unknown User',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurface,
+                          color: Colors.grey[800], // Dark grey name text
                         ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -79,7 +82,7 @@ class ChatHeader extends StatelessWidget {
             onPressed: onMorePressed,
             icon: Icon(
               Icons.more_vert,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: Colors.grey[700], // Dark grey more button
             ),
             tooltip: 'More options',
           ),
@@ -115,14 +118,14 @@ class ChatHeader extends StatelessWidget {
       return Text(
         'Last seen ${_formatLastSeen(lastSeen!)}',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: Colors.grey[600], // Light grey for offline/last seen
             ),
       );
     } else {
       return Text(
         'Offline',
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: Colors.grey[600], // Light grey for offline/last seen
             ),
       );
     }
@@ -234,13 +237,13 @@ class ChatHeader extends StatelessWidget {
             '$label: ',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w500,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: Colors.grey[600], // Light grey for info labels
                 ),
           ),
           Text(
             value,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
+                  color: Colors.grey[800], // Dark grey for info values
                 ),
           ),
         ],

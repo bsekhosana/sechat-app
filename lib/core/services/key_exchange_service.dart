@@ -5,6 +5,7 @@ import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:sechat_app/core/services/se_shared_preference_service.dart';
+import 'package:sechat_app/core/services/contact_service.dart';
 import 'package:sechat_app/features/chat/models/chat_conversation.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 import 'package:sechat_app/core/services/presence_manager.dart';
@@ -569,6 +570,8 @@ class KeyExchangeService {
         messageId: 'key_rotation_${DateTime.now().millisecondsSinceEpoch}',
         recipientId: contactId,
         body: 'Encryption keys have been updated',
+        conversationId:
+            contactId, // CRITICAL: Use recipient's sessionId as conversationId
       );
 
       print('🔑 KeyExchangeService: ✅ Key rotation notice sent to $contactId');
@@ -1072,6 +1075,24 @@ class KeyExchangeService {
             lastSeen: null,
           );
           _onConversationCreated!(conversation);
+        }
+
+        // CRITICAL: Trigger 2-way presence update with the new contact
+        try {
+          print('🔑 KeyExchangeService: 🔄 Triggering 2-way presence update with new contact: $senderId');
+          
+          // Add the new contact to our contact list
+          final contactService = ContactService.instance;
+          await contactService.addContact(senderId, userName);
+          
+          // Trigger presence sync with the new contact
+          final presenceManager = PresenceManager.instance;
+          // For now, just broadcast presence to the new contact
+          SeSocketService.instance.updatePresence(true, specificUsers: [senderId]);
+          
+          print('🔑 KeyExchangeService: ✅ 2-way presence update completed for new contact: $senderId');
+        } catch (e) {
+          print('🔑 KeyExchangeService: ⚠️ Failed to trigger presence update for new contact: $e');
         }
       } else {
         print('🔑 KeyExchangeService: ❌ Failed to create conversation locally');

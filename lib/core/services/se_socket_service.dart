@@ -166,6 +166,12 @@ class SeSocketService {
   Function(Map<String, dynamic> data)? onContactAdded;
   Function(Map<String, dynamic> data)? onContactRemoved;
   Function(Map<String, dynamic> data)? onSessionRegistered;
+  Function(
+      String senderId,
+      String messageId,
+      String status,
+      String? conversationId,
+      String? recipientId)? onMessageStatusUpdateExternal;
 
   Future<void> connect(String sessionId) async {
     // If instance was destroyed, reset it for new connection
@@ -539,19 +545,24 @@ class SeSocketService {
       }
     });
 
-    // Presence events
+    // Presence events - CONSOLIDATED FLOW
     _socket!.on('presence:update', (data) {
       print('🟢 SeSocketService: Presence update received');
       print('🟢 SeSocketService: 🔍 Presence data: $data');
 
+      // Call the main presence callback (mapped to onPresence via setOnOnlineStatusUpdate)
       if (onPresence != null) {
+        print(
+            '🟢 SeSocketService: 🔄 Calling onPresence callback (mapped from onOnlineStatusUpdate)');
         onPresence!(
           data['sessionId'] ?? '',
           data['isOnline'] ?? false,
           data['timestamp'] ?? '',
         );
+        print('🟢 SeSocketService: ✅ onPresence callback executed');
       } else {
-        print('🟢 SeSocketService: ⚠️ onPresence callback is null');
+        print(
+            '🟢 SeSocketService: ⚠️ onPresence callback is null - presence not processed!');
       }
     });
 
@@ -566,6 +577,62 @@ class SeSocketService {
         onContactAdded!(data);
       } else {
         print('🔗 SeSocketService: ⚠️ onContactAdded callback is null');
+      }
+    });
+
+    // Enhanced message status updates (silent)
+    _socket!.on('message:status_update', (data) {
+      final String messageId = data['messageId'];
+      final String status = data['status'];
+      final String recipientId = data['recipientId'];
+      final String? conversationId = data['conversationId'];
+      final String? fromUserId = data['fromUserId'];
+      final bool silent = data['silent'] ?? false;
+
+      print(
+          '📊 SeSocketService: Message status update: $messageId -> $status (silent: $silent, conversationId: $conversationId, recipientId: $recipientId)');
+
+      // Update local message status with enhanced data
+      _updateMessageStatus(messageId, status, recipientId,
+          conversationId: conversationId);
+
+      // Call the external callback with enhanced data
+      if (onMessageStatusUpdateExternal != null) {
+        onMessageStatusUpdateExternal!(
+          fromUserId ?? _sessionId ?? '',
+          messageId,
+          status,
+          conversationId,
+          recipientId,
+        );
+      }
+
+      // Notify listeners about status change (silent)
+      if (silent) {
+        _notifyMessageStatusChange(messageId, status, recipientId);
+      }
+    });
+
+    // Enhanced typing status updates (silent)
+    _socket!.on('typing:status_update', (data) {
+      final String fromUserId = data['fromUserId'];
+      final String recipientId = data['recipientId'];
+      final bool isTyping = data['isTyping'];
+      final bool delivered = data['delivered'];
+      final bool autoStopped = data['autoStopped'] ?? false;
+      final bool silent = data['silent'] ?? false;
+
+      print(
+          '⌨️ SeSocketService: Typing status update: $fromUserId -> $recipientId (delivered: $delivered, autoStopped: $autoStopped)');
+
+      // Update local typing status
+      _updateTypingStatus(
+          fromUserId, recipientId, isTyping, delivered, autoStopped);
+
+      // Notify listeners about typing status change (silent)
+      if (silent) {
+        _notifyTypingStatusChange(
+            fromUserId, recipientId, isTyping, delivered, autoStopped);
       }
     });
 
@@ -753,21 +820,46 @@ class SeSocketService {
     }
 
     try {
-      // Use recipientId as conversationId for simplicity
+      // CRITICAL FIX: conversationId MUST be the recipient's sessionId according to API docs
       final actualConversationId = conversationId == 'default_conversation'
           ? recipientId
           : conversationId;
 
+      // Validate that we're using the correct conversationId
+      if (actualConversationId == _sessionId) {
+        print(
+            '🔌 SeSocketService: ❌ ERROR: conversationId cannot be sender\'s sessionId for typing!');
+        print(
+            '🔌 SeSocketService: 🔍 Sender: $_sessionId, Recipient: $recipientId');
+        print(
+            '🔌 SeSocketService: 🔍 conversationId must be recipient\'s sessionId for typing delivery');
+        return;
+      }
+
       final payload = {
         'fromUserId': _sessionId,
-        'conversationId': actualConversationId, // Use recipient's sessionId
+        'conversationId': actualConversationId, // MUST be recipient's sessionId
         'isTyping': isTyping,
         'timestamp': DateTime.now().toIso8601String(),
       };
 
+      // Track typing status locally
+      final key = '$_sessionId->$recipientId';
+      _typingStatuses[key] = {
+        'isTyping': isTyping,
+        'delivered': false,
+        'autoStopped': false,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      print(
+          '⌨️ SeSocketService: Typing status tracked: $key -> ${isTyping ? 'typing' : 'stopped'}');
+
       print(
           '🔌 SeSocketService: ⌨️ Sending typing indicator: ${isTyping ? 'started' : 'stopped'} to $recipientId');
       print('🔌 SeSocketService: 🔍 Payload: $payload');
+      print(
+          '🔌 SeSocketService: 🔍 conversationId (recipient): $actualConversationId');
+      print('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
 
       _socket!.emit('typing:update', payload);
       print('🔌 SeSocketService: ✅ Typing indicator sent successfully');
@@ -791,20 +883,39 @@ class SeSocketService {
     }
 
     try {
-      // Use recipientId as conversationId for simplicity
+      // CRITICAL FIX: conversationId MUST be the recipient's sessionId according to API docs
+      // The server expects conversationId to be the recipient's sessionId for message delivery
       final actualConversationId = conversationId ?? recipientId;
+
+      // Validate that we're using the correct conversationId
+      if (actualConversationId == _sessionId) {
+        print(
+            '🔌 SeSocketService: ❌ ERROR: conversationId cannot be sender\'s sessionId!');
+        print(
+            '🔌 SeSocketService: 🔍 Sender: $_sessionId, Recipient: $recipientId');
+        print(
+            '🔌 SeSocketService: 🔍 conversationId must be recipient\'s sessionId for message delivery');
+        return;
+      }
 
       final payload = {
         'messageId': messageId,
         'fromUserId': _sessionId,
-        'conversationId': actualConversationId, // Use recipient's sessionId
+        'conversationId': actualConversationId, // MUST be recipient's sessionId
         'body': body,
         'timestamp': DateTime.now().toIso8601String(),
       };
 
+      // Track message locally for status updates
+      _messageStatuses[messageId] = 'sent';
+      print('📊 SeSocketService: Message status tracked: $messageId -> sent');
+
       print(
           '🔌 SeSocketService: 📤 Sending message: $messageId to $recipientId');
       print('🔌 SeSocketService: 🔍 Payload: $payload');
+      print(
+          '🔌 SeSocketService: 🔍 conversationId (recipient): $actualConversationId');
+      print('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
 
       _socket!.emit('message:send', payload);
       print('🔌 SeSocketService: ✅ Message sent successfully');
@@ -989,16 +1100,21 @@ class SeSocketService {
     }
   }
 
-  // Additional callback methods needed by main.dart
+  // Additional callback methods needed by main.dart - ENHANCED with additional context
   void setOnMessageStatusUpdate(
-      Function(String senderId, String messageId, String status)? callback) {
-    // Map to the appropriate existing callback
+      Function(String senderId, String messageId, String status,
+              String? conversationId, String? recipientId)?
+          callback) {
+    // Set the external callback for enhanced message status updates
+    onMessageStatusUpdateExternal = callback;
+
+    // Also map to the existing callbacks for backward compatibility
     if (callback != null) {
       onDelivered = (messageId, fromUserId, toUserId) {
-        callback(fromUserId, messageId, 'delivered');
+        callback(fromUserId, messageId, 'delivered', toUserId, toUserId);
       };
       onRead = (messageId, fromUserId, toUserId) {
-        callback(fromUserId, messageId, 'read');
+        callback(fromUserId, messageId, 'read', toUserId, toUserId);
       };
     }
   }
@@ -1720,5 +1836,81 @@ class SeSocketService {
       print(
           '📡 SeSocketService: ❌ Cannot send presence update - not connected or no session');
     }
+  }
+
+  /// Request presence status for specific contacts
+  void requestPresenceStatus(List<String> contactIds) {
+    if (_socket != null && _sessionId != null && isConnected) {
+      try {
+        final payload = {
+          'requesterId': _sessionId,
+          'contactIds': contactIds,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+
+        _socket!.emit('presence:request', payload);
+
+        print(
+            '🔌 SeSocketService: ✅ Presence status requested for ${contactIds.length} contacts');
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Error requesting presence status: $e');
+        _scheduleReconnect();
+      }
+    } else {
+      print(
+          '🔌 SeSocketService: ❌ Cannot request presence status - socket not connected');
+    }
+  }
+
+  // Enhanced status tracking fields
+  final Map<String, String> _messageStatuses = {};
+  final Map<String, Map<String, dynamic>> _typingStatuses = {};
+
+  // Helper methods for status updates
+  void _updateMessageStatus(String messageId, String status, String recipientId,
+      {String? conversationId}) {
+    _messageStatuses[messageId] = status;
+    print(
+        '📊 SeSocketService: Message status updated: $messageId -> $status (conversationId: $conversationId)');
+  }
+
+  void _updateTypingStatus(String fromUserId, String recipientId, bool isTyping,
+      bool delivered, bool autoStopped) {
+    final key = '$fromUserId->$recipientId';
+    _typingStatuses[key] = {
+      'isTyping': isTyping,
+      'delivered': delivered,
+      'autoStopped': autoStopped,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    print(
+        '⌨️ SeSocketService: Typing status updated: $key -> delivered: $delivered, autoStopped: $autoStopped');
+  }
+
+  // Status getters
+  String getMessageStatus(String messageId) {
+    return _messageStatuses[messageId] ?? 'sent';
+  }
+
+  Map<String, dynamic>? getTypingStatus(String fromUserId, String recipientId) {
+    final key = '$fromUserId->$recipientId';
+    return _typingStatuses[key];
+  }
+
+  // Notify listeners (implement these based on your notification system)
+  void _notifyMessageStatusChange(
+      String messageId, String status, String recipientId) {
+    print(
+        '📊 SeSocketService: Notifying message status change: $messageId -> $status');
+    // TODO: Implement notification system for message status changes
+    // This should update the UI without showing user notifications
+  }
+
+  void _notifyTypingStatusChange(String fromUserId, String recipientId,
+      bool isTyping, bool delivered, bool autoStopped) {
+    print(
+        '⌨️ SeSocketService: Notifying typing status change: $fromUserId -> $recipientId (delivered: $delivered)');
+    // TODO: Implement notification system for typing status changes
+    // This should update the UI without showing user notifications
   }
 }

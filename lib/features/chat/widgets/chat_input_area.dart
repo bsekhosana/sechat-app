@@ -77,7 +77,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: Colors.white, // White background
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -111,13 +111,10 @@ class _ChatInputAreaState extends State<ChatInputArea> {
   Widget _buildTextInputField() {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withOpacity(0.3),
+        color: Colors.grey[100], // Light grey input background
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+          color: Colors.grey[300]!, // Light grey border
         ),
       ),
       child: TextField(
@@ -128,8 +125,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
         decoration: InputDecoration(
           hintText: 'Type a message...',
           hintStyle: TextStyle(
-            color:
-                Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6),
+            color: Colors.grey[500], // Light grey hint text
           ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
@@ -157,8 +153,8 @@ class _ChatInputAreaState extends State<ChatInputArea> {
         icon: Icon(
           Icons.send,
           color: hasText.value
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.3),
+              ? Theme.of(context).colorScheme.primary // Keep orange when active
+              : Colors.grey[400], // Grey when inactive
         ),
         tooltip: 'Send message',
       ),

@@ -87,19 +87,13 @@ class MessageBubble extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .onSurfaceVariant
-                .withOpacity(0.05),
+            color: Colors.grey[100], // Light grey background for timestamp
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             _formatTimestamp(message.timestamp),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurfaceVariant
-                      .withOpacity(0.6),
+                  color: Colors.grey[600], // Light grey text for timestamp
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),
@@ -123,15 +117,15 @@ class MessageBubble extends StatelessWidget {
     switch (message.status) {
       case MessageStatus.sending:
         icon = Icons.schedule;
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4);
+        color = Colors.grey[500]!; // Grey for sending
         break;
       case MessageStatus.sent:
         icon = Icons.check; // Single tick
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6);
+        color = Colors.grey[500]!; // Grey for sent
         break;
       case MessageStatus.delivered:
         icon = Icons.done_all; // Double ticks
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.6);
+        color = Colors.grey[500]!; // Grey for delivered
         break;
       case MessageStatus.read:
         icon = Icons.done_all; // Double blue ticks
@@ -144,14 +138,14 @@ class MessageBubble extends StatelessWidget {
         break;
       case MessageStatus.deleted:
         icon = Icons.delete_outline;
-        color = Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4);
+        color = Colors.grey[400]!; // Grey for deleted
         break;
     }
 
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: Colors.grey[50], // Very light grey background
         borderRadius: BorderRadius.circular(6),
       ),
       child: Icon(

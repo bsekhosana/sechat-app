@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../../shared/models/contact.dart';
 import 'se_socket_service.dart';
+import '../../features/chat/services/message_storage_service.dart';
 
 /// Service for managing user contacts and their presence status
 class ContactService extends ChangeNotifier {
@@ -22,8 +23,17 @@ class ContactService extends ChangeNotifier {
   /// Get a specific contact by session ID
   Contact? getContact(String sessionId) {
     try {
-      return _contacts.firstWhere((contact) => contact.sessionId == sessionId);
+      print(
+          '📱 ContactService: 🔍 Looking for contact: $sessionId in ${_contacts.length} contacts');
+      print(
+          '📱 ContactService: 🔍 Available contacts: ${_contacts.map((c) => c.sessionId).join(', ')}');
+      final contact =
+          _contacts.firstWhere((contact) => contact.sessionId == sessionId);
+      print(
+          '📱 ContactService: ✅ Found contact: ${contact.sessionId} (${contact.isOnline ? 'online' : 'offline'})');
+      return contact;
     } catch (e) {
+      print('📱 ContactService: ⚠️ Contact not found: $sessionId');
       return null;
     }
   }
@@ -94,20 +104,48 @@ class ContactService extends ChangeNotifier {
   void updateContactPresence(
       String sessionId, bool isOnline, DateTime lastSeen) {
     try {
+      print(
+          '📱 ContactService: 🔍 Attempting to update presence for: $sessionId (${isOnline ? 'online' : 'offline'})');
+      print(
+          '📱 ContactService: 🔍 Current contacts: ${_contacts.map((c) => '${c.sessionId}:${c.isOnline}').join(', ')}');
+
       final index = _contacts.indexWhere((c) => c.sessionId == sessionId);
       if (index != -1) {
-        final contact = _contacts[index];
-        _contacts[index] = contact.copyWith(
+        final oldContact = _contacts[index];
+        _contacts[index] = oldContact.copyWith(
           isOnline: isOnline,
           lastSeen: lastSeen,
         );
 
         print(
-            '📱 ContactService: ✅ Presence updated for $sessionId: ${isOnline ? 'online' : 'offline'}');
+            '📱 ContactService: ✅ Presence updated for $sessionId: ${oldContact.isOnline} -> $isOnline');
         notifyListeners();
+        print(
+            '📱 ContactService: 🔔 notifyListeners() called for presence update');
       } else {
         print(
             '📱 ContactService: ⚠️ Contact not found for presence update: $sessionId');
+        print(
+            '📱 ContactService: 🔍 Available contacts: ${_contacts.map((c) => c.sessionId).join(', ')}');
+
+        // Auto-add contact if it doesn't exist but we're receiving presence updates
+        // This can happen when conversations exist but contacts weren't properly added
+        print('📱 ContactService: 🔧 Auto-adding contact for presence update');
+        final newContact = Contact(
+          sessionId: sessionId,
+          displayName:
+              sessionId, // Will be updated later when we get proper display name
+          isOnline: isOnline,
+          lastSeen: lastSeen,
+          createdAt: DateTime.now(),
+        );
+        _contacts.add(newContact);
+        _saveContacts(); // Save to persistence
+
+        print(
+            '📱 ContactService: ✅ Auto-added contact for presence: $sessionId');
+        notifyListeners();
+        print('📱 ContactService: 🔔 notifyListeners() called for auto-add');
       }
     } catch (e) {
       print('📱 ContactService: ❌ Error updating contact presence: $e');
@@ -213,10 +251,69 @@ class ContactService extends ChangeNotifier {
       // Load existing contacts from storage
       await loadContacts();
 
+      // CRITICAL: Sync contacts from existing conversations
+      // This ensures we have contacts for presence requests even on fresh login
+      await _syncContactsFromConversations();
+
       print(
           '📱 ContactService: ✅ Initialized successfully with ${_contacts.length} contacts');
     } catch (e) {
       print('📱 ContactService: ❌ Failed to initialize: $e');
+    }
+  }
+
+  /// Sync contacts from existing conversations to ensure presence works
+  Future<void> _syncContactsFromConversations() async {
+    try {
+      print(
+          '📱 ContactService: 🔄 Syncing contacts from existing conversations...');
+
+      // Import MessageStorageService to get existing conversations
+      // This ensures we have contacts even if they weren't properly added before
+      try {
+        // Get existing conversations from MessageStorageService
+        // We'll create contacts for each conversation participant
+        final messageStorageService = MessageStorageService.instance;
+        final conversations = await messageStorageService.getConversations();
+
+        print(
+            '📱 ContactService: 🔍 Found ${conversations.length} existing conversations');
+
+        for (final conversation in conversations) {
+          final conversationId = conversation.id;
+          if (conversationId.isNotEmpty && !isContact(conversationId)) {
+            print(
+                '📱 ContactService: 🔧 Creating contact from conversation: $conversationId');
+
+            // Create contact from conversation
+            final contact = Contact(
+              sessionId: conversationId,
+              displayName: conversation.getDisplayName(
+                  conversationId), // Pass conversationId as currentUserId
+              lastSeen: DateTime.now().subtract(
+                  const Duration(minutes: 5)), // Assume offline initially
+              createdAt: DateTime.now(),
+            );
+
+            _contacts.add(contact);
+            print(
+                '📱 ContactService: ✅ Contact created from conversation: ${contact.displayName}');
+          }
+        }
+
+        // Save the new contacts
+        if (conversations.isNotEmpty) {
+          await _saveContacts();
+          print(
+              '📱 ContactService: ✅ Synced ${conversations.length} contacts from conversations');
+        }
+      } catch (e) {
+        print('📱 ContactService: ⚠️ Could not sync from conversations: $e');
+        // This is not critical - we can still function without it
+      }
+    } catch (e) {
+      print(
+          '📱 ContactService: ❌ Error syncing contacts from conversations: $e');
     }
   }
 

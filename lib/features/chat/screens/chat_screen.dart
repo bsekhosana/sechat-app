@@ -109,7 +109,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.white, // White background
       body: GestureDetector(
         onTap: () {
           // Auto-close keyboard when tapping outside input field
@@ -190,7 +190,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             Text(
               'Loading messages...',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: Colors.grey[700], // Dark grey text
                     fontWeight: FontWeight.w500,
                   ),
             ),
@@ -224,7 +224,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             Text(
               'No messages yet',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: Colors.grey[800], // Dark grey text
                     fontWeight: FontWeight.w600,
                   ),
             ),
@@ -232,7 +232,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             Text(
               'Start the conversation by sending a message!',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: Colors.grey[600], // Light grey text
                     height: 1.4,
                   ),
               textAlign: TextAlign.center,
@@ -341,7 +341,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _showChatOptions(SessionChatProvider provider) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.white, // White background
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -411,7 +411,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       title: Text(
         title,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface,
+              color: Colors.grey[700], // Dark grey text
             ),
       ),
       onTap: onTap,
@@ -423,11 +423,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.white, // White background
         title: Text(
           'Search Messages',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
+            color: Colors.grey[800], // Dark grey text
           ),
         ),
         content: Column(
@@ -476,17 +476,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.white, // White background
         title: Text(
           'Delete Chat?',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
+            color: Colors.grey[800], // Dark grey text
           ),
         ),
         content: Text(
           'This will permanently delete this chat conversation. This action cannot be undone.',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: Colors.grey[600], // Light grey text
           ),
         ),
         actions: [
@@ -523,17 +523,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.white, // White background
         title: Text(
           'Delete Conversation?',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
+            color: Colors.grey[800], // Dark grey text
           ),
         ),
         content: Text(
           'This will permanently delete this conversation and all its messages. This action cannot be undone.',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: Colors.grey[600], // Light grey text
           ),
         ),
         actions: [
@@ -570,17 +570,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.white, // White background
         title: Text(
           'Delete chat?',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
+            color: Colors.grey[800], // Dark grey text
           ),
         ),
         content: Text(
           'This will permanently delete all messages in this conversation. This action cannot be undone.',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: Colors.grey[600], // Light grey text
           ),
         ),
         actions: [
@@ -614,7 +614,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _showMessageOptions(Message message, SessionChatProvider provider) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.white, // White background
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -691,7 +691,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       title: Text(
         title,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface,
+              color: Colors.grey[700], // Dark grey text
             ),
       ),
       onTap: onTap,
@@ -727,17 +727,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.white, // White background
         title: Text(
           'Forward Message',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
+            color: Colors.grey[800], // Dark grey text
           ),
         ),
         content: Text(
           'Forward functionality will be implemented in future updates',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: Colors.grey[600], // Light grey text
           ),
         ),
         actions: [
@@ -800,17 +800,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: Colors.white, // White background
         title: Text(
           'Delete message?',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface,
+            color: Colors.grey[800], // Dark grey text
           ),
         ),
         content: Text(
           'This message will be permanently deleted. This action cannot be undone.',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: Colors.grey[600], // Light grey text
           ),
         ),
         actions: [

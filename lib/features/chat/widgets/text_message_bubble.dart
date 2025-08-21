@@ -32,8 +32,10 @@ class TextMessageBubble extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: isFromCurrentUser
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
+              ? Theme.of(context)
+                  .colorScheme
+                  .primary // Keep orange for current user
+              : Colors.grey[100], // Light grey for received messages
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
@@ -63,8 +65,9 @@ class TextMessageBubble extends StatelessWidget {
               text,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: isFromCurrentUser
-                        ? Theme.of(context).colorScheme.onPrimary
-                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                        ? Colors.white // White text on orange background
+                        : Colors
+                            .grey[800], // Dark grey text on light background
                     height: 1.5,
                     fontSize: 15,
                   ),
@@ -84,13 +87,13 @@ class TextMessageBubble extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isFromCurrentUser
-            ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.15)
-            : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.1),
+            ? Colors.white.withOpacity(0.15)
+            : Colors.grey[200], // Light grey for reply background
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isFromCurrentUser
-              ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.25)
-              : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.2),
+              ? Colors.white.withOpacity(0.25)
+              : Colors.grey[300]!, // Grey border for reply
           width: 1,
         ),
       ),
@@ -101,11 +104,8 @@ class TextMessageBubble extends StatelessWidget {
             Icons.reply,
             size: 16,
             color: isFromCurrentUser
-                ? Theme.of(context).colorScheme.onPrimary.withOpacity(0.8)
-                : Theme.of(context)
-                    .colorScheme
-                    .onSurfaceVariant
-                    .withOpacity(0.7),
+                ? Colors.white.withOpacity(0.8)
+                : Colors.grey[600], // Grey for reply icon
           ),
           const SizedBox(width: 6),
           // Reply text
@@ -114,14 +114,8 @@ class TextMessageBubble extends StatelessWidget {
               replyText,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: isFromCurrentUser
-                        ? Theme.of(context)
-                            .colorScheme
-                            .onPrimary
-                            .withOpacity(0.8)
-                        : Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant
-                            .withOpacity(0.7),
+                        ? Colors.white.withOpacity(0.8)
+                        : Colors.grey[600], // Grey for reply text
                     fontSize: 13,
                     height: 1.3,
                   ),

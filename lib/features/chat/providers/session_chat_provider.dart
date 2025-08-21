@@ -47,7 +47,12 @@ class SessionChatProvider extends ChangeNotifier {
   List<Message> get messages => _messages;
   bool get isRecipientTyping => _isRecipientTyping;
   DateTime? get recipientLastSeen => _recipientLastSeen;
-  bool get isRecipientOnline => _isRecipientOnline;
+  bool get isRecipientOnline {
+    print(
+        '🔍 SessionChatProvider: isRecipientOnline getter called: $_isRecipientOnline (recipient: $_currentRecipientId)');
+    return _isRecipientOnline;
+  }
+
   String? get currentRecipientName => _currentRecipientName;
   String? get currentRecipientId => _currentRecipientId;
 
@@ -108,11 +113,23 @@ class SessionChatProvider extends ChangeNotifier {
     required bool isOnline,
     DateTime? lastSeen,
   }) {
+    print(
+        '🔌 SessionChatProvider: 🔍 updateRecipientStatus called: $recipientId -> $isOnline');
+    print(
+        '🔌 SessionChatProvider: 🔍 Current recipient ID: $_currentRecipientId');
+
     if (_currentRecipientId == recipientId) {
+      final oldStatus = _isRecipientOnline;
       _isRecipientOnline = isOnline;
       _recipientLastSeen = lastSeen;
       notifyListeners();
-      print('🔌 SessionChatProvider: ✅ Recipient status updated: $isOnline');
+      print(
+          '🔌 SessionChatProvider: ✅ Recipient status updated: $oldStatus -> $isOnline');
+      print(
+          '🔌 SessionChatProvider: 🔔 notifyListeners() called for presence update');
+    } else {
+      print(
+          '🔌 SessionChatProvider: ⚠️ Recipient ID mismatch: expected $_currentRecipientId, got $recipientId');
     }
   }
 
@@ -401,7 +418,7 @@ class SessionChatProvider extends ChangeNotifier {
         print('📱 SessionChatProvider: ⚠️ Error updating chat list: $e');
       }
 
-      // Send message via socket service
+      // Send message via socket service with connectivity guard
       if (_socketService.isConnected) {
         _socketService.sendMessage(
           messageId: messageId,

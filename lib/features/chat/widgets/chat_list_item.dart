@@ -39,11 +39,19 @@ class ChatListItem extends StatelessWidget {
         // Get real-time presence information from ContactService
         final otherParticipantId =
             conversation.getOtherParticipantId(currentUserId);
+        print(
+            '🔍 ChatListItem: Other participant ID: $otherParticipantId for conversation: ${conversation.id}');
+
         final contact = otherParticipantId != null
             ? contactService.getContact(otherParticipantId)
             : null;
+        print(
+            '🔍 ChatListItem: Contact found: ${contact != null ? '${contact!.sessionId}:${contact.isOnline}' : 'null'}');
+
         final isOnline = contact?.isOnline ?? conversation.isOnline;
         final lastSeen = contact?.lastSeen ?? conversation.lastSeen;
+        print(
+            '🔍 ChatListItem: Final presence: isOnline=$isOnline (contact: ${contact?.isOnline}, conversation: ${conversation.isOnline})');
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
