@@ -87,6 +87,36 @@ class ChatListProvider extends ChangeNotifier {
   int get totalUnreadCount =>
       _conversations.fold(0, (sum, conv) => sum + conv.unreadCount);
 
+  /// Clear all data and reset provider state (used when account is deleted)
+  void clearAllData() {
+    try {
+      print(
+          '📱 ChatListProvider: 🗑️ Clearing all data and resetting state...');
+
+      // Clear all conversations
+      _conversations.clear();
+      _filteredConversations.clear();
+
+      // Reset search and state
+      _searchQuery = '';
+      _isLoading = false;
+      _hasError = false;
+      _errorMessage = null;
+      _isInitialized = false;
+
+      // Clear realtime services
+      _presenceService = null;
+      _onOnlineStatusChanged = null;
+
+      // Notify listeners
+      notifyListeners();
+
+      print('📱 ChatListProvider: ✅ All data cleared and state reset');
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error clearing data: $e');
+    }
+  }
+
   /// Initialize the provider
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -308,11 +338,73 @@ class ChatListProvider extends ChangeNotifier {
     }
   }
 
+  /// Handle user data exchange to update conversation display names
+  void handleUserDataExchange(String senderId, String displayName) {
+    try {
+      // Find conversation by participant ID
+      final index = _conversations.indexWhere((conv) =>
+          conv.participant1Id == senderId || conv.participant2Id == senderId);
+
+      if (index != -1) {
+        final conversation = _conversations[index];
+        final updatedConversation = conversation.copyWith(
+          displayName: displayName,
+          updatedAt: DateTime.now(),
+        );
+
+        _conversations[index] = updatedConversation;
+
+        // Update in storage
+        _storageService.saveConversation(updatedConversation);
+
+        _applySearchFilter();
+        notifyListeners();
+
+        print(
+            '🔌 ChatListProvider: ✅ Updated conversation display name: $senderId -> $displayName');
+      } else {
+        print(
+            '🔌 ChatListProvider: ⚠️ No conversation found for user data exchange: $senderId');
+      }
+    } catch (e) {
+      print('🔌 ChatListProvider: ❌ Error handling user data exchange: $e');
+    }
+  }
+
+  /// Update conversation display name when user data becomes available
+  void updateConversationDisplayName(
+      String conversationId, String displayName) {
+    try {
+      final index =
+          _conversations.indexWhere((conv) => conv.id == conversationId);
+      if (index != -1) {
+        final conversation = _conversations[index];
+        final updatedConversation = conversation.copyWith(
+          displayName: displayName,
+          updatedAt: DateTime.now(),
+        );
+
+        _conversations[index] = updatedConversation;
+        _applySearchFilter();
+        notifyListeners();
+
+        print(
+            '🔌 ChatListProvider: ✅ Updated display name for conversation: $conversationId -> $displayName');
+      } else {
+        print(
+            '🔌 ChatListProvider: ⚠️ No conversation found to update display name: $conversationId');
+      }
+    } catch (e) {
+      print(
+          '🔌 ChatListProvider: ❌ Error updating conversation display name: $e');
+    }
+  }
+
   /// Setup conversation creation listener
   void _setupConversationCreationListener() {
     try {
       final socketService = SeSocketService.instance;
-      socketService.setOnConversationCreated((conversationData) {
+      socketService.setOnConversationCreated((conversationData) async {
         print(
             '🔌 ChatListProvider: 🆕 New conversation created: ${conversationData['conversation_id_local'] ?? 'unknown'}');
 
@@ -320,14 +412,52 @@ class ChatListProvider extends ChangeNotifier {
         try {
           final currentUserId = SeSessionService().currentSessionId;
           if (currentUserId != null) {
+            // Use the senderId (other user) as the conversation ID
+            final senderId = conversationData['senderId'] ?? '';
+            final conversationId =
+                senderId; // Use sender's ID as conversation ID
+
+            // Create a basic conversation - the display name will be updated when user data is available
             final conversation = ChatConversation(
-              id: conversationData['conversation_id_local'] ??
-                  const Uuid().v4(),
+              id: conversationId,
               participant1Id: currentUserId,
-              participant2Id: conversationData['senderId'] ?? '',
+              participant2Id: senderId,
+              displayName:
+                  'User ${senderId.substring(0, 8)}...', // Temporary readable name
               createdAt: DateTime.now(),
               updatedAt: DateTime.now(),
+              lastMessageAt: null,
+              lastMessageId: null,
+              lastMessagePreview: null,
+              lastMessageType: null,
+              unreadCount: 0,
+              isArchived: false,
+              isMuted: false,
+              isPinned: false,
+              metadata: null,
+              lastSeen: null,
+              isOnline: false,
+              isTyping: false,
+              typingStartedAt: null,
+              notificationsEnabled: true,
+              soundEnabled: true,
+              vibrationEnabled: true,
+              readReceiptsEnabled: true,
+              typingIndicatorsEnabled: true,
+              lastSeenEnabled: true,
             );
+
+            // CRITICAL: Save conversation to database so it persists after refresh
+            try {
+              await MessageStorageService.instance
+                  .saveConversation(conversation);
+              print(
+                  '🔌 ChatListProvider: ✅ Conversation saved to database: $conversationId');
+            } catch (e) {
+              print(
+                  '🔌 ChatListProvider: ❌ Failed to save conversation to database: $e');
+            }
+
             _addNewConversation(conversation);
             print(
                 '🔌 ChatListProvider: ✅ Conversation created and added: ${conversation.id}');
@@ -486,6 +616,10 @@ class ChatListProvider extends ChangeNotifier {
       // Check if conversation already exists
       if (!_conversations.any((conv) => conv.id == conversation.id)) {
         _conversations.add(conversation);
+
+        // Note: Conversation is already saved to database in the callback
+        // No need to save again here to avoid duplicate operations
+
         _applySearchFilter();
         notifyListeners();
         print(
@@ -1023,6 +1157,7 @@ class ChatListProvider extends ChangeNotifier {
           isPinned: false,
           metadata: null,
           lastSeen: null,
+          isOnline: false,
           isTyping: false,
           typingStartedAt: null,
           notificationsEnabled: true,
@@ -1098,6 +1233,7 @@ class ChatListProvider extends ChangeNotifier {
         isPinned: false,
         metadata: null,
         lastSeen: null,
+        isOnline: false,
         isTyping: false,
         typingStartedAt: null,
         notificationsEnabled: true,

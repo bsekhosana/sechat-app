@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:sechat_app/core/services/encryption_service.dart';
+import 'package:sechat_app/core/services/se_session_service.dart'; // Added import for SeSessionService
+import 'package:sechat_app/core/services/key_exchange_service.dart'; // Added import for KeyExchangeService
 
 class SeSocketService {
   SeSocketService._();
@@ -58,7 +62,43 @@ class SeSocketService {
   // Method to reset the service for new connections
   static void resetForNewConnection() {
     print('🔌 SeSocketService: 🔄 Resetting service for new connection...');
+
+    // Reset the destroyed flag
     _isDestroyed = false;
+
+    // If there's an existing instance, clean it up properly
+    if (_instance != null) {
+      try {
+        // Force disconnect any existing socket
+        if (_instance!._socket != null) {
+          _instance!._socket!.disconnect();
+          _instance!._socket = null;
+        }
+
+        // Clear all timers
+        _instance!._reconnectTimer?.cancel();
+        _instance!._heartbeatTimer?.cancel();
+        _instance!._stabilityTimer?.cancel();
+        _instance!._clientHeartbeatTimer?.cancel();
+
+        // Reset all state variables
+        _instance!._ready = false;
+        _instance!._isConnecting = false;
+        _instance!._reconnectAttempts = 0;
+        _instance!._sessionConfirmed = false;
+        _instance!._sessionId = null;
+
+        // Close and reset the stream controller
+        _instance!._connectionStateController?.close();
+        _instance!._connectionStateController = null;
+
+        print('🔌 SeSocketService: ✅ Existing instance cleaned up');
+      } catch (e) {
+        print(
+            '🔌 SeSocketService: ⚠️ Warning - error cleaning up existing instance: $e');
+      }
+    }
+
     print('🔌 SeSocketService: ✅ Service reset for new connection');
   }
 
@@ -83,8 +123,26 @@ class SeSocketService {
   static const int _maxReconnectAttempts = 10;
 
   // Stream controller for connection state changes
-  final StreamController<bool> _connectionStateController =
-      StreamController<bool>.broadcast();
+  StreamController<bool>? _connectionStateController;
+
+  // Getter for connection state stream
+  Stream<bool> get connectionStateStream {
+    _connectionStateController ??= StreamController<bool>.broadcast();
+    return _connectionStateController!.stream;
+  }
+
+  // Private method to safely add events to the stream controller
+  void _addConnectionStateEvent(bool state) {
+    try {
+      if (_connectionStateController != null &&
+          !_connectionStateController!.isClosed) {
+        _connectionStateController!.add(state);
+      }
+    } catch (e) {
+      print(
+          '🔌 SeSocketService: ⚠️ Warning - could not add connection state event: $e');
+    }
+  }
 
   // Heartbeat and stability monitoring
   Timer? _heartbeatTimer;
@@ -123,34 +181,90 @@ class SeSocketService {
 
     print('🔌 SeSocketService: Connecting to $_url with session: $sessionId');
 
-    _socket = IO.io(_url, {
-      'transports': ['websocket', 'polling'], // Allow fallback to polling
-      'path': '/socket.io/',
-      'autoConnect': false,
-      'reconnection': true,
-      'reconnectionAttempts': _maxReconnectAttempts,
-      'reconnectionDelay': 1000,
-      'reconnectionDelayMax': 10000,
-      'timeout': 30000, // Extended to 30 seconds as per server update
-      'forceNew': true
-    });
+    try {
+      _socket = IO.io(_url, {
+        'transports': ['websocket', 'polling'], // Allow fallback to polling
+        'path': '/socket.io/',
+        'autoConnect': false,
+        'reconnection': true,
+        'reconnectionAttempts': _maxReconnectAttempts,
+        'reconnectionDelay': 1000,
+        'reconnectionDelayMax': 10000,
+        'timeout': 30000, // Extended to 30 seconds as per server update
+        'forceNew': true,
+        'upgrade': true, // Enable transport upgrade
+        'rememberUpgrade': true, // Remember transport preference
+        'maxReconnectionAttempts': _maxReconnectAttempts,
+        'reconnectionDelayFactor': 1.5, // Exponential backoff
+      });
 
-    _bindCore();
-    _socket!.connect();
+      _bindCore();
+      _socket!.connect();
+
+      // Add connection timeout
+      Timer(const Duration(seconds: 35), () {
+        if (_isConnecting && !_ready) {
+          print(
+              '🔌 SeSocketService: ⚠️ Connection timeout, forcing disconnect');
+          _socket?.disconnect();
+          _isConnecting = false;
+          _addConnectionStateEvent(false);
+        }
+      });
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error creating socket connection: $e');
+      _isConnecting = false;
+      _addConnectionStateEvent(false);
+      rethrow;
+    }
   }
 
   void _bindCore() {
-    _socket!.on('connect', (_) {
+    _socket!.on('connect', (_) async {
       print('🔌 SeSocketService: ✅ Connected to server');
       _isConnecting = false;
       _reconnectAttempts = 0;
       // Don't set _ready = true here - wait for session_registered confirmation
-      _connectionStateController
-          .add(false); // Still not fully ready until session confirmed
+      _addConnectionStateEvent(
+          false); // Still not fully ready until session confirmed
 
       if (_sessionId != null) {
         print('🔌 SeSocketService: Registering session: $_sessionId');
-        _socket!.emit('register_session', {'sessionId': _sessionId});
+
+        // Get the user's public key for session registration
+        String? userPublicKey;
+        try {
+          // Import SeSessionService to get current user's public key
+          final sessionService = SeSessionService();
+          userPublicKey = sessionService.currentSession?.publicKey;
+          if (userPublicKey != null) {
+            print(
+                '🔌 SeSocketService: ✅ Retrieved user public key for session registration');
+          } else {
+            print(
+                '🔌 SeSocketService: ⚠️ No public key available in current session');
+          }
+        } catch (e) {
+          print(
+              '🔌 SeSocketService: ⚠️ Warning - could not retrieve user public key: $e');
+          // Continue without public key, but this may cause key exchange issues
+        }
+
+        // Register session with public key as required by API
+        final registrationData = <String, dynamic>{
+          'sessionId': _sessionId,
+        };
+
+        if (userPublicKey != null) {
+          registrationData['publicKey'] = userPublicKey;
+          print(
+              '🔌 SeSocketService: 🔑 Including public key in session registration');
+        } else {
+          print(
+              '🔌 SeSocketService: ⚠️ No public key available for session registration');
+        }
+
+        _socket!.emit('register_session', registrationData);
 
         // FALLBACK: If server doesn't send session_registered within 5 seconds,
         // assume registration was successful and proceed
@@ -161,7 +275,7 @@ class SeSocketService {
             _sessionConfirmed = true;
             _ready = true;
             _startClientHeartbeat();
-            _connectionStateController.add(true);
+            _addConnectionStateEvent(true);
           }
         });
       }
@@ -172,14 +286,14 @@ class SeSocketService {
       _sessionConfirmed = true;
       _ready = true;
       _startClientHeartbeat();
-      _connectionStateController.add(true);
+      _addConnectionStateEvent(true);
     });
 
     _socket!.on('disconnect', (reason) {
       print('🔌 SeSocketService: ❌ Disconnected from server. Reason: $reason');
       _ready = false;
       _isConnecting = false;
-      _connectionStateController.add(false);
+      _addConnectionStateEvent(false);
 
       // Stop all timers
       _heartbeatTimer?.cancel();
@@ -193,7 +307,7 @@ class SeSocketService {
       _isConnecting = false;
       _reconnectAttempts = 0;
       // Don't set _ready = true here - wait for session_registered confirmation
-      _connectionStateController.add(false);
+      _addConnectionStateEvent(false);
 
       // CRITICAL: Rebind event handlers after reconnection
       print(
@@ -213,7 +327,7 @@ class SeSocketService {
             _sessionConfirmed = true;
             _ready = true;
             _startClientHeartbeat();
-            _connectionStateController.add(true);
+            _addConnectionStateEvent(true);
           }
         });
       }
@@ -223,7 +337,7 @@ class SeSocketService {
       print('🔌 SeSocketService: ❌ Reconnection failed');
       _isConnecting = false;
       _ready = false;
-      _connectionStateController.add(false);
+      _addConnectionStateEvent(false);
     });
 
     // CRITICAL: Heartbeat response (MUST respond within 1 second)
@@ -269,6 +383,28 @@ class SeSocketService {
         print('🔑 SeSocketService: ✅ onKeyExchangeResponse callback completed');
       } else {
         print('🔑 SeSocketService: ❌ onKeyExchangeResponse callback is NULL!');
+
+        // CRITICAL: Even if callback is null, we need to process this event
+        // This prevents the key exchange from failing completely
+        print(
+            '🔑 SeSocketService: 🚨 CRITICAL: Processing key exchange response without callback');
+        print(
+            '🔑 SeSocketService: 🔍 This should not happen - callback should be set in main.dart');
+
+        // Try to process the event directly with KeyExchangeService as a fallback
+        try {
+          print(
+              '🔑 SeSocketService: 🔄 Attempting fallback processing with KeyExchangeService...');
+          // Import KeyExchangeService to handle the event directly
+          // import 'package:sechat_app/core/services/key_exchange_service.dart'; // This import is already at the top
+          KeyExchangeService.instance.handleKeyExchangeResponse(data);
+          print(
+              '🔑 SeSocketService: ✅ Fallback processing completed successfully');
+        } catch (e) {
+          print('🔑 SeSocketService: ❌ Fallback processing failed: $e');
+          print(
+              '🔑 SeSocketService: 🚨 This key exchange response will be lost!');
+        }
       }
     });
 
@@ -300,6 +436,25 @@ class SeSocketService {
         print('🔑 SeSocketService: ✅ onUserDataExchange callback completed');
       } else {
         print('🔑 SeSocketService: ❌ onUserDataExchange callback is NULL!');
+
+        // CRITICAL: Even if callback is null, we need to process this event
+        // This prevents user data exchange from failing completely
+        print(
+            '🔑 SeSocketService: 🚨 CRITICAL: Processing user data exchange without callback');
+        print(
+            '🔑 SeSocketService: 🔍 This should not happen - callback should be set in main.dart');
+
+        // Try to process the event directly with KeyExchangeService as a fallback
+        try {
+          print(
+              '🔑 SeSocketService: 🔄 Attempting fallback processing with KeyExchangeService...');
+          KeyExchangeService.instance.handleUserDataExchange(data);
+          print(
+              '🔑 SeSocketService: ✅ Fallback processing completed successfully');
+        } catch (e) {
+          print('🔑 SeSocketService: ❌ Fallback processing failed: $e');
+          print('🔑 SeSocketService: 🚨 This user data exchange will be lost!');
+        }
       }
     });
 
@@ -549,9 +704,9 @@ class SeSocketService {
 
   void sendKeyExchangeRequest(
       {required String recipientId,
-    required String publicKey,
-    required String requestId,
-    required String requestPhrase,
+      required String publicKey,
+      required String requestId,
+      required String requestPhrase,
       String version = '1'}) {
     if (!isConnected || _sessionId == null) return;
     _socket!.emit('key_exchange:request', {
@@ -566,9 +721,9 @@ class SeSocketService {
 
   void sendKeyExchangeResponse(
       {required String recipientId,
-    required String publicKey,
-    required String responseId,
-    String requestVersion = '1',
+      required String publicKey,
+      required String responseId,
+      String requestVersion = '1',
       String type = 'key_exchange_response'}) {
     if (!isConnected || _sessionId == null) return;
     _socket!.emit('key_exchange:response', {
@@ -593,7 +748,7 @@ class SeSocketService {
 
   void sendUserDataExchange(
       {required String recipientId,
-    required String encryptedData,
+      required String encryptedData,
       String? conversationId}) {
     if (!isConnected || _sessionId == null) return;
     _socket!.emit('user_data_exchange:send', {
@@ -636,7 +791,7 @@ class SeSocketService {
     _heartbeatTimer?.cancel();
     _stabilityTimer?.cancel();
     _clientHeartbeatTimer?.cancel();
-    _connectionStateController.add(false);
+    _addConnectionStateEvent(false);
 
     try {
       if (_socket != null && _sessionId != null) {
@@ -793,7 +948,7 @@ class SeSocketService {
   }
 
   // Additional utility methods that might be needed
-  Stream<bool> get connectionStateStream => _connectionStateController.stream;
+  // Stream<bool> get connectionStateStream => _connectionStateController.stream; // This line is removed as per the new_code
 
   // Additional methods needed by SocketProvider
   String? get currentSessionId => _sessionId;
@@ -884,12 +1039,18 @@ class SeSocketService {
     print('  - Session confirmed: $_sessionConfirmed');
     print('  - Session ID: $_sessionId');
     print(
-        '  - Connection state stream active: ${!_connectionStateController.isClosed}');
+        '  - Connection state stream active: ${_connectionStateController?.isClosed == false}');
   }
 
   // Method for testing connections (used by main_nav_screen)
   void emit(String event, Map<String, dynamic> data) {
-    if (!isConnected || _sessionId == null) return;
+    if (!isConnected || _sessionId == null) {
+      print(
+          '🔌 SeSocketService: ❌ Cannot emit event: Socket not connected or session invalid');
+      print(
+          '🔌 SeSocketService: 🔍 Connection status: isConnected=$isConnected, sessionId=$_sessionId');
+      return;
+    }
 
     // Debug logging for key exchange events
     if (event == 'key_exchange:accept') {
@@ -901,11 +1062,25 @@ class SeSocketService {
       print('🔌 SeSocketService: 🔍🔍🔍 Session ID: $_sessionId');
     }
 
-    _socket!.emit(event, data);
+    try {
+      _socket!.emit(event, data);
 
-    // Confirm the event was sent
-    if (event == 'key_exchange:accept') {
-      print('🔌 SeSocketService: ✅ Key exchange accept event sent via socket');
+      // Confirm the event was sent
+      if (event == 'key_exchange:accept') {
+        print(
+            '🔌 SeSocketService: ✅ Key exchange accept event sent via socket');
+      }
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error emitting event $event: $e');
+      print(
+          '🔌 SeSocketService: 🔍 This may be due to socket connectivity issues');
+
+      // Try to reconnect if there's a connection issue
+      if (_socket?.connected == false) {
+        print(
+            '🔌 SeSocketService: 🔄 Attempting to reconnect due to emit failure...');
+        _scheduleReconnect();
+      }
     }
   }
 
@@ -1023,7 +1198,7 @@ class SeSocketService {
 
     // Close stream controller
     try {
-      _connectionStateController.close();
+      _connectionStateController?.close();
     } catch (e) {
       print(
           '🔌 SeSocketService: ⚠️ Warning - stream controller already closed: $e');
@@ -1072,7 +1247,7 @@ class SeSocketService {
     _heartbeatTimer?.cancel();
     _stabilityTimer?.cancel();
     _clientHeartbeatTimer?.cancel();
-    _connectionStateController.add(false);
+    _addConnectionStateEvent(false);
 
     try {
       if (_socket != null) {
@@ -1084,8 +1259,45 @@ class SeSocketService {
     } catch (e) {
       print('🔌 SeSocketService: ❌ Error during force disconnect: $e');
     } finally {
-    _socket = null;
+      _socket = null;
     }
+  }
+
+  // Get detailed connection status for error reporting
+  Map<String, dynamic> getDetailedConnectionStatus() {
+    return {
+      'isConnected': isConnected,
+      'isConnecting': _isConnecting,
+      'isReady': _ready,
+      'sessionConfirmed': _sessionConfirmed,
+      'sessionId': _sessionId,
+      'socketConnected': _socket?.connected ?? false,
+      'socketId': _socket?.id,
+      'reconnectAttempts': _reconnectAttempts,
+      'maxReconnectAttempts': _maxReconnectAttempts,
+      'streamControllerActive': _connectionStateController?.isClosed == false,
+      'url': _url,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+  }
+
+  // Get callback status for debugging
+  Map<String, dynamic> getCallbackStatus() {
+    return {
+      'onKeyExchangeResponse': onKeyExchangeResponse != null,
+      'onUserDataExchange': onUserDataExchange != null,
+      'onConversationCreated': onConversationCreated != null,
+      'onMessageReceived': onMessageReceived != null,
+      'onMessageAcked': onMessageAcked != null,
+      'onDelivered': onDelivered != null,
+      'onRead': onRead != null,
+      'onPresence': onPresence != null,
+      'onTyping': onTyping != null,
+      'onKeyExchangeRequest': onKeyExchangeRequest != null,
+      'onKeyExchangeRevoked': onKeyExchangeRevoked != null,
+      'onUserDeleted': onUserDeleted != null,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
   }
 
   // Method for checking connection quality (new feature)

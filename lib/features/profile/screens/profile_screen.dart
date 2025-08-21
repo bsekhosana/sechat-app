@@ -4,6 +4,11 @@ import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import '../../../core/services/channel_socket_service.dart';
 import '../../../realtime/realtime_service_manager.dart';
+import 'package:sechat_app/features/chat/providers/chat_list_provider.dart';
+import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_provider.dart';
+import 'package:sechat_app/core/services/indicator_service.dart';
+import 'package:provider/provider.dart';
+import 'package:sechat_app/shared/providers/socket_status_provider.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -79,6 +84,40 @@ class ProfileScreen extends StatelessWidget {
 
       // Use the comprehensive account deletion method (local data)
       await SeSessionService().deleteAccount();
+
+      // CRITICAL: Clear all provider data to prevent old conversations from showing
+      try {
+        print('🗑️ ProfileScreen: 🧹 Clearing all provider data...');
+
+        // Clear ChatListProvider
+        final chatListProvider =
+            Provider.of<ChatListProvider>(context, listen: false);
+        chatListProvider.clearAllData();
+        print('🗑️ ProfileScreen: ✅ ChatListProvider cleared');
+
+        // Clear KeyExchangeRequestProvider
+        final keyExchangeProvider =
+            Provider.of<KeyExchangeRequestProvider>(context, listen: false);
+        keyExchangeProvider.clearAllData();
+        print('🗑️ ProfileScreen: ✅ KeyExchangeRequestProvider cleared');
+
+        // Clear IndicatorService
+        final indicatorService =
+            Provider.of<IndicatorService>(context, listen: false);
+        indicatorService.clearAllIndicators();
+        print('🗑️ ProfileScreen: ✅ IndicatorService cleared');
+
+        // Clear SocketStatusProvider
+        final socketStatusProvider =
+            Provider.of<SocketStatusProvider>(context, listen: false);
+        socketStatusProvider.resetState();
+        print('🗑️ ProfileScreen: ✅ SocketStatusProvider reset');
+
+        print('🗑️ ProfileScreen: ✅ All provider data cleared');
+      } catch (e) {
+        print('🗑️ ProfileScreen: ⚠️ Warning - provider cleanup failed: $e');
+        // Don't fail the account deletion if provider cleanup fails
+      }
 
       // Close loading dialog
       Navigator.of(context).pop();

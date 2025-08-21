@@ -8,6 +8,7 @@ class KeyExchangeRequest {
   final DateTime timestamp;
   final String type;
   final String? version; // Added: version from the original request
+  final String? publicKey; // Added: public key from the requester
   DateTime? respondedAt;
   String? errorMessage;
   String? displayName; // Added: display name from user_data_exchange
@@ -21,6 +22,7 @@ class KeyExchangeRequest {
     required this.timestamp,
     required this.type,
     this.version, // Added: version parameter
+    this.publicKey, // Added: public key parameter
     this.respondedAt,
     this.errorMessage,
     this.displayName, // Added: display name parameter
@@ -57,6 +59,7 @@ class KeyExchangeRequest {
       timestamp: parseTimestamp(json['timestamp']),
       type: json['type'] as String,
       version: json['version'] as String?, // Added: parse version
+      publicKey: json['publicKey'] as String?, // Added: parse public key
       respondedAt: json['respondedAt'] != null
           ? parseTimestamp(json['respondedAt'])
           : null,
@@ -76,6 +79,7 @@ class KeyExchangeRequest {
       'timestamp': timestamp.millisecondsSinceEpoch,
       'type': type,
       'version': version, // Added: include version
+      'publicKey': publicKey, // Added: include public key
       'respondedAt': respondedAt?.millisecondsSinceEpoch,
       'errorMessage': errorMessage,
       'displayName': displayName, // Added: include display name
@@ -92,6 +96,7 @@ class KeyExchangeRequest {
     DateTime? timestamp,
     String? type,
     String? version, // Added: version parameter
+    String? publicKey, // Added: public key parameter
     DateTime? respondedAt,
     String? errorMessage,
     String? displayName, // Added: display name parameter
@@ -105,6 +110,7 @@ class KeyExchangeRequest {
       timestamp: timestamp ?? this.timestamp,
       type: type ?? this.type,
       version: version ?? this.version, // Added: update version
+      publicKey: publicKey ?? this.publicKey, // Added: update public key
       respondedAt: respondedAt ?? this.respondedAt,
       errorMessage: errorMessage ?? this.errorMessage,
       displayName:

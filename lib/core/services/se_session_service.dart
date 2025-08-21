@@ -646,6 +646,21 @@ class SeSessionService {
     }
   }
 
+  /// Clear all provider data (in-memory state) - call this from UI layer after deleteAccount
+  static Future<void> clearAllProviderData() async {
+    try {
+      print('🗑️ SeSessionService: 🧹 Clearing all provider data...');
+
+      // This method should be called from the UI layer where Provider context is available
+      // The actual implementation will be in the UI layer to avoid circular dependencies
+
+      print(
+          '🗑️ SeSessionService: ℹ️ Provider cleanup method called - implement in UI layer');
+    } catch (e) {
+      print('🗑️ SeSessionService: ❌ Error in provider cleanup method: $e');
+    }
+  }
+
   /// Delete account completely - clears ALL data including database, shared prefs, and secure storage
   Future<void> deleteAccount() async {
     try {
@@ -746,27 +761,15 @@ class SeSessionService {
         print('🗑️ SeSessionService: ✅ All encryption keys cleared');
       } catch (e) {
         print(
-            '🗑️ SeSessionService: ⚠️ Warning - encryption keys cleanup failed: $e');
+            '🗑️ SeSessionService: ⚠️ Warning - encryption key cleanup failed: $e');
       }
 
-      // 4.6. Clear all contacts
-      try {
-        await _prefsService.clearAllContacts();
-        print('🗑️ SeSessionService: ✅ All contacts cleared');
-      } catch (e) {
-        print('🗑️ SeSessionService: ⚠️ Warning - contacts cleanup failed: $e');
-      }
+      // 5. Clear all provider data (in-memory state)
+      // Note: This will be called separately from the UI layer to avoid circular dependencies
+      print(
+          '🗑️ SeSessionService: ℹ️ Provider cleanup will be handled by UI layer');
 
-      // 5. Clear all local storage service data
-      try {
-        await LocalStorageService.instance.clearAllData();
-        print('🗑️ SeSessionService: ✅ Local storage service data cleared');
-      } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - local storage cleanup failed: $e');
-      }
-
-      // 5.5. Clear all file storage directories (images, temp files, etc.)
+      // 6. Clear all temporary files and directories
       try {
         await LocalStorageService.instance.cleanupTempFiles();
         print('🗑️ SeSessionService: ✅ Temporary files cleared');
@@ -790,7 +793,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - file storage cleanup failed: $e');
       }
 
-      // 6. Clear all key exchange service data
+      // 7. Clear all key exchange service data
       try {
         await KeyExchangeService.instance.clearAllPendingExchanges();
         print('🗑️ SeSessionService: ✅ Key exchange service data cleared');
@@ -799,7 +802,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - key exchange service cleanup failed: $e');
       }
 
-      // 7. Clear all indicator service data
+      // 8. Clear all indicator service data
       try {
         final indicatorService = IndicatorService();
         indicatorService.clearChatIndicator();
@@ -811,7 +814,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - indicator service cleanup failed: $e');
       }
 
-      // 7.5. Clear all notifications
+      // 9. Clear all notifications
       try {
         final notificationManager = NotificationManagerService();
         await notificationManager.clearAllNotifications();
@@ -821,7 +824,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - notification cleanup failed: $e');
       }
 
-      // 8. Clear all online status service data
+      // 10. Clear all online status service data
       try {
         // OnlineStatusService doesn't have a clear method, but data will be cleared when service is reinitialized
         print(
@@ -831,7 +834,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - online status service cleanup failed: $e');
       }
 
-      // 9. Clear all optimized notification service data (now handled by socket service)
+      // 11. Clear all optimized notification service data (now handled by socket service)
       try {
         // Socket service cleanup will be handled automatically
         print(
@@ -841,7 +844,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - socket service cleanup failed: $e');
       }
 
-      // 10. Clear all provider states (if accessible)
+      // 12. Clear all provider states (if accessible)
       try {
         // Clear any cached provider states
         _currentSession = null;
@@ -852,7 +855,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - provider state cleanup failed: $e');
       }
 
-      // 10.5. Clear GlobalUserService cached data
+      // 12.5. Clear GlobalUserService cached data
       try {
         // GlobalUserService doesn't have a clear method, but we can clear its cached data
         // by calling deleteSessionIdentity which clears the session
@@ -864,7 +867,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - GlobalUserService cleanup failed: $e');
       }
 
-      // 10.6. Clear any other service cached data
+      // 12.6. Clear any other service cached data
       try {
         // Clear any remaining cached data from other services
         // This ensures no data persists between account deletions
@@ -874,7 +877,7 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - additional service cleanup failed: $e');
       }
 
-      // 11. Unregister device token from AirNotifier
+      // 13. Unregister device token from AirNotifier
       try {
         await unregisterDeviceToken();
         print(

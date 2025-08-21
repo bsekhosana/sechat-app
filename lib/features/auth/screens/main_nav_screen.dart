@@ -21,6 +21,7 @@ import '../../key_exchange/providers/key_exchange_request_provider.dart';
 import '../../chat/providers/chat_list_provider.dart';
 import '../../notifications/services/notification_manager_service.dart';
 import 'package:sechat_app/main.dart' show updateCurrentScreenIndex;
+import 'package:sechat_app/shared/widgets/global_socket_status_banner.dart';
 
 class MainNavScreen extends StatefulWidget {
   final Map<String, dynamic>? notificationPayload;
@@ -304,7 +305,7 @@ Download now and let's chat securely!
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Socket connection status banner
-                SocketConnectionStatusWidget(),
+                GlobalSocketStatusBanner(),
                 // Network connection status banner
                 ConnectionStatusWidget(),
                 // Bottom navigation bar
@@ -360,11 +361,14 @@ Download now and let's chat securely!
           onTap: () => _onItemTapped(index),
           borderRadius: BorderRadius.circular(8),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(
+                vertical: 8, horizontal: 4), // Increased padding for badges
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Stack(
+                  clipBehavior:
+                      Clip.none, // Allow badges to extend beyond bounds
                   children: [
                     FaIcon(
                       icon,
@@ -373,8 +377,8 @@ Download now and let's chat securely!
                     ),
                     if (hasBadge)
                       Positioned(
-                        right: -2,
-                        top: -2,
+                        right: -4, // Move further right to avoid cutoff
+                        top: -4, // Move further up to avoid cutoff
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 4, vertical: 2),

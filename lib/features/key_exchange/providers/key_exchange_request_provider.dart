@@ -11,6 +11,7 @@ import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 import 'package:sechat_app/features/notifications/services/notification_manager_service.dart';
 import 'package:sechat_app/shared/models/key_exchange_request.dart';
 import 'dart:convert'; // Added for base64 decoding
+import 'package:flutter/material.dart'; // Added for ScaffoldMessenger
 
 /// Provider for managing key exchange requests
 class KeyExchangeRequestProvider extends ChangeNotifier {
@@ -117,55 +118,6 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           '🔑 KeyExchangeRequestProvider: ❌ Failed to set up socket event handlers: $e');
     }
   }
-
-  // /// Process received key exchange request (called by callback system)
-  // Future<void> processReceivedKeyExchangeRequest(Map<String, dynamic> data) async {
-  //   print('🔑 KeyExchangeRequestProvider: 📥 Processing received key exchange request');
-  //   print('🔑 KeyExchangeRequestProvider: 📋 Request data: $data');
-
-  //   final senderId = data['senderId'] as String?;
-  //   final publicKey = data['publicKey'] as String?;
-  //   final requestId = data['requestId'] as String?;
-  //   final requestPhrase = data['requestPhrase'] as String?;
-  //   final version = data['version']?.toString();
-  //   final timestamp = data['timestamp'] as String?;
-
-  //   if (senderId != null && publicKey != null && requestId != null && requestPhrase != null) {
-  //     print('🔑 KeyExchangeRequestProvider: ✅ Valid key exchange request data');
-
-  //     // Create a new received request
-  //     final receivedRequest = KeyExchangeRequest(
-  //       id: requestId,
-  //       fromSessionId: senderId,
-  //       toSessionId: SeSessionService().currentSessionId ?? '',
-  //       requestPhrase: requestPhrase,
-  //       status: 'received',
-  //       timestamp: DateTime.now(),
-  //       type: 'received',
-  //     );
-
-  //     // Add to received requests list
-  //     _receivedRequests.add(receivedRequest);
-
-  //     // Save to local storage
-  //     await _saveReceivedRequest(receivedRequest);
-
-  //     // Notify listeners
-  //     notifyListeners();
-
-  //     // Notify about new items
-  //     _notifyNewItems();
-
-  //     print('🔑 KeyExchangeRequestProvider: ✅ Incoming request added and saved');
-  //   } else {
-  //     print('🔑 KeyExchangeRequestProvider: ❌ Invalid key exchange request data');
-  //     print('🔑 KeyExchangeRequestProvider: 🔍 Missing fields:');
-  //     print('🔑 KeyExchangeRequestProvider:   senderId: $senderId');
-  //     print('🔑 KeyExchangeRequestProvider:   publicKey: $publicKey');
-  //     print('🔑 KeyExchangeRequestProvider:   requestId: $requestId');
-  //     print('🔑 KeyExchangeRequestProvider:   requestPhrase: $requestPhrase');
-  //   }
-  // }
 
   /// Add notification item for key exchange activities
   Future<void> _addNotificationItem(String title, String body, String type,
@@ -427,6 +379,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         type: 'key_exchange_request',
         version:
             data['version']?.toString(), // Store the version from the request
+        publicKey: senderPublicKey, // Store the sender's public key
       );
 
       _receivedRequests.add(request);
@@ -460,56 +413,111 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   }
 
   /// Accept a key exchange request
-  Future<bool> acceptKeyExchangeRequest(String requestId) async {
+  Future<bool> acceptKeyExchangeRequest(
+      KeyExchangeRequest request, BuildContext context) async {
     try {
       print(
-          '🔑 KeyExchangeRequestProvider: Accepting key exchange request: $requestId');
+          '🔑 KeyExchangeRequestProvider: Accepting key exchange request: ${request.id}');
 
-      final request =
-          _receivedRequests.firstWhere((req) => req.id == requestId);
-      if (request.status != 'received') {
-        print(
-            '🔑 KeyExchangeRequestProvider: Request is not in received status');
-        return false;
-      }
-
-      // Update status to processing
-      request.status = 'processing';
-      notifyListeners();
-
-      // Save the updated status to local storage
-      await _saveReceivedRequest(request);
-
-      // Send acceptance notification
       final currentUserId = SeSessionService().currentSessionId;
-      if (currentUserId == null) return false;
-
-      // Get Bob's (acceptor's) public key to include in the notification
-      final currentSession = SeSessionService().currentSession;
-      final bobPublicKey = currentSession?.publicKey;
-
-      if (bobPublicKey == null) {
-        print(
-            '🔑 KeyExchangeRequestProvider: ❌ Current session public key not available');
+      if (currentUserId == null) {
+        print('🔑 KeyExchangeRequestProvider: ❌ Current user ID is null');
         return false;
       }
 
-      // Get the version from the original request if available
-      final requestVersion = request.version ?? '1';
+      // CRITICAL: Ensure socket is connected before sending accept event
+      if (!_socketService.isConnected) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ❌ Socket not connected, attempting to reconnect...');
 
-      // Send key exchange response
-      _socketService.sendKeyExchangeResponse(
-        recipientId: request.fromSessionId,
-        publicKey: bobPublicKey,
-        responseId: GuidGenerator.generateGuid(),
-        requestVersion: requestVersion,
-        type: 'key_exchange_accepted',
-      );
+        try {
+          // Try to reconnect the socket
+          await _socketService.connect(SeSessionService().currentSessionId!);
 
-      print(
-          '🔑 KeyExchangeRequestProvider: 🔍🔍🔍 _socketService type: ${_socketService.runtimeType}');
-      print(
-          '🔑 KeyExchangeRequestProvider: 🔍🔍🔍 _socketService connected: ${_socketService.isConnected}');
+          // Wait a moment for connection to stabilize
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          // Check if connection was successful
+          if (!_socketService.isConnected) {
+            print(
+                '🔑 KeyExchangeRequestProvider: ❌ Failed to reconnect socket');
+
+            // Show user-friendly error message about socket connectivity
+            if (context.mounted) {
+              final connectionStatus =
+                  _socketService.getDetailedConnectionStatus();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                          '❌ Operation failed: Socket connection issues'),
+                      Text(
+                          'Status: ${connectionStatus['isConnected'] ? 'Connected' : 'Disconnected'}'),
+                      Text(
+                          'Ready: ${connectionStatus['isReady'] ? 'Yes' : 'No'}'),
+                      Text(
+                          'Session: ${connectionStatus['sessionConfirmed'] ? 'Confirmed' : 'Pending'}'),
+                    ],
+                  ),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 8),
+                  action: SnackBarAction(
+                    label: 'Retry',
+                    textColor: Colors.white,
+                    onPressed: () => _retryConnection(context),
+                  ),
+                ),
+              );
+            }
+
+            return false;
+          }
+
+          print(
+              '🔑 KeyExchangeRequestProvider: ✅ Socket reconnected successfully');
+        } catch (e) {
+          print(
+              '🔑 KeyExchangeRequestProvider: ❌ Failed to reconnect socket: $e');
+
+          // Show user-friendly error message about socket connectivity
+          if (context.mounted) {
+            final connectionStatus =
+                _socketService.getDetailedConnectionStatus();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('❌ Operation failed: Socket connection issues'),
+                    Text(
+                        'Status: ${connectionStatus['isConnected'] ? 'Connected' : 'Disconnected'}'),
+                    Text(
+                        'Ready: ${connectionStatus['isReady'] ? 'Yes' : 'No'}'),
+                    Text(
+                        'Session: ${connectionStatus['sessionConfirmed'] ? 'Confirmed' : 'Pending'}'),
+                  ],
+                ),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 8),
+                action: SnackBarAction(
+                  label: 'Retry',
+                  textColor: Colors.white,
+                  onPressed: () => _retryConnection(context),
+                ),
+              ),
+            );
+          }
+
+          return false;
+        }
+      }
+
+      // Update the request status in local storage
+      await _updateReceivedRequestStatus(request.id, 'accepted');
 
       // CRITICAL: Send key exchange accept event to server (not response)
       // This triggers the server to send key_exchange:response with our public key
@@ -529,8 +537,34 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         return false;
       }
 
+      // CRITICAL: Store the requester's public key from the original request
+      // This ensures we can encrypt data to them after accepting
+      try {
+        final requesterPublicKey = request.publicKey;
+        if (requesterPublicKey != null && requesterPublicKey.isNotEmpty) {
+          await EncryptionService.storeRecipientPublicKey(
+              request.fromSessionId, requesterPublicKey);
+          print(
+              '🔑 KeyExchangeRequestProvider: ✅ Stored requester public key for ${request.fromSessionId}');
+        } else {
+          print(
+              '🔑 KeyExchangeRequestProvider: ⚠️ Warning: No public key in request to store');
+        }
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ❌ Failed to store requester public key: $e');
+        // Don't fail the entire accept process if key storage fails
+      }
+
+      // Double-check socket connection before sending
+      if (!_socketService.isConnected) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ❌ Socket still not connected after reconnection attempt');
+        return false;
+      }
+
       _socketService.emit('key_exchange:accept', {
-        'requestId': requestId,
+        'requestId': request.id,
         'recipientId': currentUserId, // The acceptor (us)
         'senderId': request.fromSessionId, // The requester
         'publicKey': currentUserPublicKey, // CRITICAL: Include our public key
@@ -560,7 +594,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         'You accepted a key exchange request from ${request.fromSessionId.substring(0, 18)}...',
         'key_exchange_accepted',
         {
-          'request_id': requestId,
+          'request_id': request.id,
           'recipient_id': currentUserId,
           'sender_id': request.fromSessionId,
           'timestamp': DateTime.now().millisecondsSinceEpoch,
@@ -573,14 +607,14 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           '🔑 KeyExchangeRequestProvider: Error accepting key exchange request: $e');
       // Reset status to received on error to allow retry
       try {
-        final request =
-            _receivedRequests.firstWhere((req) => req.id == requestId);
-        request.status = 'received';
-        request.respondedAt = null;
+        final existingRequest =
+            _receivedRequests.firstWhere((req) => req.id == request.id);
+        existingRequest.status = 'received';
+        existingRequest.respondedAt = null;
         notifyListeners();
 
         // Save the reset status
-        await _saveReceivedRequest(request);
+        await _saveReceivedRequest(existingRequest);
       } catch (revertError) {
         print(
             '🔑 KeyExchangeRequestProvider: Error reverting status: $revertError');
@@ -1469,12 +1503,80 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     }
   }
 
-  /// Clear all data (for testing/reset)
+  /// Retry connection to socket service
+  Future<void> _retryConnection(BuildContext context) async {
+    try {
+      print('🔑 KeyExchangeRequestProvider: 🔄 Retrying socket connection...');
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔄 Attempting to reconnect...'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // Try to reconnect
+      await _socketService.connect(SeSessionService().currentSessionId!);
+
+      // Wait for connection to stabilize
+      await Future.delayed(const Duration(seconds: 2));
+
+      if (context.mounted) {
+        if (_socketService.isConnected) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Reconnected successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Reconnection failed. Please try again.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print(
+          '🔑 KeyExchangeRequestProvider: ❌ Error during reconnection retry: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Reconnection error: $e'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Clear all data and reset provider state (used when account is deleted)
   void clearAllData() {
-    _sentRequests.clear();
-    _receivedRequests.clear();
-    _pendingRequests.clear();
-    notifyListeners();
+    try {
+      print(
+          '🔑 KeyExchangeRequestProvider: 🗑️ Clearing all data and resetting state...');
+
+      // Clear all requests
+      _sentRequests.clear();
+      _receivedRequests.clear();
+      _pendingRequests.clear();
+
+      // Notify listeners
+      notifyListeners();
+
+      print(
+          '🔑 KeyExchangeRequestProvider: ✅ All data cleared and state reset');
+    } catch (e) {
+      print('🔑 KeyExchangeRequestProvider: ❌ Error clearing data: $e');
+    }
   }
 
   /// Clear all data from storage (for testing/reset)
@@ -1684,6 +1786,24 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     } catch (e) {
       print(
           '🔑 KeyExchangeRequestProvider: Error loading missing sent request: $e');
+    }
+  }
+
+  /// Update the status of a received key exchange request in local storage
+  Future<void> _updateReceivedRequestStatus(
+      String requestId, String status) async {
+    try {
+      final request =
+          _receivedRequests.firstWhere((req) => req.id == requestId);
+      request.status = status;
+      request.respondedAt = DateTime.now();
+      notifyListeners();
+      await _saveReceivedRequest(request);
+      print(
+          '🔑 KeyExchangeRequestProvider: ✅ Received request status updated to $status');
+    } catch (e) {
+      print(
+          '🔑 KeyExchangeRequestProvider: Error updating received request status: $e');
     }
   }
 

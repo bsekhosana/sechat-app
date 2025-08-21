@@ -25,12 +25,21 @@ class KeyExchangeService {
   // Callback for when conversations are created
   Function(ChatConversation)? _onConversationCreated;
 
+  // Callback for when user data is exchanged
+  Function(String senderId, String displayName)? _onUserDataExchange;
+
   // Private constructor
   KeyExchangeService._();
 
   /// Set callback for when conversations are created
   void setOnConversationCreated(Function(ChatConversation) callback) {
     _onConversationCreated = callback;
+  }
+
+  /// Set callback for when user data is exchanged
+  void setOnUserDataExchange(
+      Function(String senderId, String displayName) callback) {
+    _onUserDataExchange = callback;
   }
 
   /// Initialize user's encryption keys if they don't exist
@@ -676,6 +685,7 @@ class KeyExchangeService {
         isPinned: false,
         metadata: null,
         lastSeen: null,
+        isOnline: false,
         isTyping: false,
         typingStartedAt: null,
         notificationsEnabled: true,
@@ -893,6 +903,13 @@ class KeyExchangeService {
         );
         _onConversationCreated!(conversation);
       }
+
+      // CRITICAL: Notify UI that user data was exchanged so conversation display name can be updated
+      if (_onUserDataExchange != null) {
+        _onUserDataExchange!(senderId, userName);
+        print(
+            '🔑 KeyExchangeService: ✅ User data exchange callback triggered: $senderId -> $userName');
+      }
     } catch (e) {
       print('🔑 KeyExchangeService: ❌ Error handling user data exchange: $e');
       rethrow;
@@ -906,11 +923,12 @@ class KeyExchangeService {
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) return null;
 
-      // Generate conversation ID
-      final conversationId = currentUserId;
+      // Use the participant's ID as the conversation ID (not current user's ID)
+      final conversationId = participantId;
 
       // Create conversation in database
       final conversation = ChatConversation(
+        id: conversationId,
         participant1Id: currentUserId,
         participant2Id: participantId,
         displayName: participantName,
@@ -1009,8 +1027,7 @@ class KeyExchangeService {
           '🔑 KeyExchangeService: ✅ Sender user data decrypted: $userName ($userSessionId)');
 
       // Create conversation locally using the sender's ID as the conversation ID
-      final localConversationId =
-          await _createConversationLocally(senderId, userName);
+      final localConversationId = userSessionId;
       if (localConversationId != null) {
         print(
             '🔑 KeyExchangeService: ✅ Conversation created locally: $localConversationId');
@@ -1037,14 +1054,59 @@ class KeyExchangeService {
     }
   }
 
-  /// Get the public key for a specific sender from storage
-  Future<String?> _getSenderPublicKey(String senderId) async {
+  /// Handle key exchange response (when someone accepts our request)
+  Future<void> handleKeyExchangeResponse(Map<String, dynamic> data) async {
     try {
-      // Try to get the public key from encryption service storage
-      return await EncryptionService.getRecipientPublicKey(senderId);
+      print('🔑 KeyExchangeService: 🔍 Processing key exchange response');
+      print('🔑 KeyExchangeService: 🔍 Response data: $data');
+
+      final senderId = data['senderId']?.toString();
+      final publicKey = data['publicKey']?.toString();
+      final responseId = data['responseId']?.toString();
+      final requestVersion = data['requestVersion']?.toString();
+
+      if (senderId == null || publicKey == null) {
+        print('🔑 KeyExchangeService: ❌ Invalid key exchange response data');
+        return;
+      }
+
+      print('🔑 KeyExchangeService: ✅ Received public key from $senderId');
+
+      // CRITICAL: Store the sender's public key for future encryption
+      await _storeRecipientPublicKey(senderId, publicKey);
+      print('🔑 KeyExchangeService: ✅ Stored public key for $senderId');
+
+      // Now we can send encrypted user data since we have their public key
+      await _sendInitialUserData(senderId);
     } catch (e) {
       print(
-          '🔑 KeyExchangeService: ⚠️ Could not retrieve public key for $senderId: $e');
+          '🔑 KeyExchangeService: ❌ Error handling key exchange response: $e');
+      rethrow;
+    }
+  }
+
+  /// Store a recipient's public key for future encryption
+  Future<void> _storeRecipientPublicKey(
+      String recipientId, String publicKey) async {
+    try {
+      // Store the public key using EncryptionService
+      await EncryptionService.storeRecipientPublicKey(recipientId, publicKey);
+      print('🔑 KeyExchangeService: ✅ Public key stored for $recipientId');
+    } catch (e) {
+      print(
+          '🔑 KeyExchangeService: ❌ Failed to store public key for $recipientId: $e');
+      throw Exception('Failed to store public key: $e');
+    }
+  }
+
+  /// Get a sender's public key from storage
+  Future<String?> _getSenderPublicKey(String senderId) async {
+    try {
+      final publicKey = await EncryptionService.getRecipientPublicKey(senderId);
+      return publicKey;
+    } catch (e) {
+      print(
+          '🔑 KeyExchangeService: ❌ Failed to get public key for $senderId: $e');
       return null;
     }
   }

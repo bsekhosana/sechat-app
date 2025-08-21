@@ -40,6 +40,8 @@ import 'realtime/realtime_test.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'core/services/indicator_service.dart';
 import 'core/services/encryption_service.dart';
+import 'package:sechat_app/shared/providers/socket_status_provider.dart';
+import 'package:sechat_app/core/services/network_service.dart';
 
 // Global navigator key to access context from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -138,8 +140,19 @@ Future<void> main() async {
     SeSocketService.resetForNewConnection();
   }
 
-  // Set up socket callbacks
+  // CRITICAL: Set up socket callbacks IMMEDIATELY to avoid race conditions
+  print('🔌 Main: 🚀 Setting up socket callbacks immediately...');
   _setupSocketCallbacks(socketService);
+  print('🔌 Main: ✅ Socket callbacks set up successfully');
+
+  // Verify callback setup
+  print('🔌 Main: 🔍 Verifying onKeyExchangeResponse callback setup...');
+  if (socketService.onKeyExchangeResponse != null) {
+    print('🔌 Main: ✅ onKeyExchangeResponse callback is properly set');
+  } else {
+    print(
+        '🔌 Main: ❌ onKeyExchangeResponse callback is NULL - this will cause issues!');
+  }
 
   // Set up contact listeners for the current user's contacts
   // This will enable receiving typing indicators and other events
@@ -200,6 +213,7 @@ Future<void> main() async {
         }),
         ChangeNotifierProvider(create: (_) => NetworkService.instance),
         ChangeNotifierProvider(create: (_) => LocalStorageService.instance),
+        ChangeNotifierProvider(create: (_) => SocketStatusProvider.instance),
       ],
       child: const SeChatApp(),
     ),
@@ -355,8 +369,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         );
 
         chatListProvider.processMessageStatusUpdate(statusUpdate);
-        print(
-            '🔌 Main: ✅ Message status update processed: $messageId -> $status');
+        print('🔌 Main: ✅ Message status updated in ChatListProvider');
       } catch (e) {
         print('🔌 Main: ❌ Failed to process message status update: $e');
       }
@@ -467,38 +480,53 @@ void _setupSocketCallbacks(SeSocketService socketService) {
     print('🔌 Main: 🔍🔍🔍 Data type: ${data.runtimeType}');
     print('🔌 Main: 🔍🔍🔍 Data keys: ${data.keys.toList()}');
 
-    // Extract the responder's public key and store it for future encryption
-    final responderId =
-        data['senderId'] as String? ?? data['sender_id'] as String?;
-    final responderPublicKey =
-        data['publicKey'] as String? ?? data['sender_public_key'] as String?;
-    final response = data['response'] as String? ?? data['status'] as String?;
+    // Process the key exchange response using KeyExchangeService
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        print('🔌 Main: 🚀 Processing key exchange response...');
+        await KeyExchangeService.instance.handleKeyExchangeResponse(data);
+        print('🔌 Main: ✅ Key exchange response processed successfully');
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to process key exchange response: $e');
+        print('🔌 Main: ❌ Stack trace: ${StackTrace.current}');
+      }
+    });
+  });
 
-    print('🔌 Main: 🔍🔍🔍 Extracted values:');
-    print('🔌 Main: 🔍🔍🔍 - responderId: $responderId');
-    print('🔌 Main: 🔍🔍🔍 - responderPublicKey: $responderPublicKey');
-    print('🔌 Main: 🔍🔍🔍 - response: $response');
-
-    if (responderId != null &&
-        responderPublicKey != null &&
-        response == 'accepted') {
-      print('🔌 Main: 🔑 Storing responder public key for: $responderId');
-
-      // Store the responder's public key for future encryption
+  // CRITICAL: Verify the callback was set up correctly
+  print('🔌 Main: 🔍 Verifying onKeyExchangeResponse callback after setup...');
+  if (socketService.onKeyExchangeResponse != null) {
+    print('🔌 Main: ✅ onKeyExchangeResponse callback successfully configured');
+  } else {
+    print(
+        '🔌 Main: ❌ CRITICAL ERROR: onKeyExchangeResponse callback failed to set up!');
+    // Try to set it up again as a fallback
+    print('🔌 Main: 🔄 Attempting fallback callback setup...');
+    socketService.setOnKeyExchangeResponse((data) {
+      print('🔌 Main: 🚨 FALLBACK: Key exchange response received: $data');
+      // Process with KeyExchangeService
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
-          await EncryptionService.storeRecipientPublicKey(
-              responderId, responderPublicKey);
-          print('🔌 Main: ✅ Responder public key stored successfully');
+          await KeyExchangeService.instance.handleKeyExchangeResponse(data);
+          print('🔌 Main: ✅ Fallback callback processed successfully');
         } catch (e) {
-          print('🔌 Main: ❌ Failed to store responder public key: $e');
+          print('🔌 Main: ❌ Fallback callback failed: $e');
         }
       });
-    } else {
-      print(
-          '🔌 Main: ⚠️ Invalid key exchange response data: responderId=$responderId, hasPublicKey=${responderPublicKey != null}, response=$response');
-    }
+    });
+    print('🔌 Main: 🔄 Fallback callback setup completed');
+  }
+
+  // CRITICAL: Check all callback statuses for debugging
+  print('🔌 Main: 🔍 Checking all socket callback statuses...');
+  final callbackStatus = socketService.getCallbackStatus();
+  callbackStatus.forEach((callbackName, value) {
+    // Handle both boolean and string values safely
+    final isSet = value == true || (value is String && value.isNotEmpty);
+    final status = isSet ? '✅ SET' : '❌ NULL';
+    print('🔌 Main: $status - $callbackName');
   });
+  print('🔌 Main: 🔍 Callback status check completed');
 
   // CRITICAL: Handle user data exchange to complete key exchange flow
   socketService.setOnUserDataExchange((data) {
@@ -520,21 +548,22 @@ void _setupSocketCallbacks(SeSocketService socketService) {
   });
 
   // Handle conversation creation events from other users
-  socketService.setOnConversationCreated((data) {
-    print('💬 Main: Conversation created event received from socket: $data');
+  // REMOVED: This is now handled in ChatListProvider to avoid duplicate callbacks
+  // socketService.setOnConversationCreated((data) {
+  //   print('💬 Main: Conversation created event received from socket: $data');
 
-    // Process the conversation creation with requester's user data
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        // This will handle the conversation creation on the acceptor's side
-        // when they receive the conversation:created event with requester's user data
-        await KeyExchangeService.instance.handleConversationCreated(data);
-        print('💬 Main: ✅ Conversation created event processed successfully');
-      } catch (e) {
-        print('💬 Main: ❌ Failed to process conversation created event: $e');
-      }
-    });
-  });
+  //   // Process the conversation creation with requester's user data
+  //   WidgetsBinding.instance.addPostFrameCallback((_) async {
+  //     try {
+  //       // This will handle the conversation creation on the acceptor's side
+  //       // when they receive the conversation:created event with requester's user data
+  //       await KeyExchangeService.instance.handleConversationCreated(data);
+  //       print('💬 Main: ✅ Conversation created event processed successfully');
+  //     } catch (e) {
+  //       print('💬 Main: ❌ Failed to process conversation created event: $e');
+  //     }
+  //   });
+  // });
 
   // CRITICAL: Connect KeyExchangeService with ChatListProvider for real-time UI updates
   WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -558,6 +587,29 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           }
         });
       });
+
+      // CRITICAL: Connect user data exchange to update conversation display names
+      KeyExchangeService.instance
+          .setOnUserDataExchange((senderId, displayName) {
+        print(
+            '🔑 Main: 🚀 User data exchange, updating conversation display name...');
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            final chatListProvider = Provider.of<ChatListProvider>(
+                navigatorKey.currentContext!,
+                listen: false);
+
+            // Update the conversation display name
+            chatListProvider.handleUserDataExchange(senderId, displayName);
+            print(
+                '🔑 Main: ✅ Conversation display name updated via ChatListProvider');
+          } catch (e) {
+            print('🔑 Main: ❌ Failed to update conversation display name: $e');
+          }
+        });
+      });
+
       print('🔑 Main: ✅ KeyExchangeService conversation callback connected');
     } catch (e) {
       print('🔑 Main: ❌ Failed to connect KeyExchangeService callback: $e');
@@ -580,13 +632,64 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           messageId: messageId,
           status: msg_status.MessageDeliveryStatus.sent,
           timestamp: DateTime.now(),
-          senderId: '', // Will be filled by the provider
         );
 
+        // Update the message status in the provider
         chatListProvider.processMessageStatusUpdate(statusUpdate);
-        print('✅ Main: Message acknowledgment processed successfully');
+        print('🔌 Main: ✅ Message status updated in ChatListProvider');
       } catch (e) {
-        print('❌ Main: Failed to process message acknowledgment: $e');
+        print('🔌 Main: ❌ Failed to update message status: $e');
+      }
+    });
+  });
+
+  // Handle key exchange revoked events
+  socketService.setOnKeyExchangeRevoked((data) {
+    print('🔑 Main: Key exchange revoked event received: $data');
+
+    // Update badge counts for revoked requests
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final indicatorService = Provider.of<IndicatorService>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Decrease pending key exchange count
+        indicatorService.updateCounts(pendingKeyExchange: -1);
+        print('🔌 Main: ✅ Badge count updated after key exchange revoked');
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to update badge count after revoke: $e');
+      }
+    });
+  });
+
+  // Handle user deleted events
+  socketService.setOnUserDeleted((data) {
+    print('🗑️ Main: User deleted event received: $data');
+
+    // Handle user deletion cleanup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        print('🔌 Main: ✅ User deletion event processed');
+        // Note: Conversation cleanup will be handled by the socket service
+        // when it receives the user:deleted event
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to handle user deletion: $e');
+      }
+    });
+  });
+
+  // Handle conversation created events from other users
+  socketService.setOnConversationCreated((data) {
+    print('💬 Main: Conversation created event received from socket: $data');
+
+    // Process the conversation creation
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await KeyExchangeService.instance.handleConversationCreated(data);
+        print('💬 Main: ✅ Conversation created event processed successfully');
+      } catch (e) {
+        print('💬 Main: ❌ Failed to process conversation created event: $e');
       }
     });
   });
@@ -686,26 +789,6 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         print('🗑️ Main: User deletion event processed successfully');
       } catch (e) {
         print('❌ Main: Failed to process user deletion event: $e');
-      }
-    });
-  });
-
-  // Set up KeyExchangeService callback for conversation creation
-  KeyExchangeService.instance.setOnConversationCreated((conversation) {
-    print(
-        '🔑 Main: Conversation created via KeyExchangeService: ${conversation.id}');
-
-    // Get the ChatListProvider from the provider and add the new conversation
-    // This will be handled in the next frame when the provider is available
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        final chatListProvider = Provider.of<ChatListProvider>(
-            navigatorKey.currentContext!,
-            listen: false);
-        chatListProvider.addConversation(conversation);
-        print('🔑 Main: ✅ ChatListProvider updated with new conversation');
-      } catch (e) {
-        print('🔑 Main: ❌ Failed to update ChatListProvider: $e');
       }
     });
   });

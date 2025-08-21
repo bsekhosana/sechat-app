@@ -45,6 +45,15 @@ class IndicatorService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clear all indicators at once (used when account is deleted)
+  void clearAllIndicators() {
+    _unreadChatsCount = 0;
+    _pendingKeyExchangeCount = 0;
+    _unreadNotificationsCount = 0;
+    notifyListeners();
+    print('🔔 IndicatorService: ✅ All indicators cleared');
+  }
+
   /// Update counts from external sources
   void updateCounts({
     int? unreadChats,

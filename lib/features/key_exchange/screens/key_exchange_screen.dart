@@ -322,7 +322,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
           child: CustomElevatedButton(
             text: isProcessing ? 'Processing...' : 'Accept',
             icon: Icons.check,
-            onPressed: isProcessing ? () {} : () => _acceptRequest(request.id),
+            onPressed: isProcessing ? () {} : () => _acceptRequest(request),
             isPrimary: true,
             isLoading: isProcessing,
           ),
@@ -368,10 +368,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
     );
   }
 
-  Future<void> _acceptRequest(String requestId) async {
+  Future<void> _acceptRequest(KeyExchangeRequest request) async {
     try {
       final provider = context.read<KeyExchangeRequestProvider>();
-      final success = await provider.acceptKeyExchangeRequest(requestId);
+      final success = await provider.acceptKeyExchangeRequest(request, context);
 
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

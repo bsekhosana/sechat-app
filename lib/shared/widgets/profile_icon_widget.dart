@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:sechat_app/features/chat/providers/chat_list_provider.dart';
+import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_provider.dart';
+import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import '../../core/utils/store_link_resolver.dart';
 import '../../core/services/global_user_service.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
-import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:sechat_app/shared/providers/socket_status_provider.dart';
 
 class ProfileIconWidget extends StatefulWidget {
   const ProfileIconWidget({super.key});
@@ -461,6 +465,43 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       // Use the comprehensive account deletion method from SeSessionService
       final seSessionService = SeSessionService();
       await seSessionService.deleteAccount();
+
+      // CRITICAL: Clear all provider data to prevent old conversations from showing
+      if (mounted) {
+        try {
+          print('🗑️ ProfileIconWidget: 🧹 Clearing all provider data...');
+
+          // Clear ChatListProvider
+          final chatListProvider =
+              Provider.of<ChatListProvider>(context, listen: false);
+          chatListProvider.clearAllData();
+          print('🗑️ ProfileIconWidget: ✅ ChatListProvider cleared');
+
+          // Clear KeyExchangeRequestProvider
+          final keyExchangeProvider =
+              Provider.of<KeyExchangeRequestProvider>(context, listen: false);
+          keyExchangeProvider.clearAllData();
+          print('🗑️ ProfileIconWidget: ✅ KeyExchangeRequestProvider cleared');
+
+          // Clear IndicatorService
+          final indicatorService =
+              Provider.of<IndicatorService>(context, listen: false);
+          indicatorService.clearAllIndicators();
+          print('🗑️ ProfileIconWidget: ✅ IndicatorService cleared');
+
+          // Clear SocketStatusProvider
+          final socketStatusProvider =
+              Provider.of<SocketStatusProvider>(context, listen: false);
+          socketStatusProvider.resetState();
+          print('🗑️ ProfileIconWidget: ✅ SocketStatusProvider reset');
+
+          print('🗑️ ProfileIconWidget: ✅ All provider data cleared');
+        } catch (e) {
+          print(
+              '🗑️ ProfileIconWidget: ⚠️ Warning - provider cleanup failed: $e');
+          // Don't fail the account deletion if provider cleanup fails
+        }
+      }
 
       if (!mounted) return;
       navigator.pop(); // Close loading dialog
