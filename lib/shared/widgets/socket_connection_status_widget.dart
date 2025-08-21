@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/socket_provider.dart';
 import '../../core/services/se_socket_service.dart';
 
 class SocketConnectionStatusWidget extends StatefulWidget {
@@ -18,12 +16,12 @@ class _SocketConnectionStatusWidgetState
   bool _isVisible = false;
   String _statusMessage = '';
   Color _statusColor = Colors.orange;
+  final SeSocketService _socketService = SeSocketService.instance;
 
   @override
   void initState() {
     super.initState();
     _checkSocketStatus();
-    _setupSocketListeners();
     _startPeriodicCheck();
   }
 
@@ -31,16 +29,6 @@ class _SocketConnectionStatusWidgetState
   void dispose() {
     _periodicTimer?.cancel();
     super.dispose();
-  }
-
-  void _setupSocketListeners() {
-    // Listen for socket provider changes
-    final socketProvider = Provider.of<SocketProvider>(context, listen: false);
-    socketProvider.addListener(() {
-      if (mounted) {
-        _checkSocketStatus();
-      }
-    });
   }
 
   void _startPeriodicCheck() {
@@ -55,11 +43,8 @@ class _SocketConnectionStatusWidgetState
   }
 
   void _checkSocketStatus() {
-    final socketProvider = Provider.of<SocketProvider>(context, listen: false);
-    final isConnected = socketProvider.isConnected;
-    final isConnecting = socketProvider.isConnecting;
-    final connectionError = socketProvider.connectionError;
-    final reconnectAttempts = socketProvider.reconnectAttempts;
+    final isConnected = _socketService.isConnected;
+    final isConnecting = _socketService.isConnecting;
 
     String message;
     Color color;
@@ -74,16 +59,6 @@ class _SocketConnectionStatusWidgetState
       // Socket is connecting
       message = 'Connecting to SeChat...';
       color = Colors.orange;
-      showWidget = true;
-    } else if (reconnectAttempts > 0) {
-      // Socket is reconnecting
-      message = 'Reconnecting to SeChat... (Attempt ${reconnectAttempts})';
-      color = Colors.orange;
-      showWidget = true;
-    } else if (connectionError != null) {
-      // Socket has connection error
-      message = 'Socket Error: ${_getUserFriendlyError(connectionError)}';
-      color = Colors.red;
       showWidget = true;
     } else {
       // Socket is disconnected
@@ -101,34 +76,12 @@ class _SocketConnectionStatusWidgetState
     }
   }
 
-  String _getUserFriendlyError(String? technicalError) {
-    if (technicalError == null) return 'Connection failed';
-
-    if (technicalError.contains('timeout') ||
-        technicalError.contains('TimeoutException')) {
-      return 'Connection timed out';
-    }
-    if (technicalError.contains('Failed to fetch') ||
-        technicalError.contains('Network error')) {
-      return 'Network error';
-    }
-    if (technicalError.contains('SocketException')) {
-      return 'Socket connection failed';
-    }
-    if (technicalError.contains('Connection refused')) {
-      return 'Server connection refused';
-    }
-
-    return 'Connection error';
-  }
-
   Future<void> _attemptReconnect() async {
     try {
       print('SocketConnectionStatusWidget: Attempting to reconnect...');
 
-      final socketProvider =
-          Provider.of<SocketProvider>(context, listen: false);
-      await socketProvider.emergencyReconnect();
+      // Use the channel socket service to reconnect
+      await _socketService.initialize();
 
       // Refresh status after reconnection attempt
       _checkSocketStatus();
@@ -157,7 +110,7 @@ class _SocketConnectionStatusWidgetState
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: _statusColor.withOpacity(0.1),
+        color: _statusColor.withValues(alpha: 0.1),
         border: Border(
           top: BorderSide(color: _statusColor, width: 1),
           bottom: BorderSide(color: _statusColor, width: 1),

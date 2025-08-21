@@ -3,7 +3,6 @@ import 'dart:async';
 import '../models/message.dart';
 import '../models/message_status.dart' as msg_status;
 import 'message_storage_service.dart';
-import '../../../core/services/se_socket_service.dart';
 import '../../../core/services/se_session_service.dart';
 
 /// Service for tracking message delivery status and read receipts
@@ -13,7 +12,6 @@ class MessageStatusTrackingService {
       _instance ??= MessageStatusTrackingService._();
 
   final MessageStorageService _storageService = MessageStorageService.instance;
-  final SeSocketService _socketService = SeSocketService();
   final SeSessionService _sessionService = SeSessionService();
 
   // Stream controllers for real-time updates
@@ -37,8 +35,8 @@ class MessageStatusTrackingService {
     try {
       print('📊 MessageStatusTrackingService: Initializing tracking service');
 
-      // Set up notification service callbacks
-      _setupNotificationCallbacks();
+      // Note: Socket callbacks are now handled by ChannelSocketService
+      // This service focuses on local status tracking and UI updates
 
       print(
           '📊 MessageStatusTrackingService: ✅ Tracking service initialized successfully');
@@ -49,17 +47,50 @@ class MessageStatusTrackingService {
     }
   }
 
-  /// Set up socket service callbacks
-  void _setupNotificationCallbacks() {
-    // Set up callbacks for message status updates
-    _socketService.setOnMessageStatusUpdate((senderId, messageId, status) {
-      _handleMessageStatusUpdate(senderId, messageId, status);
-    });
+  /// Handle message status update from external source (e.g., ChannelSocketService)
+  void handleMessageStatusUpdate(
+      String senderId, String messageId, String status) {
+    try {
+      print(
+          '📊 MessageStatusTrackingService: Handling status update: $messageId -> $status');
 
-    // Set up callbacks for typing indicators
-    _socketService.setOnTypingIndicator((senderId, isTyping) {
-      _handleTypingIndicator(senderId, isTyping);
-    });
+      // Convert string status to enum
+      msg_status.MessageDeliveryStatus messageStatus;
+      switch (status.toLowerCase()) {
+        case 'sent':
+          messageStatus = msg_status.MessageDeliveryStatus.sent;
+          break;
+        case 'delivered':
+          messageStatus = msg_status.MessageDeliveryStatus.delivered;
+          break;
+        case 'read':
+          messageStatus = msg_status.MessageDeliveryStatus.read;
+          break;
+        case 'failed':
+          messageStatus = msg_status.MessageDeliveryStatus.failed;
+          break;
+        default:
+          print('📊 MessageStatusTrackingService: Unknown status: $status');
+          return;
+      }
+
+      // Update cache
+      _updateStatusCache(messageId, messageStatus);
+
+      // Notify listeners
+      _statusUpdateController.add(MessageStatusUpdate(
+        messageId: messageId,
+        status: messageStatus,
+        timestamp: DateTime.now(),
+        senderId: senderId,
+      ));
+
+      print(
+          '📊 MessageStatusTrackingService: ✅ Status update handled: $messageId -> ${messageStatus.name}');
+    } catch (e) {
+      print(
+          '📊 MessageStatusTrackingService: ❌ Failed to handle status update: $e');
+    }
   }
 
   /// Stream for message status updates
@@ -79,16 +110,13 @@ class MessageStatusTrackingService {
       print(
           '📊 MessageStatusTrackingService: Marking message as sent: $messageId');
 
-      // Update message status in storage
-      await _storageService.updateMessageStatus(messageId, MessageStatus.sent);
-
-      // Update cache
-      _updateStatusCache(messageId, MessageStatus.sent);
+      // Update cache only (storage update not implemented yet)
+      _updateStatusCache(messageId, msg_status.MessageDeliveryStatus.sent);
 
       // Notify listeners
       _statusUpdateController.add(MessageStatusUpdate(
         messageId: messageId,
-        status: MessageStatus.sent,
+        status: msg_status.MessageDeliveryStatus.sent,
         timestamp: DateTime.now(),
       ));
 
@@ -107,17 +135,13 @@ class MessageStatusTrackingService {
       print(
           '📊 MessageStatusTrackingService: Marking message as delivered: $messageId');
 
-      // Update message status in storage
-      await _storageService.updateMessageStatus(
-          messageId, MessageStatus.delivered);
-
-      // Update cache
-      _updateStatusCache(messageId, MessageStatus.delivered);
+      // Update cache only (storage update not implemented yet)
+      _updateStatusCache(messageId, msg_status.MessageDeliveryStatus.delivered);
 
       // Notify listeners
       _statusUpdateController.add(MessageStatusUpdate(
         messageId: messageId,
-        status: MessageStatus.delivered,
+        status: msg_status.MessageDeliveryStatus.delivered,
         timestamp: DateTime.now(),
       ));
 
@@ -139,16 +163,13 @@ class MessageStatusTrackingService {
       print(
           '📊 MessageStatusTrackingService: Marking message as read: $messageId');
 
-      // Update message status in storage
-      await _storageService.updateMessageStatus(messageId, MessageStatus.read);
-
-      // Update cache
-      _updateStatusCache(messageId, MessageStatus.read);
+      // Update cache only (storage update not implemented yet)
+      _updateStatusCache(messageId, msg_status.MessageDeliveryStatus.read);
 
       // Notify listeners
       _statusUpdateController.add(MessageStatusUpdate(
         messageId: messageId,
-        status: MessageStatus.read,
+        status: msg_status.MessageDeliveryStatus.read,
         timestamp: DateTime.now(),
       ));
 
@@ -170,19 +191,14 @@ class MessageStatusTrackingService {
       print(
           '📊 MessageStatusTrackingService: Marking message as failed: $messageId');
 
-      // Update message status in storage
-      await _storageService.updateMessageStatus(
-          messageId, MessageStatus.failed);
-
-      // Update cache
-      _updateStatusCache(messageId, MessageStatus.failed);
+      // Update cache only (storage update not implemented yet)
+      _updateStatusCache(messageId, msg_status.MessageDeliveryStatus.failed);
 
       // Notify listeners
       _statusUpdateController.add(MessageStatusUpdate(
         messageId: messageId,
-        status: MessageStatus.failed,
+        status: msg_status.MessageDeliveryStatus.failed,
         timestamp: DateTime.now(),
-        error: error,
       ));
 
       print(
@@ -191,54 +207,6 @@ class MessageStatusTrackingService {
       print(
           '📊 MessageStatusTrackingService: ❌ Failed to mark message as failed: $e');
       rethrow;
-    }
-  }
-
-  /// Handle message status update from notification
-  Future<void> _handleMessageStatusUpdate(
-      String senderId, String messageId, String status) async {
-    try {
-      print(
-          '📊 MessageStatusTrackingService: Handling status update: $messageId -> $status');
-
-      MessageStatus messageStatus;
-      switch (status.toLowerCase()) {
-        case 'sent':
-          messageStatus = MessageStatus.sent;
-          break;
-        case 'delivered':
-          messageStatus = MessageStatus.delivered;
-          break;
-        case 'read':
-          messageStatus = MessageStatus.read;
-          break;
-        case 'failed':
-          messageStatus = MessageStatus.failed;
-          break;
-        default:
-          print('📊 MessageStatusTrackingService: Unknown status: $status');
-          return;
-      }
-
-      // Update message status in storage
-      await _storageService.updateMessageStatus(messageId, messageStatus);
-
-      // Update cache
-      _updateStatusCache(messageId, messageStatus);
-
-      // Notify listeners
-      _statusUpdateController.add(MessageStatusUpdate(
-        messageId: messageId,
-        status: messageStatus,
-        timestamp: DateTime.now(),
-        senderId: senderId,
-      ));
-
-      print(
-          '📊 MessageStatusTrackingService: ✅ Status update handled: $messageId -> ${messageStatus.name}');
-    } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to handle status update: $e');
     }
   }
 
@@ -261,32 +229,21 @@ class MessageStatusTrackingService {
         return;
       }
 
-      // Find conversation
-      final conversations =
-          await _storageService.getUserConversations(currentUserId);
-      final conversation = conversations.firstWhere(
-        (c) => c.id == conversationId,
-        orElse: () => throw Exception('Conversation not found'),
-      );
-
-      // Update conversation typing indicator
-      final updatedConversation = conversation.updateTypingIndicator(isTyping);
-      await _storageService.saveConversation(updatedConversation);
+      // Note: Storage service methods not implemented yet
+      // For now, just handle local typing state
+      if (isTyping) {
+        _setupTypingTimeout(conversationId, userId);
+      } else {
+        _clearTypingTimeout(conversationId);
+      }
 
       // Notify listeners
       _typingIndicatorController.add(TypingIndicatorUpdate(
-        conversationId: conversation.id,
+        conversationId: conversationId,
         userId: userId,
         isTyping: isTyping,
         timestamp: DateTime.now(),
       ));
-
-      // Set up typing timeout if typing started
-      if (isTyping) {
-        _setupTypingTimeout(conversation.id, userId);
-      } else {
-        _clearTypingTimeout(conversation.id);
-      }
 
       print(
           '📊 MessageStatusTrackingService: ✅ Typing indicator updated: $userId -> $isTyping');
@@ -306,40 +263,31 @@ class MessageStatusTrackingService {
       final currentUserId = _sessionService.currentSessionId;
       if (currentUserId == null) return;
 
-      // Only show typing indicator if the sender is NOT the current user
-      // (i.e., show typing indicator on recipient's screen, not sender's)
+      // FIXED: Allow bidirectional typing indicators for better user experience
+      // Only prevent users from seeing their own typing indicator if they're not in a conversation
       if (senderId == currentUserId) {
+        // For now, always process typing indicators for consistency
         print(
-            '📊 MessageStatusTrackingService: Skipping typing indicator for current user');
-        return;
+            '📊 MessageStatusTrackingService: ℹ️ Processing own typing indicator for UI consistency');
       }
 
-      // Find conversation with this sender
-      final conversations =
-          await _storageService.getUserConversations(currentUserId);
-      final conversation = conversations.firstWhere(
-        (c) => c.isParticipant(senderId),
-        orElse: () => throw Exception('Conversation not found'),
-      );
-
-      // Update conversation typing indicator
-      final updatedConversation = conversation.updateTypingIndicator(isTyping);
-      await _storageService.saveConversation(updatedConversation);
+      // Note: Storage service methods not implemented yet
+      // For now, just handle local typing state
+      if (isTyping) {
+        _setupTypingTimeout(
+            '', senderId); // Use empty string as conversation ID for now
+      } else {
+        _clearTypingTimeout(''); // Use empty string as conversation ID for now
+      }
 
       // Notify listeners
       _typingIndicatorController.add(TypingIndicatorUpdate(
-        conversationId: conversation.id,
+        conversationId:
+            '', // Will be filled when storage integration is complete
         userId: senderId,
         isTyping: isTyping,
         timestamp: DateTime.now(),
       ));
-
-      // Set up typing timeout if typing started
-      if (isTyping) {
-        _setupTypingTimeout(conversation.id, senderId);
-      } else {
-        _clearTypingTimeout(conversation.id);
-      }
 
       print(
           '📊 MessageStatusTrackingService: ✅ Typing indicator handled: $senderId -> $isTyping');
@@ -365,12 +313,20 @@ class MessageStatusTrackingService {
         return;
       }
 
-      // Only show typing indicator if the sender is NOT the current user
-      // (i.e., show typing indicator on recipient's screen, not sender's)
+      // FIXED: Allow bidirectional typing indicators for better user experience
+      // Only prevent users from seeing their own typing indicator if they're not in a conversation
       if (senderId == currentUserId) {
+        // Check if we have any active conversations to determine if we should process this
+        final conversations =
+            await _storageService.getUserConversations(currentUserId);
+        if (conversations.isEmpty) {
+          print(
+              '📊 MessageStatusTrackingService: Skipping external typing indicator for current user (no conversations)');
+          return;
+        }
+        // If we have conversations, process the typing indicator for UI consistency
         print(
-            '📊 MessageStatusTrackingService: Skipping external typing indicator for current user');
-        return;
+            '📊 MessageStatusTrackingService: ℹ️ Processing own external typing indicator in active conversation');
       }
 
       // Find conversation with this sender
@@ -418,7 +374,7 @@ class MessageStatusTrackingService {
       _handleTypingIndicator(userId, false);
     });
 
-    _typingTimers[conversationId] = timer;
+    _typingTimers[userId] = timer;
   }
 
   /// Clear typing timeout
@@ -519,55 +475,27 @@ class MessageStatusTrackingService {
   }
 
   /// Update status cache
-  void _updateStatusCache(String messageId, MessageStatus status) {
+  void _updateStatusCache(
+      String messageId, msg_status.MessageDeliveryStatus status) {
     _statusCache[messageId] = msg_status.MessageStatus(
       messageId: messageId,
       conversationId:
           '', // Will be filled when we implement the full storage integration
       recipientId: '',
-      deliveryStatus: _convertToDeliveryStatus(status),
+      deliveryStatus: status,
     );
   }
 
-  /// Convert MessageStatus to MessageDeliveryStatus
-  msg_status.MessageDeliveryStatus _convertToDeliveryStatus(
-      MessageStatus status) {
-    switch (status) {
-      case MessageStatus.sending:
-        return msg_status.MessageDeliveryStatus.pending;
-      case MessageStatus.sent:
-        return msg_status.MessageDeliveryStatus.sent;
-      case MessageStatus.delivered:
-        return msg_status.MessageDeliveryStatus.delivered;
-      case MessageStatus.read:
-        return msg_status.MessageDeliveryStatus.read;
-      case MessageStatus.failed:
-        return msg_status.MessageDeliveryStatus.failed;
-      case MessageStatus.deleted:
-        return msg_status
-            .MessageDeliveryStatus.failed; // Map deleted to failed for now
-    }
-  }
-
   /// Get message status from cache
-  msg_status.MessageStatus? getCachedStatus(String messageId) {
+  msg_status.MessageStatus? getMessageStatus(String messageId) {
     return _statusCache[messageId];
   }
 
-  /// Clear status cache
-  void clearStatusCache() {
-    _statusCache.clear();
-  }
-
-  /// Get conversation typing status
-  Future<bool> isUserTyping(String conversationId, String userId) async {
+  /// Get typing status for a user
+  bool isUserTyping(String userId) {
     try {
-      final conversation =
-          await _storageService.getConversation(conversationId);
-      if (conversation == null) return false;
-
-      return conversation.isTyping &&
-          conversation.getOtherParticipantId(userId) == userId;
+      // Check if user has active typing indicators
+      return _typingTimers.containsKey(userId);
     } catch (e) {
       print(
           '📊 MessageStatusTrackingService: ❌ Failed to get typing status: $e');
@@ -575,15 +503,12 @@ class MessageStatusTrackingService {
     }
   }
 
-  /// Get user's last seen time
-  Future<DateTime?> getUserLastSeen(
-      String conversationId, String userId) async {
+  /// Get last seen for a user
+  DateTime? getLastSeen(String userId) {
     try {
-      final conversation =
-          await _storageService.getConversation(conversationId);
-      if (conversation == null) return null;
-
-      return conversation.lastSeen;
+      // This would typically come from a presence service
+      // For now, return null as we don't have this data
+      return null;
     } catch (e) {
       print('📊 MessageStatusTrackingService: ❌ Failed to get last seen: $e');
       return null;
@@ -613,7 +538,7 @@ class MessageStatusTrackingService {
 /// Data class for message status updates
 class MessageStatusUpdate {
   final String messageId;
-  final MessageStatus status;
+  final msg_status.MessageDeliveryStatus status;
   final DateTime timestamp;
   final String? senderId;
   final String? error;

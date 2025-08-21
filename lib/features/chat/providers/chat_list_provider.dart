@@ -10,12 +10,15 @@ import '../services/message_storage_service.dart';
 import '../services/message_status_tracking_service.dart';
 import '../models/message.dart';
 import '../models/chat_conversation.dart';
+import 'package:sechat_app/core/utils/conversation_id_generator.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
 
 /// Provider for managing chat list state and operations
 class ChatListProvider extends ChangeNotifier {
   final MessageStorageService _storageService = MessageStorageService.instance;
   final MessageStatusTrackingService _statusTrackingService =
       MessageStatusTrackingService.instance;
+  final SeSocketService _socketService = SeSocketService.instance;
 
   // Realtime services
   PresenceService? _presenceService;
@@ -30,6 +33,7 @@ class ChatListProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _hasError = false;
   String? _errorMessage;
+  bool _isInitialized = false;
 
   /// Set callback for online status changes
   void setOnOnlineStatusChanged(Function(String, bool, DateTime?) callback) {
@@ -83,42 +87,27 @@ class ChatListProvider extends ChangeNotifier {
   int get totalUnreadCount =>
       _conversations.fold(0, (sum, conv) => sum + conv.unreadCount);
 
-  /// Initialize the chat list provider
+  /// Initialize the provider
   Future<void> initialize() async {
+    if (_isInitialized) return;
+
     try {
-      print('📱 ChatListProvider: 🚀 Starting initialization...');
-      _setLoading(true);
+      print('📱 ChatListProvider: Initializing...');
 
-      // Load conversations with timeout protection
-      try {
-        await _loadConversations();
-      } catch (e) {
-        print('📱 ChatListProvider: ❌ _loadConversations failed: $e');
-        // Ensure we have a result even if loading fails
-        _conversations = [];
-        _applySearchFilter();
-      }
+      // Initialize the channel-based socket service
+      await _socketService.initialize();
 
-      print(
-          '📱 ChatListProvider: ✅ Conversations loaded, setting up services...');
-      _setupStatusTracking();
-      _setupConversationCreationListener();
-      _setupRealtimeServices();
-      _setupOnlineStatusCallback();
-      print('📱 ChatListProvider: ✅ Initialization complete');
-      _setLoading(false);
+      // Load existing conversations
+      await _loadConversations();
+
+      // Set up socket callbacks
+      _setupSocketCallbacks();
+
+      _isInitialized = true;
+      print('📱 ChatListProvider: ✅ Initialized successfully');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Initialization failed: $e');
-      if (e is TimeoutException) {
-        _setError('Loading conversations timed out. Please try again.');
-      } else {
-        _setError('Failed to initialize chat list: $e');
-      }
-    } finally {
-      // Ensure loading is always set to false, even if there's an error
-      print(
-          '📱 ChatListProvider: 🔄 Setting loading to false in finally block');
-      _setLoading(false);
+      print('📱 ChatListProvider: ❌ Failed to initialize: $e');
+      rethrow;
     }
   }
 
@@ -274,7 +263,7 @@ class ChatListProvider extends ChangeNotifier {
 
     // Listen for typing indicators from socket service
     try {
-      final socketService = SeSocketService();
+      final socketService = SeSocketService.instance;
       socketService.setOnTypingIndicator((senderId, isTyping) {
         _handleTypingIndicatorFromSocket(senderId, isTyping);
       });
@@ -287,7 +276,7 @@ class ChatListProvider extends ChangeNotifier {
 
     // Listen for online status updates from socket service
     try {
-      final socketService = SeSocketService();
+      final socketService = SeSocketService.instance;
       // Note: Online status updates are handled through lastSeen updates
       print('🔌 ChatListProvider: ✅ Status tracking services set up');
     } catch (e) {
@@ -322,12 +311,32 @@ class ChatListProvider extends ChangeNotifier {
   /// Setup conversation creation listener
   void _setupConversationCreationListener() {
     try {
-      final socketService = SeSocketService();
+      final socketService = SeSocketService.instance;
       socketService.setOnConversationCreated((conversationData) {
         print(
-            '🔌 ChatListProvider: 🆕 New conversation created: ${conversationData.id}');
-        // Add the new conversation to the list
-        _addNewConversation(conversationData);
+            '🔌 ChatListProvider: 🆕 New conversation created: ${conversationData['conversation_id_local'] ?? 'unknown'}');
+
+        // Create a ChatConversation from the socket data
+        try {
+          final currentUserId = SeSessionService().currentSessionId;
+          if (currentUserId != null) {
+            final conversation = ChatConversation(
+              id: conversationData['conversation_id_local'] ??
+                  const Uuid().v4(),
+              participant1Id: currentUserId,
+              participant2Id: conversationData['senderId'] ?? '',
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+            _addNewConversation(conversation);
+            print(
+                '🔌 ChatListProvider: ✅ Conversation created and added: ${conversation.id}');
+          }
+        } catch (e) {
+          print(
+              '🔌 ChatListProvider: ❌ Error creating conversation from socket data: $e');
+        }
+
         print('🔌 ChatListProvider: Conversation data: $conversationData');
       });
       print('🔌 ChatListProvider: ✅ Conversation creation listener set up');
@@ -347,7 +356,7 @@ class ChatListProvider extends ChangeNotifier {
       }
 
       // Initialize presence service
-      _presenceService = RealtimeServiceManager.instance.presence;
+      _presenceService = RealtimeServiceManager().presence;
 
       // Note: Presence updates are handled through the existing socket service
       // The realtime presence service will be used for local presence management
@@ -1005,7 +1014,7 @@ class ChatListProvider extends ChangeNotifier {
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
           lastMessageAt: DateTime.now(),
-          lastMessageId: conversationId,
+          lastMessageId: messageId ?? conversationId,
           lastMessagePreview: message,
           lastMessageType: MessageType.text,
           unreadCount: 1,
@@ -1055,127 +1064,108 @@ class ChatListProvider extends ChangeNotifier {
     }
   }
 
-  /// Handle outgoing message (message sent by current user)
-  Future<void> handleOutgoingMessage({
-    required String recipientId,
-    required String message,
-    required String conversationId,
-    String? messageId,
-  }) async {
+  /// Add a new conversation by recipient ID
+  void _addNewConversationByRecipient(
+      String recipientId, String recipientName) {
     try {
-      print(
-          '📱 ChatListProvider: Handling outgoing message to $recipientId: $message');
+      // Use recipient ID as conversation ID
+      final conversationId = recipientId;
 
-      final currentUserId = _getCurrentUserId();
-      if (currentUserId == 'unknown_user') {
-        print('📱 ChatListProvider: ❌ No current user session found');
+      // Check if conversation already exists
+      if (_conversations.any((conv) => conv.id == conversationId)) {
+        print(
+            '📱 ChatListProvider: ℹ️ Conversation already exists: $conversationId');
         return;
       }
 
-      // Find existing conversation
-      ChatConversation? existingConversation;
-      try {
-        existingConversation = _conversations.firstWhere(
-          (conv) => conv.id == conversationId,
-        );
-        print(
-            '📱 ChatListProvider: ✅ Found conversation by ID: $conversationId');
-      } catch (e) {
-        // If not found by ID, try to find by participant
-        try {
-          existingConversation = _conversations.firstWhere(
-            (conv) => conv.isParticipant(recipientId),
-          );
-          print(
-              '📱 ChatListProvider: ✅ Found conversation by participant: $recipientId');
-        } catch (e) {
-          existingConversation = null;
-          print('📱 ChatListProvider: ⚠️ No existing conversation found');
-        }
-      }
+      final currentUserId = _getCurrentUserId();
 
-      if (existingConversation != null) {
-        // Update existing conversation with outgoing message
-        final updatedConversation = existingConversation.copyWith(
-          lastMessageAt: DateTime.now(),
-          lastMessageId:
-              messageId ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
-          lastMessagePreview: message,
-          lastMessageType: MessageType.text,
-          unreadCount: 0, // No unread count for outgoing messages
-          updatedAt: DateTime.now(),
-        );
+      // Create new conversation
+      final newConversation = ChatConversation(
+        id: conversationId,
+        participant1Id: currentUserId,
+        participant2Id: recipientId,
+        displayName: recipientName,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        lastMessageAt: null,
+        lastMessageId: null,
+        lastMessagePreview: null,
+        lastMessageType: null,
+        unreadCount: 0,
+        isArchived: false,
+        isMuted: false,
+        isPinned: false,
+        metadata: null,
+        lastSeen: null,
+        isTyping: false,
+        typingStartedAt: null,
+        notificationsEnabled: true,
+        soundEnabled: true,
+        vibrationEnabled: true,
+        readReceiptsEnabled: true,
+        typingIndicatorsEnabled: true,
+        lastSeenEnabled: true,
+      );
 
-        // Update in storage
-        await _storageService.saveConversation(updatedConversation);
-
-        // Update local state
-        final index =
-            _conversations.indexWhere((c) => c.id == existingConversation!.id);
-        if (index != -1) {
-          _conversations[index] = updatedConversation;
-        }
-
-        print(
-            '📱 ChatListProvider: ✅ Updated conversation with outgoing message');
-      } else {
-        // Create new conversation for outgoing message
-        final newConversation = ChatConversation(
-          id: conversationId,
-          participant1Id: currentUserId,
-          participant2Id: recipientId,
-          displayName: recipientId, // Will be updated when user data is loaded
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          lastMessageAt: DateTime.now(),
-          lastMessageId: messageId ?? conversationId,
-          lastMessagePreview: message,
-          lastMessageType: MessageType.text,
-          unreadCount: 0,
-          isArchived: false,
-          isMuted: false,
-          isPinned: false,
-          metadata: null,
-          lastSeen: null,
-          isTyping: false,
-          typingStartedAt: null,
-          notificationsEnabled: true,
-          soundEnabled: true,
-          vibrationEnabled: true,
-          readReceiptsEnabled: true,
-          typingIndicatorsEnabled: true,
-          lastSeenEnabled: true,
-          isBlocked: false,
-          blockedAt: null,
-          recipientId: recipientId,
-        );
-
-        // Save to storage
-        await _storageService.saveConversation(newConversation);
-
-        // Add to local state
-        _conversations.add(newConversation);
-
-        print(
-            '📱 ChatListProvider: ✅ Created new conversation for outgoing message');
-      }
-
-      // Sort conversations by last message time
-      _conversations.sort((a, b) {
-        final aTime = a.lastMessageAt ?? a.createdAt;
-        final bTime = b.lastMessageAt ?? b.createdAt;
-        return bTime.compareTo(aTime);
-      });
-
-      // Apply search filter
+      _conversations.add(newConversation);
       _applySearchFilter();
-
-      // Notify listeners
       notifyListeners();
 
-      print('📱 ChatListProvider: ✅ Outgoing message handled successfully');
+      print('📱 ChatListProvider: ✅ Added new conversation: $conversationId');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error handling outgoing message: $e');
+      print('📱 ChatListProvider: ❌ Failed to add new conversation: $e');
+    }
+  }
+
+  /// Handle outgoing message
+  void handleOutgoingMessage(
+      String recipientId, String content, String messageId) {
+    try {
+      // Use recipient ID as conversation ID
+      final conversationId = recipientId;
+
+      // Find existing conversation
+      final conversationIndex =
+          _conversations.indexWhere((conv) => conv.id == conversationId);
+
+      if (conversationIndex != -1) {
+        // Update existing conversation
+        final conversation = _conversations[conversationIndex];
+        _conversations[conversationIndex] = conversation.copyWith(
+          lastMessagePreview: content,
+          lastMessageId: messageId,
+          lastMessageAt: DateTime.now(),
+          lastMessageType: MessageType.text,
+          updatedAt: DateTime.now(),
+        );
+      } else {
+        // Create new conversation if it doesn't exist
+        _addNewConversationByRecipient(
+            recipientId, recipientId); // Use recipient ID as name for now
+
+        // Update the newly created conversation
+        final newConversationIndex =
+            _conversations.indexWhere((conv) => conv.id == conversationId);
+        if (newConversationIndex != -1) {
+          final conversation = _conversations[newConversationIndex];
+          _conversations[newConversationIndex] = conversation.copyWith(
+            lastMessagePreview: content,
+            lastMessageId: messageId,
+            lastMessageAt: DateTime.now(),
+            lastMessageType: MessageType.text,
+            updatedAt: DateTime.now(),
+          );
+        }
+      }
+
+      _applySearchFilter();
+      notifyListeners();
+
+      print(
+          '📱 ChatListProvider: ✅ Updated conversation with outgoing message: $conversationId');
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Failed to handle outgoing message: $e');
     }
   }
 
@@ -1220,7 +1210,7 @@ class ChatListProvider extends ChangeNotifier {
   void _setupOnlineStatusCallback() {
     try {
       // Set up online status callback from socket service
-      final socketService = SeSocketService();
+      final socketService = SeSocketService.instance;
       socketService.setOnOnlineStatusUpdate(
         (senderId, isOnline, lastSeen) {
           _handleOnlineStatusUpdate(senderId, isOnline, lastSeen);
@@ -1272,5 +1262,13 @@ class ChatListProvider extends ChangeNotifier {
     } catch (e) {
       print('📱 ChatListProvider: ❌ Error handling online status update: $e');
     }
+  }
+
+  /// Setup socket callbacks
+  void _setupSocketCallbacks() {
+    _setupConversationCreationListener();
+    _setupStatusTracking();
+    _setupRealtimeServices();
+    _setupOnlineStatusCallback();
   }
 }

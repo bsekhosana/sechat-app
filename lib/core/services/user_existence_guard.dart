@@ -33,7 +33,7 @@ class UserExistenceGuard {
     try {
       // 1. Remove session on socket server (if possible) then logout locally
       try {
-        final socketService = SeSocketService();
+        final socketService = SeSocketService.instance;
         final sessionId = SeSessionService().currentSessionId;
         await socketService.deleteSessionOnServer(sessionId: sessionId);
       } catch (e) {

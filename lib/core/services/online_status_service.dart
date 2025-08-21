@@ -73,7 +73,7 @@ class OnlineStatusService {
 
       // Send online status to all contacts
       for (final contactId in contactIds) {
-        await SeSocketService().sendMessageStatusUpdate(
+        await SeSocketService.instance.sendMessageStatusUpdate(
           recipientId: contactId,
           messageId: 'status_update_${DateTime.now().millisecondsSinceEpoch}',
           status: isOnline ? 'online' : 'offline',

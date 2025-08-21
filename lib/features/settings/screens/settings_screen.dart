@@ -6,9 +6,10 @@ import '../../../shared/widgets/search_widget.dart';
 import '../../../shared/widgets/profile_icon_widget.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/se_shared_preference_service.dart';
-import '../../../core/services/se_socket_service.dart';
+import '../../../core/services/channel_socket_service.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../../core/services/se_session_service.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'queue_statistics_screen.dart';
 import '../../../realtime/realtime_service_manager.dart';
 
@@ -209,82 +210,71 @@ Download now and let's chat securely!
 
       // Send offline status to all contacts and disconnect socket
       try {
-        final socketService = SeSocketService();
+        final socketService = SeSocketService.instance;
         // Send offline status via realtime service
         try {
-          final realtimeManager = RealtimeServiceManager.instance;
+          final realtimeManager = RealtimeServiceManager();
           if (realtimeManager.isInitialized) {
             realtimeManager.presence.forcePresenceUpdate(false);
-            print('🔌 Settings: ✅ Offline status sent via realtime service');
           } else {
             // Fallback to direct socket service
-            await socketService.sendUserOnlineStatus(false);
-            print('🔌 Settings: ✅ Offline status sent via fallback');
+            socketService.sendPresenceUpdate('', false);
           }
         } catch (e) {
           // Fallback to direct socket service
-          await socketService.sendUserOnlineStatus(false);
-          print('🔌 Settings: ✅ Offline status sent via fallback');
+          socketService.sendPresenceUpdate('', false);
         }
-
-        // Best effort: remove session on server
-        final sessionId = SeSessionService().currentSessionId;
-        await socketService.deleteSessionOnServer(sessionId: sessionId);
-
-        // Disconnect socket
-        await socketService.disconnect();
-        print('🔌 Settings: ✅ Socket disconnected');
+        socketService.dispose();
+        print('🔌 SettingsScreen: ✅ Channel socket disposed during logout');
       } catch (e) {
         print(
-            '🔌 Settings: ⚠️ Error handling socket during logout: $e, but continuing with logout');
+            '🔌 SettingsScreen: ⚠️ Error disposing channel socket: $e, but continuing with logout');
       }
 
-      // Perform logout using SeSessionService
-      final seSessionService = SeSessionService();
-      final logoutSuccess = await seSessionService.logout();
+      // Note: Session deletion on server is now handled by ChannelSocketService
+      // Session cleanup is handled automatically when the connection is closed
+      print('🔌 Settings: Session cleanup will be handled by server');
 
-      print('🔍 Settings: Logout result: $logoutSuccess');
+      // Note: Channel socket has already been disposed in the try block above
+      print('🔌 Settings: ✅ Channel socket disposed');
+    } catch (e) {
+      print(
+          '🔌 Settings: ⚠️ Error handling socket during logout: $e, but continuing with logout');
+    }
 
-      // Close loading dialog
-      if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-      }
+    // Perform logout using SeSessionService
+    final seSessionService = SeSessionService();
+    final logoutSuccess = await seSessionService.logout();
 
-      // Check if widget is still mounted before navigation
-      if (context.mounted) {
-        print('🔍 Settings: Navigating to login screen...');
-        // Navigate to login screen without back button
+    print('🔍 Settings: Logout result: $logoutSuccess');
+
+    // Close loading dialog
+    if (context.mounted) {
+      Navigator.of(context).pop(); // Close loading dialog
+    }
+
+    // Check if widget is still mounted before navigation
+    if (context.mounted) {
+      print('🔍 Settings: Navigating to login screen...');
+      // Navigate to login screen without back button
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(),
+        ),
+        (route) => false,
+      );
+      print('🔍 Settings: Navigation completed');
+    } else {
+      print('🔍 Settings: Context not mounted after logout');
+      // Force navigation even if context is not mounted
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(
             builder: (_) => const LoginScreen(),
           ),
           (route) => false,
         );
-        print('🔍 Settings: Navigation completed');
-      } else {
-        print('🔍 Settings: Context not mounted after logout');
-        // Force navigation even if context is not mounted
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(
-              builder: (_) => const LoginScreen(),
-            ),
-            (route) => false,
-          );
-        });
-      }
-    } catch (e) {
-      print('🔍 Settings: Logout error: $e');
-      // Close loading dialog if there's an error
-      if (context.mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Logout failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      });
     }
   }
 

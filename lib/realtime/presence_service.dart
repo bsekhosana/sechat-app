@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import '../core/services/se_socket_service.dart';
 import '../core/services/se_session_service.dart';
 import 'realtime_logger.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
 
 /// Service to manage user presence (online/offline) with robust TTL handling
 class PresenceService {
@@ -14,7 +15,7 @@ class PresenceService {
 
   PresenceService._();
 
-  final SeSocketService _socketService = SeSocketService();
+  final SeSocketService _socketService = SeSocketService.instance;
   final SeSessionService _sessionService = SeSessionService();
 
   // Presence state
@@ -183,6 +184,56 @@ class PresenceService {
     } catch (e) {
       RealtimeLogger.presence('Failed to emit presence update: $e',
           details: {'error': e.toString()});
+    }
+  }
+
+  /// Send presence update to the server
+  void _sendPresenceUpdate(bool isOnline) async {
+    try {
+      final currentUserId = _sessionService.currentSessionId;
+      if (currentUserId == null) {
+        print(
+            '🟢 PresenceService: ❌ No session ID available for presence update');
+        return;
+      }
+
+      // Get all active contacts from the session service
+      final activeContacts = _getActiveContactsFromSession();
+      if (activeContacts.isEmpty) {
+        print('🟢 PresenceService: ℹ️ No active contacts to send presence to');
+        return;
+      }
+
+      // Use the new channel-based socket service
+      final socketService = SeSocketService.instance;
+
+      // Send presence update to all active contacts
+      for (final contactId in activeContacts) {
+        socketService.sendPresenceUpdate(contactId, isOnline);
+      }
+
+      print(
+          '🟢 PresenceService: ✅ Presence update sent via channel socket: ${isOnline ? 'online' : 'offline'} to ${activeContacts.length} contacts');
+    } catch (e) {
+      print('🟢 PresenceService: ❌ Failed to send presence update: $e');
+    }
+  }
+
+  /// Get active contacts from the session service
+  List<String> _getActiveContactsFromSession() {
+    try {
+      // Get contacts from the current session's message cache
+      // This represents users we've communicated with
+      final session = _sessionService.currentSession;
+      if (session == null) return [];
+
+      // For now, return an empty list since we don't have a contacts service yet
+      // In a real implementation, this would come from a contacts/relationships service
+      // or be derived from the message cache
+      return <String>[];
+    } catch (e) {
+      print('🟢 PresenceService: ❌ Error getting active contacts: $e');
+      return [];
     }
   }
 

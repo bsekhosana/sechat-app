@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:sechat_app/features/notifications/models/socket_notification.dart';
 import 'package:sechat_app/features/notifications/services/notification_database_service.dart';
 
-/// Socket-based notifications screen
-/// Shows real-time notifications from the socket service
+/// Notifications screen
+/// Shows notifications from the database (socket events are now handled by ChannelSocketService)
 class SocketNotificationsScreen extends StatefulWidget {
   const SocketNotificationsScreen({Key? key}) : super(key: key);
 
@@ -16,7 +15,6 @@ class SocketNotificationsScreen extends StatefulWidget {
 }
 
 class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
-  final SeSocketService _socketService = SeSocketService();
   final NotificationDatabaseService _databaseService =
       NotificationDatabaseService();
   List<SocketNotification> _notifications = [];

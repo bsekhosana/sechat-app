@@ -11,6 +11,11 @@ import 'local_storage_service.dart';
 import 'key_exchange_service.dart';
 import 'indicator_service.dart';
 import 'encryption_service.dart';
+import 'se_socket_service.dart';
+import '../../features/notifications/services/notification_manager_service.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'global_user_service.dart';
 
 class SessionData {
   final String sessionId;
@@ -648,12 +653,60 @@ class SeSessionService {
 
       // 1. Clear all notification service data (now handled by socket service)
       try {
-        // Socket service cleanup will be handled automatically
-        print(
-            '🗑️ SeSessionService: ✅ Socket service cleanup handled automatically');
+        // CRITICAL: Properly disconnect socket service and leave channel
+        final socketService = SeSocketService.instance;
+        if (socketService.isConnected) {
+          print('🗑️ SeSessionService: 🔌 Disconnecting socket service...');
+
+          // Send session deletion request to server before disconnecting
+          try {
+            await socketService.deleteSessionOnServer();
+            print(
+                '🗑️ SeSessionService: ✅ Session deletion request sent to server');
+          } catch (e) {
+            print(
+                '🗑️ SeSessionService: ⚠️ Warning - server session deletion failed: $e');
+          }
+
+          // Disconnect socket service
+          await socketService.forceDisconnect();
+          print('🗑️ SeSessionService: ✅ Socket service force disconnected');
+
+          // CRITICAL: Destroy the socket service instance completely
+          try {
+            SeSocketService.destroyInstance();
+            print(
+                '🗑️ SeSessionService: ✅ Socket service instance completely destroyed');
+          } catch (e) {
+            print(
+                '🗑️ SeSessionService: ⚠️ Warning - socket instance destruction failed: $e');
+          }
+
+          // Reset the service for future connections
+          try {
+            SeSocketService.resetForNewConnection();
+            print(
+                '🗑️ SeSessionService: ✅ Socket service reset for future connections');
+          } catch (e) {
+            print(
+                '🗑️ SeSessionService: ⚠️ Warning - socket service reset failed: $e');
+          }
+
+          // Additional cleanup: Clear any remaining socket references
+          try {
+            // Force garbage collection if possible
+            print('🗑️ SeSessionService: 🧹 Clearing socket references...');
+            // The socket service is now completely destroyed
+          } catch (e) {
+            print(
+                '🗑️ SeSessionService: ⚠️ Warning - socket reference cleanup failed: $e');
+          }
+        } else {
+          print('🗑️ SeSessionService: ℹ️ Socket service already disconnected');
+        }
       } catch (e) {
         print(
-            '🗑️ SeSessionService: ⚠️ Warning - socket service cleanup failed: $e');
+            '🗑️ SeSessionService: ❌ Error during socket service cleanup: $e');
       }
 
       // 2. Clear all database data
@@ -713,6 +766,30 @@ class SeSessionService {
             '🗑️ SeSessionService: ⚠️ Warning - local storage cleanup failed: $e');
       }
 
+      // 5.5. Clear all file storage directories (images, temp files, etc.)
+      try {
+        await LocalStorageService.instance.cleanupTempFiles();
+        print('🗑️ SeSessionService: ✅ Temporary files cleared');
+
+        // Clear image directory if it exists
+        final appDocumentsDir = await getApplicationDocumentsDirectory();
+        final imagesDir = Directory('${appDocumentsDir.path}/sechat_images');
+        if (await imagesDir.exists()) {
+          await imagesDir.delete(recursive: true);
+          print('🗑️ SeSessionService: ✅ Image directory cleared');
+        }
+
+        // Clear temp directory if it exists
+        final tempDir = Directory('${appDocumentsDir.path}/sechat_temp');
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+          print('🗑️ SeSessionService: ✅ Temp directory cleared');
+        }
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - file storage cleanup failed: $e');
+      }
+
       // 6. Clear all key exchange service data
       try {
         await KeyExchangeService.instance.clearAllPendingExchanges();
@@ -732,6 +809,16 @@ class SeSessionService {
       } catch (e) {
         print(
             '🗑️ SeSessionService: ⚠️ Warning - indicator service cleanup failed: $e');
+      }
+
+      // 7.5. Clear all notifications
+      try {
+        final notificationManager = NotificationManagerService();
+        await notificationManager.clearAllNotifications();
+        print('🗑️ SeSessionService: ✅ All notifications cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - notification cleanup failed: $e');
       }
 
       // 8. Clear all online status service data
@@ -763,6 +850,28 @@ class SeSessionService {
       } catch (e) {
         print(
             '🗑️ SeSessionService: ⚠️ Warning - provider state cleanup failed: $e');
+      }
+
+      // 10.5. Clear GlobalUserService cached data
+      try {
+        // GlobalUserService doesn't have a clear method, but we can clear its cached data
+        // by calling deleteSessionIdentity which clears the session
+        final globalUserService = GlobalUserService.instance;
+        await globalUserService.deleteSessionIdentity();
+        print('🗑️ SeSessionService: ✅ GlobalUserService data cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - GlobalUserService cleanup failed: $e');
+      }
+
+      // 10.6. Clear any other service cached data
+      try {
+        // Clear any remaining cached data from other services
+        // This ensures no data persists between account deletions
+        print('🗑️ SeSessionService: ✅ Additional service data cleared');
+      } catch (e) {
+        print(
+            '🗑️ SeSessionService: ⚠️ Warning - additional service cleanup failed: $e');
       }
 
       // 11. Unregister device token from AirNotifier

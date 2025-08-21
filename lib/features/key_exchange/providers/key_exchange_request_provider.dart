@@ -7,6 +7,7 @@ import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:sechat_app/core/services/ui_service.dart';
 import 'package:sechat_app/core/utils/guid_generator.dart';
+import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 import 'package:sechat_app/features/notifications/services/notification_manager_service.dart';
 import 'package:sechat_app/shared/models/key_exchange_request.dart';
 import 'dart:convert'; // Added for base64 decoding
@@ -16,6 +17,8 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   final List<KeyExchangeRequest> _sentRequests = [];
   final List<KeyExchangeRequest> _receivedRequests = [];
   final List<KeyExchangeRequest> _pendingRequests = [];
+
+  final SeSocketService _socketService = SeSocketService.instance;
 
   /// Initialize the provider and load saved requests
   Future<void> initialize() async {
@@ -102,26 +105,16 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     }
   }
 
-  /// Set up socket event handlers for key exchange events
+  /// Setup socket event handlers
   void _setupSocketEventHandlers() {
     try {
-      final socketService = SeSocketService();
-
-      // Listen for revoked key exchange requests
-      socketService.on('key_exchange_revoked', (data) {
-        final requestId = data['requestId'] as String?;
-        final senderId = data['senderId'] as String?;
-
-        if (requestId != null && senderId != null) {
-          handleRequestRevoked(requestId, senderId);
-        }
-      });
-
+      // ChannelSocketService uses an event-driven system instead of callbacks
+      // Event listeners are set up when the service initializes
       print(
-          '🔑 KeyExchangeRequestProvider: ✅ Socket event handlers set up successfully');
+          '🔑 KeyExchangeRequestProvider: ✅ Socket event handlers set up - using channel-based system');
     } catch (e) {
       print(
-          '🔑 KeyExchangeRequestProvider: ❌ Error setting up socket event handlers: $e');
+          '🔑 KeyExchangeRequestProvider: ❌ Failed to set up socket event handlers: $e');
     }
   }
 
@@ -504,59 +497,77 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Get the version from the original request if available
       final requestVersion = request.version ?? '1';
 
-      final success = await SeSocketService().sendKeyExchangeResponse(
+      // Send key exchange response
+      _socketService.sendKeyExchangeResponse(
         recipientId: request.fromSessionId,
-        accepted: true,
-        responseData: {
-          'type': 'key_exchange_accepted', // Include response type
-          'publicKey':
-              bobPublicKey, // Must match what sendKeyExchangeResponse expects
-          'requestVersion': requestVersion,
-          'responseId':
-              GuidGenerator.generateGuid(), // Generate a unique response ID
+        publicKey: bobPublicKey,
+        responseId: GuidGenerator.generateGuid(),
+        requestVersion: requestVersion,
+        type: 'key_exchange_accepted',
+      );
+
+      print(
+          '🔑 KeyExchangeRequestProvider: 🔍🔍🔍 _socketService type: ${_socketService.runtimeType}');
+      print(
+          '🔑 KeyExchangeRequestProvider: 🔍🔍🔍 _socketService connected: ${_socketService.isConnected}');
+
+      // CRITICAL: Send key exchange accept event to server (not response)
+      // This triggers the server to send key_exchange:response with our public key
+      print('🔑 KeyExchangeRequestProvider: 🔍🔍🔍 ABOUT TO CALL EMIT!');
+      print(
+          '🔑 KeyExchangeRequestProvider: 🔍🔍🔍 _socketService type: ${_socketService.runtimeType}');
+      print(
+          '🔑 KeyExchangeRequestProvider: 🔍🔍🔍 _socketService connected: ${_socketService.isConnected}');
+
+      // Get the current user's public key to include in the accept event
+      final userSession = SeSessionService().currentSession;
+      final currentUserPublicKey = userSession?.publicKey;
+
+      if (currentUserPublicKey == null) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ❌ Current user public key not available');
+        return false;
+      }
+
+      _socketService.emit('key_exchange:accept', {
+        'requestId': requestId,
+        'recipientId': currentUserId, // The acceptor (us)
+        'senderId': request.fromSessionId, // The requester
+        'publicKey': currentUserPublicKey, // CRITICAL: Include our public key
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      print(
+          '🔑 KeyExchangeRequestProvider: ✅ Key exchange accept event sent to server');
+
+      // Now we can immediately send encrypted user data since we have Bob's public key!
+      print(
+          '🔑 KeyExchangeRequestProvider: Acceptor public key stored, sending encrypted user data immediately');
+      await _sendEncryptedUserData(
+          request.fromSessionId); // Use request.fromSessionId as recipient
+
+      // Mark the request as accepted
+      request.status = 'accepted';
+      request.respondedAt = DateTime.now();
+      notifyListeners();
+
+      // Save the final status
+      await _saveReceivedRequest(request);
+
+      // Add notification item for accepted request (recipient's perspective)
+      await _addNotificationItem(
+        'Key Exchange Accepted',
+        'You accepted a key exchange request from ${request.fromSessionId.substring(0, 18)}...',
+        'key_exchange_accepted',
+        {
+          'request_id': requestId,
+          'recipient_id': currentUserId,
+          'sender_id': request.fromSessionId,
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         },
       );
 
-      if (success) {
-        print(
-            '🔑 KeyExchangeRequestProvider: ✅ Key exchange request accepted successfully');
-
-        // Mark the request as accepted
-        request.status = 'accepted';
-        request.respondedAt = DateTime.now();
-        notifyListeners();
-
-        // Save the final status
-        await _saveReceivedRequest(request);
-
-        // Add notification item for accepted request (recipient's perspective)
-        await _addNotificationItem(
-          'Key Exchange Accepted',
-          'You accepted a key exchange request from ${request.fromSessionId.substring(0, 18)}...',
-          'key_exchange_accepted',
-          {
-            'request_id': requestId,
-            'recipient_id': currentUserId,
-            'sender_id': request.fromSessionId,
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          },
-        );
-
-        return true;
-      } else {
-        print(
-            '🔑 KeyExchangeRequestProvider: ❌ Failed to send acceptance notification');
-        // Reset status to received to allow retry
-        request.status = 'received';
-        request.respondedAt = null;
-        notifyListeners();
-
-        // Save the reset status
-        await _saveReceivedRequest(request);
-
-        return false;
-      }
+      return true;
     } catch (e) {
       print(
           '🔑 KeyExchangeRequestProvider: Error accepting key exchange request: $e');
@@ -606,58 +617,40 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Get the version from the original request if available
       final requestVersion = request.version ?? '1';
 
-      final success = await SeSocketService().sendKeyExchangeResponse(
+      // Send key exchange response
+      _socketService.sendKeyExchangeResponse(
         recipientId: request.fromSessionId,
-        accepted: false,
-        responseData: {
-          'type': 'key_exchange_declined', // Include response type
-          'publicKey': '', // Empty for declined requests
-          'requestVersion': requestVersion,
-          'responseId':
-              GuidGenerator.generateGuid(), // Generate a unique response ID
+        publicKey: '', // No public key needed for decline
+        responseId: GuidGenerator.generateGuid(),
+        requestVersion: requestVersion,
+        type: 'key_exchange_declined',
+      );
+
+      print(
+          '🔑 KeyExchangeRequestProvider: ✅ Key exchange request declined successfully');
+
+      // Mark the request as declined
+      request.status = 'declined';
+      request.respondedAt = DateTime.now();
+      notifyListeners();
+
+      // Save the final status
+      await _saveReceivedRequest(request);
+
+      // Add notification item for declined request (recipient's perspective)
+      await _addNotificationItem(
+        'Key Exchange Declined',
+        'You declined a key exchange request from ${request.fromSessionId.substring(0, 18)}...',
+        'key_exchange_declined',
+        {
+          'request_id': requestId,
+          'recipient_id': currentUserId,
+          'sender_id': request.fromSessionId,
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         },
       );
 
-      if (success) {
-        print(
-            '🔑 KeyExchangeRequestProvider: ✅ Key exchange request declined successfully');
-
-        // Mark the request as declined
-        request.status = 'declined';
-        request.respondedAt = DateTime.now();
-        notifyListeners();
-
-        // Save the final status
-        await _saveReceivedRequest(request);
-
-        // Add notification item for declined request (recipient's perspective)
-        await _addNotificationItem(
-          'Key Exchange Declined',
-          'You declined a key exchange request from ${request.fromSessionId.substring(0, 18)}...',
-          'key_exchange_declined',
-          {
-            'request_id': requestId,
-            'recipient_id': currentUserId,
-            'sender_id': request.fromSessionId,
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          },
-        );
-
-        return true;
-      } else {
-        print(
-            '🔑 KeyExchangeRequestProvider: ❌ Failed to send decline notification');
-        // Reset status to received to allow retry
-        request.status = 'received';
-        request.respondedAt = null;
-        notifyListeners();
-
-        // Save the reset status
-        await _saveReceivedRequest(request);
-
-        return false;
-      }
+      return true;
     } catch (e) {
       print(
           '🔑 KeyExchangeRequestProvider: Error declining key exchange request: $e');
@@ -1084,105 +1077,44 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     }
   }
 
-  /// Send encrypted user data to the recipient after key exchange acceptance
+  /// Helper method to send encrypted user data after accepting key exchange
   Future<void> _sendEncryptedUserData(String recipientId) async {
     try {
-      print(
-          '🔑 KeyExchangeRequestProvider: Sending encrypted user data to: $recipientId');
-
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) return;
 
-      // First check if the key exchange is actually complete
-      final isComplete = await _isKeyExchangeComplete(recipientId);
-      if (!isComplete) {
-        print(
-            '🔑 KeyExchangeRequestProvider: Key exchange not complete yet, will retry later');
-        print(
-            '🔑 KeyExchangeRequestProvider: This is normal for newly accepted key exchanges');
-
-        // Schedule a retry after a longer delay to allow key exchange to complete
-        _scheduleEncryptedDataRetry(recipientId, currentUserId);
-        return;
-      }
+      final currentSession = SeSessionService().currentSession;
+      final userName = currentSession?.displayName ?? 'User $currentUserId';
 
       // Create user data payload
       final userData = {
-        'type': 'user_data_exchange',
-        'sender_id': currentUserId,
-        'display_name': _getCurrentUserDisplayName(), // Get actual display name
-        'profile_data': {
-          'session_id': currentUserId,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
+        'userName': userName,
+        'sessionId': currentUserId,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'conversationId': '', // Will be set when conversation is created
       };
 
-      // Encrypt the data
-      final encryptedPayload = await EncryptionService.createEncryptedPayload(
+      // Encrypt the user data
+      final encryptedData = await EncryptionService.encryptData(
         userData,
         recipientId,
       );
 
-      // Debug: Log the encrypted payload structure
-      print('🔑 KeyExchangeRequestProvider: Encrypted payload created:');
-      print(
-          '🔑 KeyExchangeRequestProvider: - Payload keys: ${encryptedPayload.keys.toList()}');
-      print(
-          '🔑 KeyExchangeRequestProvider: - Data field length: ${(encryptedPayload['data'] as String).length}');
-
-      // Safe substring operation - only take up to the actual length
-      final dataField = encryptedPayload['data'] as String;
-      final previewLength = dataField.length > 50 ? 50 : dataField.length;
-      print(
-          '🔑 KeyExchangeRequestProvider: - Data field preview: ${dataField.substring(0, previewLength)}...');
-      print(
-          '🔑 KeyExchangeRequestProvider: - Checksum: ${encryptedPayload['checksum']}');
-
-      // Send encrypted data via socket service
-      final success = await SeSocketService().sendMessage(
-        recipientId: recipientId,
-        message: 'Encrypted user data received',
-        conversationId: 'key_exchange_$recipientId',
-        messageId: 'user_data_${DateTime.now().millisecondsSinceEpoch}',
-        metadata: {
-          'encryptedData': encryptedPayload['data'] as String,
-          'type': 'user_data_exchange',
-          'encrypted': true,
-          'checksum': encryptedPayload['checksum'] as String,
-        },
-      );
-
-      if (success) {
-        print(
-            '🔑 KeyExchangeRequestProvider: ✅ Encrypted user data sent successfully');
-
-        // Add notification item for user data sent
-        _addNotificationItem(
-          'Secure Connection Established',
-          'Encrypted user data sent successfully',
-          'user_data_exchange',
-          {
-            'recipient_id': recipientId,
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          },
+      if (encryptedData != null) {
+        // Send user data exchange back to requester
+        _socketService.sendUserDataExchange(
+          recipientId: recipientId,
+          encryptedData: encryptedData,
         );
+        print(
+            '🔑 KeyExchangeRequestProvider: ✅ User data exchange sent back to requester: $recipientId');
       } else {
         print(
-            '🔑 KeyExchangeRequestProvider: ❌ Failed to send encrypted user data');
+            '🔑 KeyExchangeRequestProvider: ⚠️ Warning: Could not encrypt user data for exchange');
       }
     } catch (e) {
       print(
-          '🔑 KeyExchangeRequestProvider: Error sending encrypted user data: $e');
-
-      // If it's a key missing error, schedule a retry
-      if (e.toString().contains('Recipient public key not found')) {
-        print(
-            '🔑 KeyExchangeRequestProvider: Scheduling retry for encrypted data due to missing key');
-        final currentUserId = SeSessionService().currentSessionId;
-        if (currentUserId != null) {
-          _scheduleEncryptedDataRetry(recipientId, currentUserId);
-        }
-      }
+          '🔑 KeyExchangeRequestProvider: ⚠️ Warning: Could not send user data exchange: $e');
     }
   }
 
@@ -1955,9 +1887,11 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Notify the server that the request is revoked (if it was sent)
       if (request.status == 'sent' || request.status == 'pending') {
         try {
-          await SeSocketService().revokeKeyExchangeRequest(
-            recipientId: request.toSessionId,
-            requestId: requestId,
+          _socketService.sendMessage(
+            request.toSessionId,
+            'Key exchange request revoked',
+            messageId:
+                'key_exchange_revoke_${DateTime.now().millisecondsSinceEpoch}',
           );
           print(
               '🔑 KeyExchangeRequestProvider: ✅ Revoke notification sent to server');
@@ -1966,6 +1900,18 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
               '🔑 KeyExchangeRequestProvider: ⚠️ Failed to notify server about revocation: $e');
         }
       }
+
+      // For now, we'll just log the revocation
+      // In the future, this can be implemented to send revocation events via the channel socket
+      print(
+          '🔑 KeyExchangeRequestProvider: 📊 Key exchange request revoked: $requestId');
+
+      // Update local request status
+      request.status = 'revoked';
+      notifyListeners();
+
+      print(
+          '🔑 KeyExchangeRequestProvider: ✅ Key exchange request revoked locally: $requestId');
 
       // Remove from local list
       _sentRequests.removeAt(requestIndex);

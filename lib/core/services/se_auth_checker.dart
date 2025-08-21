@@ -12,7 +12,7 @@ class SeAuthChecker {
 
   // Services
   final SeSessionService _sessionService = SeSessionService();
-  final SeSocketService _socketService = SeSocketService();
+  final SeSocketService _socketService = SeSocketService.instance;
 
   // Auth state
   bool _isAuthenticated = false;
@@ -96,8 +96,8 @@ class SeAuthChecker {
       if (!_socketService.isConnected) {
         print(
             '🔐 SeAuthChecker: ⚠️ Socket not connected, attempting to connect...');
-        final connected = await _socketService.initialize();
-        if (!connected) {
+        await _socketService.initialize();
+        if (!_socketService.isConnected) {
           return false;
         }
       }

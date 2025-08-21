@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
+import 'package:sechat_app/core/services/se_session_service.dart';
 
 /// Socket Provider
 /// Manages socket service state and provides it to the app
 class SocketProvider extends ChangeNotifier {
-  final SeSocketService _socketService = SeSocketService();
+  final SeSocketService _socketService = SeSocketService.instance;
 
   // Connection state
   bool _isConnected = false;
@@ -36,10 +37,11 @@ class SocketProvider extends ChangeNotifier {
 
       print('🔌 SocketProvider: Initializing socket...');
 
-      final success = await _socketService.initialize();
-
-      if (success) {
-        _isConnected = true;
+      // For SeSocketService, we need to connect with a session ID
+      final sessionId = SeSessionService().currentSessionId;
+      if (sessionId != null) {
+        await _socketService.connect(sessionId);
+        _isConnected = _socketService.isConnected;
         _currentSessionId = _socketService.currentSessionId;
         _reconnectAttempts = 0;
         print('🔌 SocketProvider: ✅ Socket initialized successfully');
@@ -47,13 +49,16 @@ class SocketProvider extends ChangeNotifier {
         // Listen to connection state changes from the socket service
         _setupConnectionStateListener();
       } else {
-        _connectionError = 'Failed to initialize socket';
-        print('🔌 SocketProvider: ❌ Socket initialization failed');
+        _connectionError = 'No session ID available';
+        print('🔌 SocketProvider: ❌ No session ID available');
+        _isConnecting = false;
+        notifyListeners();
+        return false;
       }
 
       _isConnecting = false;
       notifyListeners();
-      return success;
+      return _isConnected;
     } catch (e) {
       _isConnecting = false;
       _connectionError = 'Error: $e';
@@ -133,9 +138,7 @@ class SocketProvider extends ChangeNotifier {
     _socketService.refreshConnectionStatus();
 
     // Double-check the actual socket connection state
-    final actualSocketState = _socketService.getSocketStatus();
-    final actualConnected =
-        actualSocketState['socketConnected'] as bool? ?? false;
+    final actualConnected = _socketService.isConnected;
 
     if (_isConnected != actualConnected) {
       print(

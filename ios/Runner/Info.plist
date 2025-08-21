@@ -28,19 +28,11 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSCameraUsageDescription</key>
-	<string>This app needs camera access to take photos for QR code scanning and contact invitations.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>This app needs photo library access to save QR codes and profile pictures.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs photo library access to select images for QR code scanning.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
-		<string>background-processing</string>
-		<string>background-fetch</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
@@ -48,14 +40,8 @@
 	<string>Main</string>
 	<key>UIStatusBarHidden</key>
 	<false/>
-	        <key>NSUserNotificationUsageDescription</key>
-        <string>This app needs notification permissions to show you important updates when the app is in the background.</string>
-        <key>UIBackgroundModes</key>
-        <array>
-            <string>remote-notification</string>
-            <string>background-processing</string>
-            <string>background-fetch</string>
-        </array>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>This app needs notification permissions to show you important updates when the app is in the background.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
+import 'dart:io' show Platform, ProcessSignal, Process;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
-import 'dart:io' show Platform;
 
 // Import models for message status updates
 import 'features/chat/services/message_status_tracking_service.dart';
 import 'features/chat/models/message.dart';
+import 'features/chat/models/message_status.dart' as msg_status;
 
 // import feature providers
 import 'features/key_exchange/providers/key_exchange_request_provider.dart';
@@ -36,9 +37,50 @@ import 'core/services/ui_service.dart';
 import 'features/notifications/services/notification_manager_service.dart';
 import 'realtime/realtime_service_manager.dart';
 import 'realtime/realtime_test.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
+import 'core/services/indicator_service.dart';
+import 'core/services/encryption_service.dart';
 
 // Global navigator key to access context from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// Global variable to track current screen index
+int _currentScreenIndex = 0;
+
+/// Update the current screen index (called from MainNavScreen)
+void updateCurrentScreenIndex(int index) {
+  _currentScreenIndex = index;
+  print('🔍 Main: Current screen index updated to: $index');
+}
+
+/// CRITICAL: Set up app termination handler to prevent socket service memory leaks
+void _setupAppTerminationHandler() {
+  // Handle app termination signals
+  ProcessSignal.sigterm.watch().listen((_) {
+    print('🔌 Main: 🚨 SIGTERM received - cleaning up socket services...');
+    _cleanupSocketServices();
+  });
+
+  ProcessSignal.sigint.watch().listen((_) {
+    print('🔌 Main: 🚨 SIGINT received - cleaning up socket services...');
+    _cleanupSocketServices();
+  });
+
+  print('🔌 Main: ✅ App termination handlers configured');
+}
+
+/// Clean up socket services to prevent memory leaks
+void _cleanupSocketServices() {
+  try {
+    print('🔌 Main: 🧹 Starting socket service cleanup...');
+
+    // Force cleanup all socket services
+    SeSocketService.forceCleanup();
+    print('🔌 Main: ✅ Socket services force cleanup completed');
+  } catch (e) {
+    print('🔌 Main: ❌ Error during socket service cleanup: $e');
+  }
+}
 
 Future<void> main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -46,6 +88,9 @@ Future<void> main() async {
   print('🔌 Main: Starting SeChat application...');
   print(
       '🔌 Main: Platform: ${Platform.isIOS ? 'iOS' : Platform.isAndroid ? 'Android' : 'Web'}');
+
+  // CRITICAL: Set up app termination handler to prevent memory leaks
+  _setupAppTerminationHandler();
 
   // Only use native splash on mobile platforms
   if (!kIsWeb) {
@@ -62,7 +107,8 @@ Future<void> main() async {
 
   // Initialize realtime services
   try {
-    await RealtimeServiceManager.instance.initialize();
+    final realtimeManager = RealtimeServiceManager();
+    await realtimeManager.initialize();
     print('🔌 Main: ✅ Realtime services initialized successfully');
 
     // Run basic tests in debug mode
@@ -82,28 +128,38 @@ Future<void> main() async {
   final seSessionService = SeSessionService();
   await seSessionService.loadSession();
 
-  // Initialize SeChat socket service
-  final socketService = SeSocketService();
-  bool socketInitialized = false;
+  // Set up socket callbacks for realtime features
+  final socketService = SeSocketService.instance;
 
-  if (seSessionService.currentSession != null) {
-    // Initialize socket connection
-    socketInitialized = await socketService.initialize();
-    if (socketInitialized) {
-      print('🔌 Main: ✅ Socket service initialized successfully');
-    } else {
-      print('🔌 Main: ❌ Socket service initialization failed');
-    }
+  // Ensure socket service is ready for new connections
+  if (SeSocketService.isDestroyed) {
+    print(
+        '🔌 Main: 🔄 Socket service was destroyed, resetting for new session...');
+    SeSocketService.resetForNewConnection();
   }
 
   // Set up socket callbacks
   _setupSocketCallbacks(socketService);
 
-  // All real-time features now use SeChat socket
+  // Set up contact listeners for the current user's contacts
+  // This will enable receiving typing indicators and other events
+  if (seSessionService.currentSession != null) {
+    // For now, we'll set up a basic listener
+    // In the future, this should be populated with actual contact session IDs
+    final currentUserId = seSessionService.currentSessionId;
+    if (currentUserId != null) {
+      print(
+          '🔌 Main: ✅ Channel-based socket service initialized for user: $currentUserId');
+    }
+  }
+
+  // Note: Typing indicators are now handled through the ChannelSocketService event system
+  // The realtime services will automatically receive and process these events
 
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => IndicatorService()),
         ChangeNotifierProvider(create: (_) => SessionChatProvider()),
         ChangeNotifierProvider(create: (_) => KeyExchangeRequestProvider()),
         ChangeNotifierProvider(create: (_) {
@@ -157,6 +213,30 @@ void _setupSocketCallbacks(SeSocketService socketService) {
       (senderId, senderName, message, conversationId, messageId) {
     print(
         '🔌 Main: Message received callback from socket: $senderName: $message');
+
+    // Update badge counts for new messages
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final indicatorService = Provider.of<IndicatorService>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Count unread conversations
+        final unreadCount = chatListProvider.conversations
+            .where((conv) => conv.unreadCount > 0)
+            .length;
+
+        // Update the indicator service
+        indicatorService.updateCounts(unreadChats: unreadCount);
+        print('🔌 Main: ✅ Chat badge count updated for new message');
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to update chat badge count: $e');
+      }
+    });
   });
 
   socketService.setOnTypingIndicator((senderId, isTyping) {
@@ -173,18 +253,56 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         // Find conversation by participant ID and update typing indicator
         chatListProvider.updateTypingIndicatorByParticipant(senderId, isTyping);
 
-        // Also notify SessionChatProvider if there's an active chat with this user
+        // Also notify SessionChatProvider if there's an active chat
         try {
           final sessionChatProvider = Provider.of<SessionChatProvider>(
               navigatorKey.currentContext!,
               listen: false);
 
-          // Check if this is the current recipient in the active chat
-          if (sessionChatProvider.currentRecipientId == senderId) {
-            // Update the typing state directly
-            sessionChatProvider.updateRecipientTypingState(isTyping);
-            print(
-                '🔌 Main: ✅ Typing indicator forwarded to SessionChatProvider for active chat');
+          // FIXED: Forward ALL typing indicators to SessionChatProvider for bidirectional communication
+          // This allows both users to see typing indicators from each other
+          if (sessionChatProvider.currentRecipientId != null) {
+            // If the sender is the current recipient, update their typing state
+            if (sessionChatProvider.currentRecipientId == senderId) {
+              sessionChatProvider.updateRecipientTypingState(isTyping);
+              print(
+                  '🔌 Main: ✅ Typing indicator forwarded to SessionChatProvider for current recipient: $senderId');
+            } else {
+              // If the sender is someone else (e.g., current user typing), still process it
+              // This allows the current user to see their own typing state in the UI if needed
+              print(
+                  '🔌 Main: ℹ️ Typing indicator from different user: $senderId (current recipient: ${sessionChatProvider.currentRecipientId})');
+            }
+
+            // CRITICAL: Forward typing indicator to realtime typing service for proper UI updates
+            try {
+              final realtimeManager = RealtimeServiceManager();
+              print(
+                  '🔌 Main: 🔍 Realtime manager initialized: ${realtimeManager.isInitialized}');
+              print(
+                  '🔌 Main: 🔍 Current conversation ID: ${sessionChatProvider.currentConversationId}');
+
+              if (realtimeManager.isInitialized &&
+                  sessionChatProvider.currentConversationId != null) {
+                final typingService = realtimeManager.typing;
+                print(
+                    '🔌 Main: 🔍 Typing service available: ${typingService != null}');
+
+                typingService.handleIncomingTypingIndicator(
+                  sessionChatProvider.currentConversationId!,
+                  senderId,
+                  isTyping,
+                );
+                print(
+                    '🔌 Main: ✅ Typing indicator forwarded to realtime typing service');
+              } else {
+                print(
+                    '🔌 Main: ⚠️ Cannot forward to realtime service: manager=${realtimeManager.isInitialized}, conversationId=${sessionChatProvider.currentConversationId}');
+              }
+            } catch (e) {
+              print(
+                  '🔌 Main: ❌ Error forwarding to realtime typing service: $e');
+            }
           }
         } catch (e) {
           print('🔌 Main: ⚠️ SessionChatProvider not available: $e');
@@ -248,28 +366,328 @@ void _setupSocketCallbacks(SeSocketService socketService) {
   // Set up key exchange callbacks
   socketService.setOnKeyExchangeRequestReceived((data) {
     print('🔌 Main: Key exchange request received from socket: $data');
-    // This will be connected to the KeyExchangeRequestProvider in main_nav_screen
+
+    // Update badge counts in real-time ONLY if user is not on K.Exchange screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final indicatorService = Provider.of<IndicatorService>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Check if user is currently on K.Exchange screen (index 1)
+        final isOnKeyExchangeScreen = _currentScreenIndex == 1;
+
+        if (!isOnKeyExchangeScreen) {
+          // Only update badge if user is not on K.Exchange screen
+          final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+              navigatorKey.currentContext!,
+              listen: false);
+
+          final pendingCount = keyExchangeProvider.receivedRequests.length;
+          indicatorService.updateCounts(pendingKeyExchange: pendingCount);
+          print('🔌 Main: ✅ Badge count updated for new key exchange request');
+        } else {
+          print(
+              '🔌 Main: ℹ️ User is on K.Exchange screen, skipping badge update');
+        }
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to update badge count: $e');
+      }
+    });
   });
 
   socketService.setOnKeyExchangeAccepted((data) {
     print('🔌 Main: Key exchange accepted from socket: $data');
-    print(
-        '🔌 Main: ✅ Key exchange accepted callback triggered - flow should continue automatically');
 
-    // The flow should continue automatically through KeyExchangeService.processKeyExchangeResponse()
-    // which will send the initial user data to complete the handshake
+    // Update badge counts when key exchange is completed ONLY if user is not on K.Exchange screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final indicatorService = Provider.of<IndicatorService>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Check if user is currently on K.Exchange screen (index 1)
+        final isOnKeyExchangeScreen = _currentScreenIndex == 1;
+
+        if (!isOnKeyExchangeScreen) {
+          // Only update badge if user is not on K.Exchange screen
+          final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+              navigatorKey.currentContext!,
+              listen: false);
+
+          final pendingCount = keyExchangeProvider.receivedRequests.length;
+          indicatorService.updateCounts(pendingKeyExchange: pendingCount);
+          print('🔌 Main: ✅ Badge count updated after key exchange accepted');
+        } else {
+          print(
+              '🔌 Main: ℹ️ User is on K.Exchange screen, skipping badge update');
+        }
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to update badge count after acceptance: $e');
+      }
+    });
   });
 
   socketService.setOnKeyExchangeDeclined((data) {
     print('🔌 Main: Key exchange declined from socket: $data');
+
+    // Update badge counts when key exchange is declined ONLY if user is not on K.Exchange screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final indicatorService = Provider.of<IndicatorService>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Check if user is currently on K.Exchange screen (index 1)
+        final isOnKeyExchangeScreen = _currentScreenIndex == 1;
+
+        if (!isOnKeyExchangeScreen) {
+          // Only update badge if user is not on K.Exchange screen
+          final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+              navigatorKey.currentContext!,
+              listen: false);
+
+          final pendingCount = keyExchangeProvider.receivedRequests.length;
+          indicatorService.updateCounts(pendingKeyExchange: pendingCount);
+          print('🔌 Main: ✅ Badge count updated after key exchange declined');
+        } else {
+          print(
+              '🔌 Main: ℹ️ User is on K.Exchange screen, skipping badge update');
+        }
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to update badge count after decline: $e');
+      }
+    });
   });
 
-  socketService.setOnConversationCreated((conversation) {
-    print('🔌 Main: Conversation created from socket: ${conversation.id}');
+  // Handle key exchange response (when someone accepts/declines our request)
+  socketService.setOnKeyExchangeResponse((data) {
+    print('🔌 Main: 🔍🔍🔍 KEY EXCHANGE RESPONSE RECEIVED!');
+    print('🔌 Main: 🔍🔍🔍 Full data: $data');
+    print('🔌 Main: 🔍🔍🔍 Data type: ${data.runtimeType}');
+    print('🔌 Main: 🔍🔍🔍 Data keys: ${data.keys.toList()}');
 
-    // Notify the ChatListProvider to refresh its data
-    // This will be handled by the provider's socket callbacks
-    print('🔌 Main: ✅ Conversation created event received from socket');
+    // Extract the responder's public key and store it for future encryption
+    final responderId =
+        data['senderId'] as String? ?? data['sender_id'] as String?;
+    final responderPublicKey =
+        data['publicKey'] as String? ?? data['sender_public_key'] as String?;
+    final response = data['response'] as String? ?? data['status'] as String?;
+
+    print('🔌 Main: 🔍🔍🔍 Extracted values:');
+    print('🔌 Main: 🔍🔍🔍 - responderId: $responderId');
+    print('🔌 Main: 🔍🔍🔍 - responderPublicKey: $responderPublicKey');
+    print('🔌 Main: 🔍🔍🔍 - response: $response');
+
+    if (responderId != null &&
+        responderPublicKey != null &&
+        response == 'accepted') {
+      print('🔌 Main: 🔑 Storing responder public key for: $responderId');
+
+      // Store the responder's public key for future encryption
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await EncryptionService.storeRecipientPublicKey(
+              responderId, responderPublicKey);
+          print('🔌 Main: ✅ Responder public key stored successfully');
+        } catch (e) {
+          print('🔌 Main: ❌ Failed to store responder public key: $e');
+        }
+      });
+    } else {
+      print(
+          '🔌 Main: ⚠️ Invalid key exchange response data: responderId=$responderId, hasPublicKey=${responderPublicKey != null}, response=$response');
+    }
+  });
+
+  // CRITICAL: Handle user data exchange to complete key exchange flow
+  socketService.setOnUserDataExchange((data) {
+    print('🔑 Main: User data exchange received from socket: $data');
+    print('🔑 Main: 🔍 Data type: ${data.runtimeType}');
+    print('🔑 Main: 🔍 Data keys: ${data.keys.toList()}');
+
+    // Process the user data exchange and create conversation
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        print('🔑 Main: 🚀 Starting to process user data exchange...');
+        await KeyExchangeService.instance.handleUserDataExchange(data);
+        print('🔑 Main: ✅ User data exchange processed successfully');
+      } catch (e) {
+        print('🔑 Main: ❌ Failed to process user data exchange: $e');
+        print('🔑 Main: ❌ Stack trace: ${StackTrace.current}');
+      }
+    });
+  });
+
+  // Handle conversation creation events from other users
+  socketService.setOnConversationCreated((data) {
+    print('💬 Main: Conversation created event received from socket: $data');
+
+    // Process the conversation creation with requester's user data
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        // This will handle the conversation creation on the acceptor's side
+        // when they receive the conversation:created event with requester's user data
+        await KeyExchangeService.instance.handleConversationCreated(data);
+        print('💬 Main: ✅ Conversation created event processed successfully');
+      } catch (e) {
+        print('💬 Main: ❌ Failed to process conversation created event: $e');
+      }
+    });
+  });
+
+  // CRITICAL: Connect KeyExchangeService with ChatListProvider for real-time UI updates
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    try {
+      KeyExchangeService.instance.setOnConversationCreated((conversation) {
+        print('🔑 Main: 🚀 Conversation created, updating UI...');
+
+        // Update the ChatListProvider to refresh the UI
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            final chatListProvider = Provider.of<ChatListProvider>(
+                navigatorKey.currentContext!,
+                listen: false);
+
+            // Add the new conversation to the provider
+            chatListProvider.addConversation(conversation);
+            print(
+                '🔑 Main: ✅ Conversation added to ChatListProvider, UI will update');
+          } catch (e) {
+            print('🔑 Main: ❌ Failed to update ChatListProvider: $e');
+          }
+        });
+      });
+      print('🔑 Main: ✅ KeyExchangeService conversation callback connected');
+    } catch (e) {
+      print('🔑 Main: ❌ Failed to connect KeyExchangeService callback: $e');
+    }
+  });
+
+  // Handle message acknowledgment events
+  socketService.setOnMessageAcked((messageId) {
+    print('✅ Main: Message acknowledged: $messageId');
+
+    // Update message status in ChatListProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Create a MessageStatusUpdate for acknowledgment
+        final statusUpdate = MessageStatusUpdate(
+          messageId: messageId,
+          status: msg_status.MessageDeliveryStatus.sent,
+          timestamp: DateTime.now(),
+          senderId: '', // Will be filled by the provider
+        );
+
+        chatListProvider.processMessageStatusUpdate(statusUpdate);
+        print('✅ Main: Message acknowledgment processed successfully');
+      } catch (e) {
+        print('❌ Main: Failed to process message acknowledgment: $e');
+      }
+    });
+  });
+
+  // Handle message delivery status events
+  socketService.setOnMessageDelivered((messageId, fromUserId, toUserId) {
+    print(
+        '✅ Main: Message delivered: $messageId from $fromUserId to $toUserId');
+
+    // Update message status in ChatListProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Create a MessageStatusUpdate for delivery
+        final statusUpdate = MessageStatusUpdate(
+          messageId: messageId,
+          status: msg_status.MessageDeliveryStatus.delivered,
+          timestamp: DateTime.now(),
+          senderId: fromUserId,
+        );
+
+        chatListProvider.processMessageStatusUpdate(statusUpdate);
+        print('✅ Main: Message delivery status processed successfully');
+      } catch (e) {
+        print('❌ Main: Failed to process message delivery status: $e');
+      }
+    });
+  });
+
+  // Handle message read status events
+  socketService.setOnMessageRead((messageId, fromUserId, toUserId) {
+    print('👁️ Main: Message read: $messageId from $fromUserId to $toUserId');
+
+    // Update message status in ChatListProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Create a MessageStatusUpdate for read status
+        final statusUpdate = MessageStatusUpdate(
+          messageId: messageId,
+          status: msg_status.MessageDeliveryStatus.read,
+          timestamp: DateTime.now(),
+          senderId: fromUserId,
+        );
+
+        chatListProvider.processMessageStatusUpdate(statusUpdate);
+        print('👁️ Main: Message read status processed successfully');
+      } catch (e) {
+        print('❌ Main: Failed to process message read status: $e');
+      }
+    });
+  });
+
+  // Handle key exchange revocation events
+  socketService.setOnKeyExchangeRevoked((data) {
+    print('🔑 Main: Key exchange revoked: $data');
+
+    // Update badge counts when key exchange is revoked
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final indicatorService = Provider.of<IndicatorService>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Update counts based on current state
+        final pendingCount = keyExchangeProvider.receivedRequests.length;
+        indicatorService.updateCounts(pendingKeyExchange: pendingCount);
+        print('🔑 Main: ✅ Badge count updated after key exchange revoked');
+      } catch (e) {
+        print('🔑 Main: ❌ Failed to update badge count after revocation: $e');
+      }
+    });
+  });
+
+  // Handle user deletion events
+  socketService.setOnUserDeleted((data) {
+    print('🗑️ Main: User deleted event received: $data');
+
+    // Handle user deletion - this might involve cleaning up local data
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        // This could involve:
+        // 1. Removing conversations with the deleted user
+        // 2. Cleaning up any cached data
+        // 3. Updating UI to reflect the deletion
+
+        print('🗑️ Main: User deletion event processed successfully');
+      } catch (e) {
+        print('❌ Main: Failed to process user deletion event: $e');
+      }
+    });
   });
 
   // Set up KeyExchangeService callback for conversation creation
@@ -293,23 +711,23 @@ void _setupSocketCallbacks(SeSocketService socketService) {
   });
 }
 
-/// Parse message status string to MessageStatus enum
-MessageStatus _parseMessageStatus(String status) {
+/// Parse message status string to MessageDeliveryStatus enum
+msg_status.MessageDeliveryStatus _parseMessageStatus(String status) {
   switch (status.toLowerCase()) {
     case 'sending':
-      return MessageStatus.sending;
+      return msg_status.MessageDeliveryStatus.pending;
     case 'sent':
-      return MessageStatus.sent;
+      return msg_status.MessageDeliveryStatus.sent;
     case 'delivered':
-      return MessageStatus.delivered;
+      return msg_status.MessageDeliveryStatus.delivered;
     case 'read':
-      return MessageStatus.read;
+      return msg_status.MessageDeliveryStatus.read;
     case 'failed':
-      return MessageStatus.failed;
+      return msg_status.MessageDeliveryStatus.failed;
     case 'deleted':
-      return MessageStatus.deleted;
+      return msg_status.MessageDeliveryStatus.failed; // Map deleted to failed
     default:
-      return MessageStatus.sent; // Default to sent
+      return msg_status.MessageDeliveryStatus.sent; // Default to sent
   }
 }
 
@@ -409,14 +827,10 @@ class _AuthCheckerState extends State<AuthChecker> {
               '🔍 AuthChecker: User is logged in, initializing socket services...');
 
           // Initialize socket connection
-          final socketService = SeSocketService();
-          final socketInitialized = await socketService.initialize();
+          final socketService = SeSocketService.instance;
+          await socketService.connect(session!.sessionId);
 
-          if (socketInitialized) {
-            print('🔍 AuthChecker: ✅ Socket service initialized successfully');
-          } else {
-            print('🔍 AuthChecker: ❌ Socket service initialization failed');
-          }
+          print('🔍 AuthChecker: ✅ Socket service initialized successfully');
 
           print('🔍 AuthChecker: User is logged in, navigating to main screen');
           Navigator.of(context).pushReplacement(

@@ -1,64 +1,49 @@
 import 'dart:async';
+import 'package:sechat_app/core/services/se_socket_service.dart';
+import 'package:sechat_app/core/services/se_session_service.dart';
 import 'presence_service.dart';
 import 'typing_service.dart';
-import 'message_transport.dart';
-import 'socket_client.dart';
+import 'message_transport_service.dart';
 import 'realtime_logger.dart';
-import '../core/services/se_socket_service.dart';
 
 /// Central manager for all realtime services
-/// Provides easy access and coordination between services
 class RealtimeServiceManager {
-  static RealtimeServiceManager? _instance;
-  static RealtimeServiceManager get instance =>
-      _instance ??= RealtimeServiceManager._();
+  static final RealtimeServiceManager _instance =
+      RealtimeServiceManager._internal();
+  factory RealtimeServiceManager() => _instance;
+  RealtimeServiceManager._internal();
 
-  RealtimeServiceManager._();
-
-  // Service instances
+  // Core services
   late final PresenceService _presenceService;
   late final TypingService _typingService;
   late final MessageTransportService _messageTransportService;
-  late final SocketClientService _socketClientService;
+  late final SeSocketService _socketService;
 
-  // State
-  bool _isInitialized = false;
-  bool _isConnected = false;
+  // Session service
+  final SeSessionService _sessionService = SeSessionService();
 
   // Getters
-  bool get isInitialized => _isInitialized;
-  bool get isConnected => _isConnected;
-
-  // Service access
   PresenceService get presence => _presenceService;
   TypingService get typing => _typingService;
-  MessageTransportService get messages => _messageTransportService;
-  SocketClientService get socket => _socketClientService;
+  MessageTransportService get messageTransport => _messageTransportService;
+  SeSocketService get socket => _socketService;
 
   /// Initialize all realtime services
   Future<void> initialize() async {
-    if (_isInitialized) return;
-
     try {
       RealtimeLogger.socket('Initializing realtime service manager');
 
-      // Initialize individual services
+      // Initialize core services
       _presenceService = PresenceService.instance;
       _typingService = TypingService.instance;
-      _messageTransportService = MessageTransportService.instance;
-      _socketClientService = SocketClientService.instance;
+      _messageTransportService = MessageTransportService();
+      _socketService = SeSocketService.instance;
 
-      // Initialize socket client first (it coordinates others)
-      await _socketClientService.initialize();
+      // Initialize the channel-based socket service
+      await _socketService.initialize();
 
-      // Set up connection state listener
-      SeSocketService().connectionStateStream.listen((isConnected) {
-        _isConnected = isConnected;
-        RealtimeLogger.socket(
-            'Realtime manager connection state: ${isConnected ? 'connected' : 'disconnected'}');
-      });
-
-      _isInitialized = true;
+      // Initialize other services
+      await _presenceService.initialize();
 
       RealtimeLogger.socket(
           'Realtime service manager initialized successfully');
@@ -69,58 +54,42 @@ class RealtimeServiceManager {
     }
   }
 
-  /// Get comprehensive statistics from all services
-  Map<String, dynamic> getAllStats() {
-    if (!_isInitialized) {
-      return {'error': 'Services not initialized'};
-    }
-
+  /// Get service statistics
+  Map<String, dynamic> getServiceStats() {
     return {
-      'manager': {
-        'isInitialized': _isInitialized,
-        'isConnected': _isConnected,
-      },
       'presence': _presenceService.getPresenceStats(),
-      'typing': _typingService.getTypingStats(),
-      'messages': _messageTransportService.getDeliveryStats(),
-      'socket': _socketClientService.getServiceStats(),
-      'logger': RealtimeLogger.getEventStats(),
+      'typing': {'isActive': true}, // Simplified for now
+      'messageTransport': {'deliveryStates': 0}, // Simplified for now
+      'socket': {'isConnected': _socketService.isConnected},
     };
   }
 
   /// Dispose all services
   void dispose() {
-    if (!_isInitialized) return;
-
-    RealtimeLogger.socket('Disposing realtime service manager');
-
-    _presenceService.dispose();
-    _typingService.dispose();
-    _messageTransportService.dispose();
-    _socketClientService.dispose();
-
-    _isInitialized = false;
-    _isConnected = false;
-
-    RealtimeLogger.socket('Realtime service manager disposed');
+    try {
+      _presenceService.dispose();
+      _typingService.dispose();
+      // MessageTransportService doesn't have dispose method
+      _socketService.dispose();
+      RealtimeLogger.socket('Realtime service manager disposed');
+    } catch (e) {
+      RealtimeLogger.socket('Error disposing realtime service manager: $e');
+    }
   }
+
+  /// Get current session ID
+  String? get currentSessionId => _sessionService.currentSessionId;
+
+  /// Check if services are initialized
+  bool get isInitialized => _presenceService.isInitialized;
 }
 
-/// Extension methods for easy access to realtime services
-extension RealtimeServices on Object {
-  /// Get presence service
-  PresenceService get presence => RealtimeServiceManager.instance.presence;
-
-  /// Get typing service
-  TypingService get typing => RealtimeServiceManager.instance.typing;
-
-  /// Get message transport service
-  MessageTransportService get messages =>
-      RealtimeServiceManager.instance.messages;
-
-  /// Get socket client service
-  SocketClientService get socket => RealtimeServiceManager.instance.socket;
-
-  /// Get realtime service manager
-  RealtimeServiceManager get realtime => RealtimeServiceManager.instance;
+/// Global access to realtime services
+class RealtimeServices {
+  static PresenceService get presence =>
+      RealtimeServiceManager._instance.presence;
+  static TypingService get typing => RealtimeServiceManager._instance.typing;
+  static MessageTransportService get messageTransport =>
+      RealtimeServiceManager._instance.messageTransport;
+  static SeSocketService get socket => RealtimeServiceManager._instance.socket;
 }

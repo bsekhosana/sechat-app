@@ -74,37 +74,17 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
     }
   }
 
-  // Method to get current connection status for debugging
-  String _getConnectionStatusText(NetworkService networkService) {
-    final seSessionService = SeSessionService();
-    final session = seSessionService.currentSession;
-    bool isConnected = networkService.isConnected && session != null;
-    bool isReconnecting = networkService.isReconnecting;
-
-    if (!networkService.isConnected) {
-      return 'No Internet Connection';
-    } else if (isReconnecting) {
-      return 'Reconnecting...';
-    } else if (isConnected) {
-      return 'Fully Connected';
-    } else {
-      return 'Session Disconnected';
-    }
-  }
-
   void _showProfileMenu() {
     showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        isScrollControlled: true,
-        builder: (context) {
-          final screenHeight = MediaQuery.of(context).size.height;
-          final statusBarHeight = MediaQuery.of(context).padding.top;
-          final bottomPadding = MediaQuery.of(context).padding.bottom;
-          final availableHeight =
-              screenHeight - statusBarHeight - bottomPadding;
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        final screenHeight = MediaQuery.of(context).size.height;
 
-          return Container(
+        return Hero(
+          tag: 'profile_icon_button',
+          child: Container(
             height: screenHeight * 0.95,
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -257,8 +237,10 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                 ),
               ],
             ),
-          );
-        });
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildMenuButton({
@@ -396,6 +378,11 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
   }
 
   Future<void> _clearAllChats() async {
+    if (!mounted) return;
+
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       // Show loading with informative message
       showDialog(
@@ -422,17 +409,19 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       final seSessionService = SeSessionService();
       await seSessionService.deleteAllChats();
 
-      Navigator.pop(context); // Close loading dialog
+      if (!mounted) return;
+      navigator.pop(); // Close loading dialog
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      scaffoldMessenger.showSnackBar(
         const SnackBar(
           content: Text('All chats cleared successfully'),
           backgroundColor: Color(0xFFFF6B35),
         ),
       );
     } catch (e) {
-      Navigator.pop(context); // Close loading dialog
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      navigator.pop(); // Close loading dialog
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('Error clearing chats: $e'),
           backgroundColor: Colors.red,
@@ -442,6 +431,11 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
   }
 
   Future<void> _deleteAccount() async {
+    if (!mounted) return;
+
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       // Show loading with informative message
       showDialog(
@@ -468,16 +462,18 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       final seSessionService = SeSessionService();
       await seSessionService.deleteAccount();
 
-      Navigator.pop(context); // Close loading dialog
+      if (!mounted) return;
+      navigator.pop(); // Close loading dialog
 
       // Navigate to welcome screen
-      Navigator.of(context).pushAndRemoveUntil(
+      navigator.pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const WelcomeScreen()),
         (route) => false,
       );
     } catch (e) {
-      Navigator.pop(context); // Close loading dialog
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      navigator.pop(); // Close loading dialog
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('Error deleting account: $e'),
           backgroundColor: Colors.red,
@@ -794,6 +790,10 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
   }
 
   void _shareSessionCode(BuildContext context) async {
+    if (!mounted) return;
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       final sessionId = SeSessionService().currentSessionId;
       final displayName =
@@ -817,7 +817,8 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
           subject: 'Connect on SeChat - Secure Messaging',
         );
 
-        ScaffoldMessenger.of(context).showSnackBar(
+        if (!mounted) return;
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Session code shared successfully!'),
             backgroundColor: Colors.green,
@@ -826,23 +827,13 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
         );
       }
     } catch (e) {
-      print('Error sharing session code: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      scaffoldMessenger.showSnackBar(
         SnackBar(
           content: Text('Failed to share session code: ${e.toString()}'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 2),
         ),
-      );
-    }
-  }
-
-  void _shareSessionId() {
-    final sessionId = SeSessionService().currentSessionId;
-    if (sessionId != null) {
-      Share.share(
-        'Connect with me on SeChat! My Session ID: $sessionId',
-        subject: 'SeChat Session ID',
       );
     }
   }
@@ -883,48 +874,51 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
         return GestureDetector(
           onTap: _showProfileMenu,
-          child: AnimatedBuilder(
-            animation: Listenable.merge([_glowAnimation, _pulseAnimation]),
-            builder: (context, child) {
-              // Determine which animation to use
-              double animationValue;
-              if (isConnected) {
-                animationValue = _glowAnimation.value;
-              } else if (isReconnecting) {
-                animationValue = _pulseAnimation.value;
-              } else {
-                animationValue = 0.3; // Static low glow for disconnected
-              }
+          child: Hero(
+            tag: 'profile_icon_button',
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_glowAnimation, _pulseAnimation]),
+              builder: (context, child) {
+                // Determine which animation to use
+                double animationValue;
+                if (isConnected) {
+                  animationValue = _glowAnimation.value;
+                } else if (isReconnecting) {
+                  animationValue = _pulseAnimation.value;
+                } else {
+                  animationValue = 0.3; // Static low glow for disconnected
+                }
 
-              return Container(
-                width: 50,
-                height: 50,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          statusColor.withValues(alpha: animationValue * 0.6),
-                      blurRadius: isReconnecting ? 8 : 12,
-                      spreadRadius: isReconnecting ? 1 : 2,
-                    ),
-                  ],
-                ),
-                child: Container(
+                return Container(
+                  width: 50,
+                  height: 50,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: statusColor.withValues(alpha: animationValue),
-                      width: isReconnecting ? 1.5 : 2,
-                    ),
-                    image: const DecorationImage(
-                      image: AssetImage('assets/logo/seChat_Logo.png'),
-                      fit: BoxFit.cover,
+                    boxShadow: [
+                      BoxShadow(
+                        color:
+                            statusColor.withValues(alpha: animationValue * 0.6),
+                        blurRadius: isReconnecting ? 8 : 12,
+                        spreadRadius: isReconnecting ? 1 : 2,
+                      ),
+                    ],
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: animationValue),
+                        width: isReconnecting ? 1.5 : 2,
+                      ),
+                      image: const DecorationImage(
+                        image: AssetImage('assets/logo/seChat_Logo.png'),
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         );
       },

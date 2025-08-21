@@ -5,7 +5,6 @@ import '../../core/services/se_session_service.dart';
 import '../../core/services/se_socket_service.dart';
 import '../../features/chat/services/message_storage_service.dart';
 import '../../core/services/app_state_service.dart';
-import '../providers/socket_provider.dart';
 import '../../features/notifications/services/notification_manager_service.dart';
 import '../../core/services/ui_service.dart';
 import '../../realtime/realtime_service_manager.dart';
@@ -76,19 +75,34 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
   void _handleAppResumed() async {
     print('🔄 AppLifecycleHandler: App resumed, refreshing services...');
 
-    // Send online status update via socket
-    await _sendOnlineStatusUpdate(true);
-
-    // Refresh socket connection state to update UI indicators
+    // Reset socket service if it was destroyed
     try {
-      // Import and use SocketProvider to refresh connection state
-      final socketProvider =
-          Provider.of<SocketProvider>(context, listen: false);
-      socketProvider.refreshConnectionState();
-      print('🔌 AppLifecycleHandler: ✅ Socket connection state refreshed');
+      if (SeSocketService.isDestroyed) {
+        print(
+            '🔌 AppLifecycleHandler: 🔄 Socket service was destroyed, resetting...');
+        SeSocketService.resetForNewConnection();
+        print('🔌 AppLifecycleHandler: ✅ Socket service reset for resume');
+      }
     } catch (e) {
       print(
-          '🔌 AppLifecycleHandler: ⚠️ Could not refresh socket connection state: $e');
+          '🔌 AppLifecycleHandler: ⚠️ Warning - socket service reset failed: $e');
+    }
+
+    // Send online status update via channel socket service
+    await _sendOnlineStatusUpdate(true);
+
+    // Refresh channel socket connection state
+    try {
+      final socketService = SeSocketService.instance;
+      if (socketService.isConnected) {
+        print('🔌 AppLifecycleHandler: ✅ SeSocketService connection active');
+      } else {
+        print('🔌 AppLifecycleHandler: ⚠️ SeSocketService connection inactive');
+        // SeSocketService is already initialized when the app starts
+      }
+    } catch (e) {
+      print(
+          '🔌 AppLifecycleHandler: ⚠️ Could not refresh channel socket connection: $e');
     }
 
     // Refresh other services as needed
@@ -107,8 +121,25 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
   void _handleAppPaused() async {
     try {
-      // Socket services handle this automatically
-      print('🔌 AppLifecycleHandler: App paused - socket services continue');
+      print('🔌 AppLifecycleHandler: App paused - cleaning up socket services');
+
+      // CRITICAL: More aggressive cleanup when app goes to background
+      try {
+        final socketService = SeSocketService.instance;
+        if (socketService.isConnected) {
+          print(
+              '🔌 AppLifecycleHandler: 🔌 App going to background, disconnecting socket...');
+
+          // Send offline status first
+          await _sendOnlineStatusUpdate(false);
+
+          // Force disconnect to prevent background socket activity
+          await socketService.forceDisconnect();
+          print('🔌 AppLifecycleHandler: ✅ Socket disconnected for background');
+        }
+      } catch (e) {
+        print('🔌 AppLifecycleHandler: ⚠️ Warning - socket cleanup failed: $e');
+      }
 
       // Silent permission check when going to background (no test notifications)
       try {
@@ -119,23 +150,43 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
         print(
             '🔌 AppLifecycleHandler: ⚠️ Could not check permissions when going to background: $e');
       }
-
-      // Send offline status update via socket
-      await _sendOnlineStatusUpdate(false);
     } catch (e) {
-      print('🔌 AppLifecycleHandler: Error handling app pause: $e');
+      print('🔌 AppLifecycleHandler: ❌ Error handling app pause: $e');
     }
   }
 
   void _handleAppDetached() async {
     try {
-      // Socket services handle this automatically
-      print('🔌 AppLifecycleHandler: App detached - socket services continue');
+      print(
+          '🔌 AppLifecycleHandler: App detached - terminating socket services');
 
-      // Send offline status update via socket
-      await _sendOnlineStatusUpdate(false);
+      // CRITICAL: Completely destroy socket service to prevent memory leaks
+      try {
+        final socketService = SeSocketService.instance;
+        if (socketService.isConnected) {
+          print('🔌 AppLifecycleHandler: 🔌 Disconnecting socket service...');
+          await socketService.forceDisconnect();
+          print('🔌 AppLifecycleHandler: ✅ Socket service disconnected');
+        }
+
+        // Destroy the singleton instance completely
+        SeSocketService.destroyInstance();
+        print('🔌 AppLifecycleHandler: ✅ Socket service instance destroyed');
+      } catch (e) {
+        print(
+            '🔌 AppLifecycleHandler: ⚠️ Warning - socket service cleanup failed: $e');
+      }
+
+      // Send offline status update via socket (if still possible)
+      try {
+        await _sendOnlineStatusUpdate(false);
+      } catch (e) {
+        print('🔌 AppLifecycleHandler: ⚠️ Could not send offline status: $e');
+      }
+
+      print('🔌 AppLifecycleHandler: ✅ App termination cleanup completed');
     } catch (e) {
-      print('🔌 AppLifecycleHandler: Error handling app detach: $e');
+      print('🔌 AppLifecycleHandler: ❌ Error handling app detach: $e');
     }
   }
 
@@ -145,26 +196,26 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       print(
           '🔌 AppLifecycleHandler: Sending online status update via realtime service: $isOnline');
 
-      // Use RealtimeServiceManager to send presence update
+      // Try to use realtime service manager first
       try {
-        final realtimeManager = RealtimeServiceManager.instance;
+        final realtimeManager = RealtimeServiceManager();
         if (realtimeManager.isInitialized) {
           realtimeManager.presence.forcePresenceUpdate(isOnline);
           print(
-              '🔌 AppLifecycleHandler: ✅ Online status update sent via realtime service');
+              '🔌 AppLifecycleHandler: ✅ Online status updated via realtime service');
         } else {
           print(
               '🔌 AppLifecycleHandler: ⚠️ Realtime service not initialized, using fallback');
           // Fallback to direct socket service
-          final socketService = SeSocketService();
-          await socketService.sendUserOnlineStatus(isOnline);
+          final socketService = SeSocketService.instance;
+          socketService.sendPresenceUpdate('', isOnline);
         }
       } catch (e) {
         print(
             '🔌 AppLifecycleHandler: ⚠️ Realtime service failed, using fallback: $e');
         // Fallback to direct socket service
-        final socketService = SeSocketService();
-        await socketService.sendUserOnlineStatus(isOnline);
+        final socketService = SeSocketService.instance;
+        socketService.sendPresenceUpdate('', isOnline);
       }
     } catch (e) {
       print(

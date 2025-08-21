@@ -16,7 +16,7 @@ class _QueueStatisticsScreenState extends State<QueueStatisticsScreen> {
   Map<String, dynamic> _queueStats = {};
   List<Map<String, dynamic>> _queuedMessages = [];
   bool _isLoading = true;
-  final SeSocketService _socketService = SeSocketService();
+  final SeSocketService _socketService = SeSocketService.instance;
 
   @override
   void initState() {
@@ -155,7 +155,7 @@ class _QueueStatisticsScreenState extends State<QueueStatisticsScreen> {
         if (recipientId.isNotEmpty) {
           print(
               '🔌 QueueStats: Checking queue status for conversation with $recipientId');
-          await _socketService.checkQueueStatus(recipientId);
+          await _socketService.checkQueueStatus();
         }
       }
     } catch (e) {

@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/socket_provider.dart';
-import '../../features/notifications/services/notification_manager_service.dart';
-import '../../core/services/se_session_service.dart';
-import '../../core/services/se_socket_service.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
+import 'package:sechat_app/core/services/se_session_service.dart';
 
 class SocketStatusButton extends StatefulWidget {
   const SocketStatusButton({super.key});
@@ -57,11 +54,11 @@ class _SocketStatusButtonState extends State<SocketStatusButton>
     ));
   }
 
-  void _updateAnimationStatus(bool isConnected, bool isReconnecting) {
+  void _updateAnimationStatus(bool isConnected, bool isConnecting) {
     if (isConnected) {
       _glowController.repeat(reverse: true);
       _pulseController.stop();
-    } else if (isReconnecting) {
+    } else if (isConnecting) {
       _glowController.stop();
       _pulseController.repeat(reverse: true);
     } else {
@@ -70,50 +67,273 @@ class _SocketStatusButtonState extends State<SocketStatusButton>
     }
   }
 
-  void _showConnectionDebugDialog(
-      BuildContext context, SocketProvider socketProvider) {
-    showDialog(
+  void _showConnectionDetails() {
+    showModalBottomSheet(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Socket Details'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                  'Status: ${socketProvider.isConnected ? "Connected" : "Disconnected"}'),
-              const SizedBox(height: 8),
-              Text('Connecting: ${socketProvider.isConnecting ? "Yes" : "No"}'),
-              const SizedBox(height: 8),
-              Text(
-                  'Session ID: ${SeSessionService().currentSessionId ?? 'None'}'),
-              const SizedBox(height: 8),
-              Text(
-                  'Socket Connected: ${SeSocketService().isConnected ? "Yes" : "No"}'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        final screenHeight = MediaQuery.of(context).size.height;
+
+        return Hero(
+          tag: 'socket_status_button',
+          child: Container(
+            height: screenHeight * 0.95,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-          ],
+            child: Column(
+              children: [
+                // Handle bar
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      // Socket icon
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF6B35),
+                          borderRadius: BorderRadius.circular(40),
+                        ),
+                        child: const Icon(
+                          Icons.hub,
+                          color: Colors.white,
+                          size: 40,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Title
+                      const Text(
+                        'Socket Connection',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Connection status
+                      Builder(
+                        builder: (context) {
+                          final socketService = SeSocketService.instance;
+                          final bool isConnected = socketService.isConnected;
+                          final bool isConnecting = socketService.isConnecting;
+
+                          // Determine status text and color
+                          String statusText;
+                          Color statusColor;
+
+                          if (isConnected) {
+                            statusText = 'Connected';
+                            statusColor = const Color(0xFF4CAF50);
+                          } else if (isConnecting) {
+                            statusText = 'Connecting...';
+                            statusColor = Colors.orange;
+                          } else {
+                            statusText = 'Disconnected';
+                            statusColor = Colors.red;
+                          }
+
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                statusText,
+                                style: TextStyle(
+                                  color: statusColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Connection details
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Connection Details',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Session ID
+                        _buildDetailItem(
+                          'Session ID',
+                          SeSessionService().currentSessionId ?? 'None',
+                          Icons.person,
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Socket URL
+                        _buildDetailItem(
+                          'Server URL',
+                          'sechat-socket.strapblaque.com',
+                          Icons.dns,
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Connection type
+                        _buildDetailItem(
+                          'Connection Type',
+                          'Channel-based (Encrypted)',
+                          Icons.security,
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Realtime services status
+                        _buildDetailItem(
+                          'Realtime Services',
+                          'Active',
+                          Icons.sync,
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Active channels
+                        _buildDetailItem(
+                          'Active Channels',
+                          '1 (Personal Session)',
+                          Icons.router,
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Last activity
+                        _buildDetailItem(
+                          'Last Activity',
+                          DateTime.now().toString().substring(0, 19),
+                          Icons.access_time,
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Connection info
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Connection Info',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                '• End-to-end encrypted communication\n'
+                                '• Channel-based routing for privacy\n'
+                                '• Automatic reconnection on network changes\n'
+                                '• Heartbeat monitoring for connection health',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
   }
 
+  Widget _buildDetailItem(String label, String value, IconData icon) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          color: const Color(0xFFFF6B35),
+          size: 20,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Consumer<SocketProvider>(
-      builder: (context, socketProvider, child) {
-        final bool isConnected = socketProvider.isConnected;
-        final bool isConnecting = socketProvider.isConnecting;
-
-        // Debug print to see the actual values
-        print(
-            '🔌 SocketStatusButton: isConnected: $isConnected, isConnecting: $isConnecting');
+    return StreamBuilder<bool>(
+      stream: SeSocketService.instance.connectionStateStream,
+      builder: (context, snapshot) {
+        final bool isConnected = snapshot.data ?? false;
+        final bool isConnecting = SeSocketService.instance.isConnecting;
 
         // Update animation based on connection status
         _updateAnimationStatus(isConnected, isConnecting);
@@ -142,51 +362,52 @@ class _SocketStatusButtonState extends State<SocketStatusButton>
         }
 
         return GestureDetector(
-          onTap: () {
-            _showConnectionDebugDialog(context, socketProvider);
-          },
-          child: Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: orange,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: orange.withOpacity(animationValue * 0.6),
-                  blurRadius: isConnecting ? 8 : 12,
-                  spreadRadius: isConnecting ? 1 : 2,
-                  offset: const Offset(0, 2),
+          onTap: _showConnectionDetails,
+          child: Hero(
+            tag: 'socket_status_button',
+            child: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: orange,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: orange.withValues(alpha: animationValue * 0.6),
+                    blurRadius: isConnecting ? 8 : 12,
+                    spreadRadius: isConnecting ? 1 : 2,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+                border: Border.all(
+                  color: orange.withValues(alpha: animationValue * 0.8),
+                  width: isConnecting ? 1.5 : 2,
                 ),
-              ],
-              border: Border.all(
-                color: orange.withOpacity(animationValue * 0.8),
-                width: isConnecting ? 1.5 : 2,
               ),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(
-                  Icons.hub, // socket-like connectivity icon
-                  color: Colors.white,
-                  size: 22,
-                ),
-                // Status dot (top-right)
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Icon(
+                    Icons.hub, // socket-like connectivity icon
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                  // Status dot (top-right)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

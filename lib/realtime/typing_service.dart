@@ -3,6 +3,8 @@ import 'dart:io';
 import '../core/services/se_socket_service.dart';
 import '../core/services/se_session_service.dart';
 import 'realtime_logger.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
+import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 
 /// Service to manage typing indicators with debouncing and heartbeat
 class TypingService {
@@ -11,7 +13,7 @@ class TypingService {
 
   TypingService._();
 
-  final SeSocketService _socketService = SeSocketService();
+  final SeSocketService _socketService = SeSocketService.instance;
   final SeSessionService _sessionService = SeSessionService();
 
   // Typing state per conversation
@@ -60,7 +62,7 @@ class TypingService {
       _cancelTimers(conversationId);
 
       // Send typing start immediately
-      _sendTypingIndicator(conversationId, toUserIds, true);
+      _sendTypingIndicator(conversationId, true);
 
       // Start heartbeat timer
       _startHeartbeatTimer(conversationId, toUserIds);
@@ -100,7 +102,7 @@ class TypingService {
       _cancelTimers(conversationId);
 
       // Send typing stop immediately
-      _sendTypingIndicator(conversationId, state.toUserIds, false);
+      _sendTypingIndicator(conversationId, false);
 
       // Notify listeners
       _typingController.add(TypingUpdate(
@@ -170,7 +172,7 @@ class TypingService {
       }
 
       // Send heartbeat typing indicator
-      _sendTypingIndicator(conversationId, toUserIds, true);
+      _sendTypingIndicator(conversationId, true);
 
       RealtimeLogger.typing('Typing session extended via heartbeat',
           convoId: conversationId);
@@ -180,39 +182,33 @@ class TypingService {
     }
   }
 
-  /// Send typing indicator to server
-  void _sendTypingIndicator(
-      String conversationId, List<String> toUserIds, bool isTyping) {
+  /// Send typing indicator to the server
+  void _sendTypingIndicator(String conversationId, bool isTyping) async {
     try {
-      final sessionId = _sessionService.currentSessionId;
-      if (sessionId == null) {
-        RealtimeLogger.typing('No session ID available for typing indicator');
+      final currentUserId = _sessionService.currentSessionId;
+      if (currentUserId == null) {
+        print(
+            '📝 TypingService: ❌ No session ID available for typing indicator');
         return;
       }
 
-      final typingData = {
-        'type': 'typing',
-        'conversationId': conversationId,
-        'fromUserId': sessionId,
-        'toUserIds': toUserIds,
-        'isTyping': isTyping,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-
-      if (_socketService.isConnected) {
-        _socketService.emit('typing', typingData);
-        RealtimeLogger.typing(
-            'Typing indicator sent to server: ${isTyping ? 'start' : 'stop'}',
-            convoId: conversationId,
-            peerId: toUserIds.join(','));
-      } else {
-        RealtimeLogger.typing('Socket not connected, typing indicator queued',
-            convoId: conversationId);
-        // Note: Server will handle TTL if socket is disconnected
+      // Get the recipient ID from the conversation ID
+      final recipientId = ConversationIdGenerator.getOtherParticipant(
+          conversationId, currentUserId);
+      if (recipientId == null) {
+        print(
+            '📝 TypingService: ❌ Could not determine recipient from conversation: $conversationId');
+        return;
       }
+
+      // Use the new channel-based socket service
+      final socketService = SeSocketService.instance;
+      socketService.sendTypingIndicator(recipientId, isTyping);
+
+      print(
+          '📝 TypingService: ✅ Typing indicator sent via channel socket: $isTyping to $recipientId');
     } catch (e) {
-      RealtimeLogger.typing('Failed to send typing indicator: $e',
-          convoId: conversationId, details: {'error': e.toString()});
+      print('📝 TypingService: ❌ Failed to send typing indicator: $e');
     }
   }
 
@@ -274,6 +270,42 @@ class TypingService {
   /// Check if user is typing in a conversation
   bool isTyping(String conversationId) {
     return _typingStates[conversationId]?.isTyping ?? false;
+  }
+
+  /// Handle incoming typing indicator from server/peer
+  /// This method is called when we receive a typing indicator from another user
+  void handleIncomingTypingIndicator(
+      String conversationId, String fromUserId, bool isTyping) {
+    try {
+      RealtimeLogger.typing('Incoming typing indicator received',
+          convoId: conversationId,
+          peerId: fromUserId,
+          details: {'isTyping': isTyping});
+
+      print(
+          '🔄 TypingService: 🔔 Incoming typing indicator: $fromUserId -> $isTyping in conversation $conversationId');
+      print(
+          '🔄 TypingService: 🔍 Current stream listeners: ${_typingController.hasListener ? 'Yes' : 'No'}');
+
+      // Emit typing update for UI consumption
+      _typingController.add(TypingUpdate(
+        conversationId: conversationId,
+        isTyping: isTyping,
+        timestamp: DateTime.now(),
+        source: 'peer', // This is from another user
+      ));
+
+      print('🔄 TypingService: ✅ Typing update emitted to stream');
+      RealtimeLogger.typing('Incoming typing indicator processed',
+          convoId: conversationId, peerId: fromUserId);
+    } catch (e) {
+      print(
+          '🔄 TypingService: ❌ Failed to handle incoming typing indicator: $e');
+      RealtimeLogger.typing('Failed to handle incoming typing indicator: $e',
+          convoId: conversationId,
+          peerId: fromUserId,
+          details: {'error': e.toString()});
+    }
   }
 
   /// Get typing statistics

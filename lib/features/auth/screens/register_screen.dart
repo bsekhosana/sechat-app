@@ -8,9 +8,10 @@ import '../../../core/services/network_service.dart';
 import 'main_nav_screen.dart';
 import 'dart:convert';
 import '../../../core/services/se_session_service.dart';
-import '../../../core/services/se_socket_service.dart';
+import '../../../core/services/channel_socket_service.dart';
 import '../../../shared/widgets/custom_elevated_button.dart';
 import '../../../shared/widgets/custom_textfield.dart';
+import 'package:sechat_app/core/services/se_socket_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -534,15 +535,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
             // Connect to socket with the new session ID
             if (_sessionId != null) {
-              final socketService = SeSocketService();
-              final socketInitialized = await socketService.initialize();
+              final socketService = SeSocketService.instance;
 
-              if (socketInitialized) {
+              // CRITICAL: Use connect() instead of initialize() for SeSocketService
+              try {
+                await socketService.connect(_sessionId!);
                 print(
-                    '🔌 RegisterScreen: ✅ Socket connected successfully with session: $_sessionId');
-              } else {
-                print(
-                    '🔌 RegisterScreen: ⚠️ Socket connection failed, but continuing with registration');
+                    '🔌 RegisterScreen: ✅ Socket connection initiated for session: $_sessionId');
+
+                // Wait a moment for connection to establish
+                await Future.delayed(const Duration(seconds: 2));
+
+                // Check if socket is connected
+                if (socketService.isConnected) {
+                  print(
+                      '🔌 RegisterScreen: ✅ Socket connected successfully with session: $_sessionId');
+                } else {
+                  print(
+                      '🔌 RegisterScreen: ⚠️ Socket connection failed, but continuing with registration');
+                }
+              } catch (e) {
+                print('🔌 RegisterScreen: ❌ Error connecting socket: $e');
+                // Continue with registration even if socket fails
               }
             }
 

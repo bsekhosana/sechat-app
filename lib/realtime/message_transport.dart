@@ -24,7 +24,7 @@ class MessageTransportService {
 
   MessageTransportService._();
 
-  final SeSocketService _socketService = SeSocketService();
+  final SeSocketService _socketService = SeSocketService.instance;
   final SeSessionService _sessionService = SeSessionService();
 
   // Message state tracking

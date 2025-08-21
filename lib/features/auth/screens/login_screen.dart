@@ -394,23 +394,53 @@ class _LoginScreenState extends State<LoginScreen> {
 
           // Connect to socket and send online status to all contacts
           try {
-            final socketService = SeSocketService();
-            final socketInitialized = await socketService.initialize();
+            final socketService = SeSocketService.instance;
 
-            if (socketInitialized) {
+            // CRITICAL: Use connect() instead of initialize() for SeSocketService
+            final currentSessionId = seSessionService.currentSessionId;
+            if (currentSessionId != null) {
+              await socketService.connect(currentSessionId);
+              print(
+                  '🔌 LoginScreen: ✅ Socket connection initiated for session: $currentSessionId');
+
+              // Wait a moment for connection to establish
+              await Future.delayed(const Duration(seconds: 2));
+            }
+
+            // Check if socket is connected
+            if (socketService.isConnected) {
               print('🔌 LoginScreen: ✅ Socket connected successfully');
 
               // Send online status via realtime service
               try {
-                final realtimeManager = RealtimeServiceManager.instance;
-                if (realtimeManager.isInitialized) {
-                  realtimeManager.presence.forcePresenceUpdate(true);
+                // Initialize realtime services
+                try {
+                  await RealtimeServiceManager().initialize();
+                  print('🔌 LoginScreen: ✅ Realtime services initialized');
+                } catch (e) {
                   print(
-                      '🔌 LoginScreen: ✅ Online status sent via realtime service');
-                } else {
-                  // Fallback to direct socket service
-                  await socketService.sendUserOnlineStatus(true);
-                  print('🔌 LoginScreen: ✅ Online status sent via fallback');
+                      '🔌 LoginScreen: ⚠️ Failed to initialize realtime services: $e');
+                  // Show error message to user
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Realtime services are unavailable at this time. Please try again later.',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        backgroundColor: Colors.orange,
+                        duration: Duration(seconds: 5),
+                        action: SnackBarAction(
+                          label: 'Dismiss',
+                          textColor: Colors.white,
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                          },
+                        ),
+                      ),
+                    );
+                  }
+                  // Continue with login even if realtime services fail
                 }
               } catch (e) {
                 // Fallback to direct socket service
