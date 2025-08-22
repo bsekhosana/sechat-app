@@ -50,7 +50,7 @@ class _TypingIndicatorState extends State<TypingIndicator>
     ));
 
     // Start the continuous typing animation
-    _animationController.repeat();
+    _animationController.forward();
   }
 
   @override

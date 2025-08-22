@@ -909,8 +909,9 @@ class SeSocketService {
         'messageId': messageId,
         'fromUserId': _sessionId,
         'conversationId':
-            senderConversationId, // MUST be sender's sessionId per updated API docs
+            recipientId, // MUST be sender's sessionId per updated API docs
         'body': body,
+        'toUserIds': [recipientId],
         'timestamp': DateTime.now().toIso8601String(),
       };
 

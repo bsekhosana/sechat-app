@@ -1117,20 +1117,10 @@ class SessionChatProvider extends ChangeNotifier {
         throw Exception('Message content cannot be empty');
       }
 
-      // Validate recipient ID
-      if (_currentRecipientId == null || _currentRecipientId!.isEmpty) {
-        throw Exception('No recipient selected');
-      }
-
       final recipientId = _currentRecipientId!;
-      final conversationId = currentConversationId;
-
-      if (conversationId == null) {
-        throw Exception('No conversation ID available');
-      }
 
       print(
-          '📱 SessionChatProvider: 🚀 Sending text message to $recipientId in conversation $conversationId');
+          '📱 SessionChatProvider: 🚀 Sending text message to $recipientId in conversation $_currentConversationId');
 
       // Generate message ID
       final messageId =
@@ -1139,7 +1129,7 @@ class SessionChatProvider extends ChangeNotifier {
       // Create message object
       final message = Message(
         id: messageId,
-        conversationId: conversationId,
+        conversationId: recipientId,
         senderId: SeSessionService().currentSessionId ?? '',
         recipientId: recipientId,
         type: MessageType.text,
@@ -1181,13 +1171,13 @@ class SessionChatProvider extends ChangeNotifier {
         messageId: messageId,
         recipientId: recipientId,
         body: content,
-        conversationId:
-            recipientId, // Use recipient's session ID as conversation ID (per API docs)
+        conversationId: SeSessionService()
+            .currentSessionId!, // ✅ FIX: Use SENDER's sessionId as conversationId (per API docs)
       );
 
       if (sendResult.success) {
         print(
-            '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $recipientId');
+            '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: ${SeSessionService().currentSessionId} (sender sessionId)');
       } else {
         print(
             '📱 SessionChatProvider: ❌ Message send failed: ${sendResult.error}');
