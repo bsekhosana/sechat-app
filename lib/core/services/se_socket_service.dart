@@ -1,9 +1,11 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
-import 'package:sechat_app/core/services/encryption_service.dart';
-import 'package:sechat_app/core/services/se_session_service.dart'; // Added import for SeSessionService
-import 'package:sechat_app/core/services/key_exchange_service.dart'; // Added import for KeyExchangeService
+import 'package:sechat_app/core/services/se_session_service.dart';
+import 'package:sechat_app/core/services/key_exchange_service.dart';
+import 'package:sechat_app/core/services/ui_service.dart';
+import 'package:sechat_app/features/chat/providers/session_chat_provider.dart';
 
 class SeSocketService {
   SeSocketService._();
@@ -667,6 +669,22 @@ class SeSocketService {
         print(
             '⌨️ SeSocketService: ❌ onTyping callback is NULL - typing indicator not processed!');
       }
+
+      // ✅ FIX: Also call the internal typing status change handler for SessionChatProvider
+      try {
+        final fromUserId = data['fromUserId'] ?? '';
+        final conversationId = data['conversationId'] ?? '';
+        final isTyping = data['isTyping'] ?? false;
+
+        // Call the internal handler to update SessionChatProvider
+        _notifyTypingStatusChange(
+            fromUserId, conversationId, isTyping, true, false);
+        print(
+            '⌨️ SeSocketService: ✅ Internal typing status change handler called');
+      } catch (e) {
+        print(
+            '⌨️ SeSocketService: ❌ Error calling internal typing handler: $e');
+      }
     });
 
     // Debug: Log all incoming events (reduced for less clutter)
@@ -820,25 +838,19 @@ class SeSocketService {
     }
 
     try {
-      // CRITICAL FIX: conversationId MUST be the recipient's sessionId according to API docs
-      final actualConversationId = conversationId == 'default_conversation'
-          ? recipientId
-          : conversationId;
+      // CRITICAL FIX: conversationId MUST be the SENDER's sessionId per updated API docs
+      final senderConversationId = _sessionId;
 
-      // Validate that we're using the correct conversationId
-      if (actualConversationId == _sessionId) {
-        print(
-            '🔌 SeSocketService: ❌ ERROR: conversationId cannot be sender\'s sessionId for typing!');
-        print(
-            '🔌 SeSocketService: 🔍 Sender: $_sessionId, Recipient: $recipientId');
-        print(
-            '🔌 SeSocketService: 🔍 conversationId must be recipient\'s sessionId for typing delivery');
+      // Validate that we have a valid sender ID
+      if (senderConversationId == null || senderConversationId.isEmpty) {
+        print('🔌 SeSocketService: ❌ ERROR: Invalid sender session ID');
         return;
       }
 
       final payload = {
         'fromUserId': _sessionId,
-        'conversationId': actualConversationId, // MUST be recipient's sessionId
+        'conversationId':
+            recipientId, // MUST be sender's sessionId per updated API docs
         'isTyping': isTyping,
         'timestamp': DateTime.now().toIso8601String(),
       };
@@ -858,7 +870,7 @@ class SeSocketService {
           '🔌 SeSocketService: ⌨️ Sending typing indicator: ${isTyping ? 'started' : 'stopped'} to $recipientId');
       print('🔌 SeSocketService: 🔍 Payload: $payload');
       print(
-          '🔌 SeSocketService: 🔍 conversationId (recipient): $actualConversationId');
+          '🔌 SeSocketService: 🔍 conversationId (sender): $senderConversationId');
       print('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
 
       _socket!.emit('typing:update', payload);
@@ -883,25 +895,21 @@ class SeSocketService {
     }
 
     try {
-      // CRITICAL FIX: conversationId MUST be the recipient's sessionId according to API docs
-      // The server expects conversationId to be the recipient's sessionId for message delivery
-      final actualConversationId = conversationId ?? recipientId;
+      // CRITICAL FIX: conversationId MUST be the SENDER's sessionId per updated API docs
+      // The server expects conversationId to be the sender's sessionId for message delivery
+      final senderConversationId = _sessionId;
 
-      // Validate that we're using the correct conversationId
-      if (actualConversationId == _sessionId) {
-        print(
-            '🔌 SeSocketService: ❌ ERROR: conversationId cannot be sender\'s sessionId!');
-        print(
-            '🔌 SeSocketService: 🔍 Sender: $_sessionId, Recipient: $recipientId');
-        print(
-            '🔌 SeSocketService: 🔍 conversationId must be recipient\'s sessionId for message delivery');
+      // Validate that we have a valid sender ID
+      if (senderConversationId == null || senderConversationId.isEmpty) {
+        print('🔌 SeSocketService: ❌ ERROR: Invalid sender session ID');
         return;
       }
 
       final payload = {
         'messageId': messageId,
         'fromUserId': _sessionId,
-        'conversationId': actualConversationId, // MUST be recipient's sessionId
+        'conversationId':
+            senderConversationId, // MUST be sender's sessionId per updated API docs
         'body': body,
         'timestamp': DateTime.now().toIso8601String(),
       };
@@ -914,7 +922,7 @@ class SeSocketService {
           '🔌 SeSocketService: 📤 Sending message: $messageId to $recipientId');
       print('🔌 SeSocketService: 🔍 Payload: $payload');
       print(
-          '🔌 SeSocketService: 🔍 conversationId (recipient): $actualConversationId');
+          '🔌 SeSocketService: 🔍 conversationId (sender): $senderConversationId');
       print('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
 
       _socket!.emit('message:send', payload);
@@ -931,6 +939,8 @@ class SeSocketService {
       'messageId': messageId,
       'fromUserId': _sessionId,
       'toUserId': toUserId,
+      'conversationId':
+          _sessionId, // Server expects sender's sessionId as conversationId
       'timestamp': DateTime.now().toIso8601String()
     });
   }
@@ -1385,6 +1395,8 @@ class SeSocketService {
         'recipientId': recipientId,
         'messageId': messageId,
         'status': status ?? 'sent',
+        'conversationId':
+            _sessionId, // Server expects sender's sessionId as conversationId
         'timestamp': DateTime.now().toIso8601String(),
       });
       print(
@@ -1910,7 +1922,30 @@ class SeSocketService {
       bool isTyping, bool delivered, bool autoStopped) {
     print(
         '⌨️ SeSocketService: Notifying typing status change: $fromUserId -> $recipientId (delivered: $delivered)');
-    // TODO: Implement notification system for typing status changes
-    // This should update the UI without showing user notifications
+
+    // Update the UI by calling SessionChatProvider to update typing state
+    try {
+      final context = UIService().context;
+      if (context != null) {
+        final sessionChatProvider =
+            Provider.of<SessionChatProvider>(context, listen: false);
+
+        // ✅ CRITICAL: Only update if the typing user is the current recipient
+        if (sessionChatProvider.currentRecipientId == fromUserId) {
+          sessionChatProvider.updateRecipientTypingState(isTyping);
+          print(
+              '⌨️ SeSocketService: ✅ Typing status updated for current recipient: $fromUserId -> $isTyping');
+        } else {
+          print(
+              '⌨️ SeSocketService: ℹ️ Typing indicator from different user: $fromUserId (current recipient: ${sessionChatProvider.currentRecipientId})');
+        }
+      } else {
+        print(
+            '⌨️ SeSocketService: ⚠️ No context available for typing status update');
+      }
+    } catch (e) {
+      print(
+          '⌨️ SeSocketService: ❌ Error updating typing status via SessionChatProvider: $e');
+    }
   }
 }

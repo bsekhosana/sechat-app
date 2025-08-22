@@ -285,23 +285,29 @@ class PresenceManager extends ChangeNotifier {
   /// Sync presence with a newly added contact (2-way presence update)
   Future<void> syncPresenceWithNewContact(String contactSessionId) async {
     try {
-      print('🟢 PresenceManager: 🔄 Syncing presence with new contact: $contactSessionId');
-      
+      print(
+          '🟢 PresenceManager: 🔄 Syncing presence with new contact: $contactSessionId');
+
       // Step 1: Broadcast our presence to the new contact
       _socketService.updatePresence(true, specificUsers: [contactSessionId]);
-      print('🟢 PresenceManager: ✅ Our presence broadcasted to new contact: $contactSessionId');
-      
+      print(
+          '🟢 PresenceManager: ✅ Our presence broadcasted to new contact: $contactSessionId');
+
       // Step 2: Request presence status from the new contact
       _socketService.requestPresenceStatus([contactSessionId]);
-      print('🟢 PresenceManager: ✅ Presence status requested from new contact: $contactSessionId');
-      
+      print(
+          '🟢 PresenceManager: ✅ Presence status requested from new contact: $contactSessionId');
+
       // Step 3: Also send individual presence update to trigger response
       _socketService.updatePresence(true, specificUsers: [contactSessionId]);
-      print('🟢 PresenceManager: ✅ Individual presence update sent to new contact: $contactSessionId');
-      
-      print('🟢 PresenceManager: ✅ 2-way presence sync completed for new contact: $contactSessionId');
+      print(
+          '🟢 PresenceManager: ✅ Individual presence update sent to new contact: $contactSessionId');
+
+      print(
+          '🟢 PresenceManager: ✅ 2-way presence sync completed for new contact: $contactSessionId');
     } catch (e) {
-      print('🟢 PresenceManager: ❌ Error syncing presence with new contact: $contactSessionId: $e');
+      print(
+          '🟢 PresenceManager: ❌ Error syncing presence with new contact: $contactSessionId: $e');
       rethrow;
     }
   }

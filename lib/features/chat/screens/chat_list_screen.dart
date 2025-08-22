@@ -355,16 +355,18 @@ class _ChatListScreenState extends State<ChatListScreen>
                 await provider.refreshConversations();
               },
               child: ListView.builder(
-                padding:
-                    const EdgeInsets.only(bottom: 24, left: 24, right: 24, top: 24),
+                padding: const EdgeInsets.only(
+                    bottom: 24, left: 24, right: 24, top: 24),
                 itemCount: provider.filteredConversations.length,
                 itemBuilder: (context, index) {
                   final conversation = provider.filteredConversations[index];
-                  final isLast = index == provider.filteredConversations.length - 1;
+                  final isOnline = conversation.isOnline;
+                  final isLast =
+                      index == provider.filteredConversations.length - 1;
 
                   return ChatListItem(
                     conversation: conversation,
-                    onTap: () => _openChat(conversation),
+                    onTap: () => _openChat(conversation, isOnline),
                     onLongPress: () => _showConversationOptions(conversation),
                     onDelete: () => _deleteConversation(conversation),
                     isLast: isLast,
@@ -391,7 +393,7 @@ class _ChatListScreenState extends State<ChatListScreen>
   }
 
   /// Open chat conversation
-  void _openChat(ChatConversation conversation) {
+  void _openChat(ChatConversation conversation, bool isOnline) {
     // Use recipientId if available, otherwise fall back to participant2Id
     // This handles cases where older conversations might not have recipientId populated
     final effectiveRecipientId =
@@ -409,6 +411,7 @@ class _ChatListScreenState extends State<ChatListScreen>
           conversationId: conversation.id,
           recipientId: effectiveRecipientId,
           recipientName: effectiveRecipientName,
+          isOnline: isOnline,
         ),
       ),
     );

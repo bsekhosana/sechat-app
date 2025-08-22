@@ -153,7 +153,7 @@ class ChatListItem extends StatelessWidget {
                               ),
                               // Conversation ID (shortened)
                               Text(
-                                'ID: ${conversation.id.substring(0, 8)}...',
+                                'ID: ${conversation.id.substring(0, 24)}...',
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: Colors.grey[500],

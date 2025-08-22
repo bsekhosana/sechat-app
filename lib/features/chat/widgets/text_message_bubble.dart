@@ -19,8 +19,22 @@ class TextMessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text =
-        message.content['text'] as String? ?? 'Message content unavailable';
+    // CRITICAL: Use decryptedText if available, otherwise fall back to text
+    // This ensures we display decrypted content while keeping encrypted data in storage
+    // Handle both old format (originalText) and new format (decryptedText)
+    final text = message.content['decryptedText'] as String? ??
+        message.content['originalText'] as String? ??
+        message.content['text'] as String? ??
+        'Message content unavailable';
+
+    // Debug logging to see what content we're receiving
+    print('🔍 TextMessageBubble: Message ID: ${message.id}');
+    print(
+        '🔍 TextMessageBubble: Content keys: ${message.content.keys.toList()}');
+    print(
+        '🔍 TextMessageBubble: Using decryptedText: ${message.content.containsKey('decryptedText')}');
+    print('🔍 TextMessageBubble: Text content: $text');
+    print('🔍 TextMessageBubble: Full content: ${message.content}');
 
     return GestureDetector(
       onTap: onTap,

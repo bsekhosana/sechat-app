@@ -15,6 +15,9 @@ class UIService {
   }
 
   BuildContext? get _context => _navigatorKey?.currentContext;
+  
+  /// Get the current navigator context for external use
+  BuildContext? get context => _navigatorKey?.currentContext;
 
   void showSnack(String message, {bool isError = false, Duration? duration}) {
     final context = _context;

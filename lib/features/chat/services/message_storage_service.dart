@@ -295,8 +295,8 @@ class MessageStorageService {
     try {
       final List<Map<String, dynamic>> maps = await _database!.query(
         'conversations',
-        where: 'participant1_id = ? OR participant2_id = ?',
-        whereArgs: [userId, userId],
+        where: 'id = ?',
+        whereArgs: [userId],
         orderBy: 'updated_at DESC',
       );
 
@@ -306,6 +306,29 @@ class MessageStorageService {
       return conversations;
     } catch (e) {
       print('💾 MessageStorageService: ❌ Failed to get user conversations: $e');
+      rethrow;
+    }
+  }
+
+  /// Get user conversations
+  Future<List<ChatConversation>> getMyLocalConversations() async {
+    if (_database == null) {
+      throw Exception('Database not initialized');
+    }
+
+    try {
+      final List<Map<String, dynamic>> maps = await _database!.query(
+        'conversations',
+        orderBy: 'updated_at DESC',
+      );
+
+      final conversations = maps.map((map) => _mapToConversation(map)).toList();
+      print(
+          '💾 MessageStorageService: ✅ Retrieved ${conversations.length} from getMyLocalConversations function');
+      return conversations;
+    } catch (e) {
+      print(
+          '💾 MessageStorageService: ❌ Failed to get my local conversations: $e');
       rethrow;
     }
   }

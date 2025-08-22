@@ -45,6 +45,7 @@ import 'core/services/indicator_service.dart';
 import 'core/services/encryption_service.dart';
 import 'package:sechat_app/shared/providers/socket_status_provider.dart';
 import 'package:sechat_app/core/services/network_service.dart';
+import 'package:sechat_app/core/services/unified_message_service.dart';
 
 // Global navigator key to access context from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -204,6 +205,17 @@ Future<void> main() async {
           // Initialize in the next frame to avoid blocking the UI
           WidgetsBinding.instance.addPostFrameCallback((_) {
             provider.initialize();
+
+            // CRITICAL: Set up ChatListProvider to listen to UnifiedMessageService
+            final unifiedMessageService = UnifiedMessageService.instance;
+            unifiedMessageService.addListener(() {
+              print(
+                  '🔌 Main: 🔔 ChatListProvider UnifiedMessageService update received');
+              // Refresh the chat list to show latest messages
+              provider.refreshConversations();
+            });
+            print(
+                '🔌 Main: ✅ ChatListProvider UnifiedMessageService listener set up');
           });
           return provider;
         }),
@@ -235,6 +247,36 @@ Future<void> main() async {
       ),
     ),
   );
+
+  // CRITICAL: Set up global UnifiedMessageService listener after app is built
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    try {
+      final globalSessionChatProvider = Provider.of<SessionChatProvider>(
+          navigatorKey.currentContext!,
+          listen: false);
+
+      // Set up a global listener for UnifiedMessageService
+      final unifiedMessageService = UnifiedMessageService.instance;
+      print('🔌 Main: 🔍 Setting up global UnifiedMessageService listener');
+      print(
+          '🔌 Main: 🔍 Global SessionChatProvider instance: ${globalSessionChatProvider.hashCode}');
+      print(
+          '🔌 Main: 🔍 UnifiedMessageService instance: ${unifiedMessageService.hashCode}');
+
+      // Add the global provider as a listener
+      unifiedMessageService.addListener(() {
+        print('🔌 Main: 🔔 Global UnifiedMessageService update received');
+        // Notify the global SessionChatProvider to refresh
+        globalSessionChatProvider.notifyListeners();
+      });
+
+      print(
+          '🔌 Main: ✅ Global UnifiedMessageService listener set up successfully');
+    } catch (e) {
+      print(
+          '🔌 Main: ❌ Failed to set up global UnifiedMessageService listener: $e');
+    }
+  });
 }
 
 // Set up socket callbacks
@@ -244,6 +286,45 @@ void _setupSocketCallbacks(SeSocketService socketService) {
       (senderId, senderName, message, conversationId, messageId) {
     print(
         '🔌 Main: Message received callback from socket: $senderName: $message');
+
+    // CRITICAL: Save incoming message to database via UnifiedMessageService
+    try {
+      final unifiedMessageService = UnifiedMessageService.instance;
+      print(
+          '🔌 Main: 🔍 Using UnifiedMessageService instance: ${unifiedMessageService.hashCode}');
+
+      // Check if message is encrypted (default to true for security)
+      bool isEncrypted = true;
+      String? checksum;
+
+      // If the message payload contains encryption info, extract it
+      // This would come from the socket event data structure
+      if (messageId.isNotEmpty && message.isNotEmpty) {
+        // CRITICAL: Use the ORIGINAL conversation ID from the socket event
+        // This ensures messages appear in the correct conversation
+        final actualConversationId = conversationId;
+
+        print('🔌 Main: 🔍 Socket conversationId: $conversationId');
+        print('🔌 Main: 🔍 SenderId: $senderId');
+        print('🔌 Main: 🔍 Using conversationId: $actualConversationId');
+
+        unifiedMessageService.handleIncomingMessage(
+          messageId: messageId,
+          fromUserId: senderId,
+          conversationId: actualConversationId,
+          body: message,
+          timestamp: DateTime.now(),
+          isEncrypted: isEncrypted,
+          checksum: checksum,
+        );
+        print(
+            '🔌 Main: ✅ Incoming message saved to database via UnifiedMessageService');
+      } else {
+        print('🔌 Main: ⚠️ Invalid message data received');
+      }
+    } catch (e) {
+      print('🔌 Main: ❌ Failed to save incoming message to database: $e');
+    }
 
     // Update badge counts for new messages
     WidgetsBinding.instance.addPostFrameCallback((_) {

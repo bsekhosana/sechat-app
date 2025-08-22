@@ -15,12 +15,13 @@ class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String recipientId;
   final String recipientName;
-
+  final bool isOnline;
   const ChatScreen({
     super.key,
     required this.conversationId,
     required this.recipientId,
     required this.recipientName,
+    required this.isOnline,
   });
 
   @override
@@ -126,6 +127,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 child: _buildMessagesList(),
               ),
 
+              // Typing indicator - positioned between messages and input
+              _buildTypingIndicator(),
+
               // Input area
               _buildInputArea(),
             ],
@@ -141,7 +145,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       builder: (context, provider, child) {
         return ChatHeader(
           recipientName: provider.currentRecipientName ?? widget.recipientName,
-          isOnline: provider.isRecipientOnline,
+          isOnline: widget.isOnline || provider.isRecipientOnline,
           lastSeen: provider.recipientLastSeen,
           onBackPressed: () => Navigator.pop(context),
           onMorePressed: () => _showChatOptions(provider),
@@ -279,19 +283,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
-
-            // Typing indicator
-            if (provider.isRecipientTyping)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16, left: 20),
-                child: TypingIndicator(
-                  typingUserName:
-                      provider.currentRecipientName ?? widget.recipientName,
-                ),
-              ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Build typing indicator
+  Widget _buildTypingIndicator() {
+    return Consumer<SessionChatProvider>(
+      builder: (context, provider, child) {
+        if (!provider.isRecipientTyping) {
+          return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16, left: 20),
+          child: TypingIndicator(
+            typingUserName:
+                provider.currentRecipientName ?? widget.recipientName,
+          ),
+        );
+      },
     );
   }
 

@@ -179,8 +179,7 @@ class ChatListProvider extends ChangeNotifier {
       while (!databaseReady && retryCount < maxRetries) {
         try {
           // Try to load conversations from the database
-          final conversations =
-              await _storageService.getUserConversations(currentUserId);
+          final conversations = await _storageService.getMyLocalConversations();
 
           // Sort conversations by last message time (newest first)
           conversations.sort((a, b) {
@@ -767,17 +766,21 @@ class ChatListProvider extends ChangeNotifier {
       // ENHANCED LOOKUP: Use the additional context for better conversation finding
       ChatConversation? conversation;
 
-      // Method 1: Try to find by conversationId from context (most reliable)
+      // Method 1: Try to find by conversationId from context (sender's ID per updated API docs)
       if (conversation == null && conversationId != null) {
         try {
+          // CRITICAL: conversationId is now the SENDER's sessionId, not the conversation ID
+          // We need to find the conversation where this sender is a participant
           conversation = _conversations.firstWhere(
-            (conv) => conv.id == conversationId,
+            (conv) =>
+                conv.participant1Id == conversationId ||
+                conv.participant2Id == conversationId,
           );
           print(
-              '📱 ChatListProvider: ✅ Found conversation by context conversationId: ${conversation.id}');
+              '📱 ChatListProvider: ✅ Found conversation by context conversationId (sender): ${conversation.id}');
         } catch (e) {
           print(
-              '📱 ChatListProvider: ⚠️ No conversation found by context conversationId: $conversationId');
+              '📱 ChatListProvider: ⚠️ No conversation found by context conversationId (sender): $conversationId');
         }
       }
 

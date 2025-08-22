@@ -1079,20 +1079,24 @@ class KeyExchangeService {
 
         // CRITICAL: Trigger 2-way presence update with the new contact
         try {
-          print('🔑 KeyExchangeService: 🔄 Triggering 2-way presence update with new contact: $senderId');
-          
+          print(
+              '🔑 KeyExchangeService: 🔄 Triggering 2-way presence update with new contact: $senderId');
+
           // Add the new contact to our contact list
           final contactService = ContactService.instance;
           await contactService.addContact(senderId, userName);
-          
+
           // Trigger presence sync with the new contact
           final presenceManager = PresenceManager.instance;
           // For now, just broadcast presence to the new contact
-          SeSocketService.instance.updatePresence(true, specificUsers: [senderId]);
-          
-          print('🔑 KeyExchangeService: ✅ 2-way presence update completed for new contact: $senderId');
+          SeSocketService.instance
+              .updatePresence(true, specificUsers: [senderId]);
+
+          print(
+              '🔑 KeyExchangeService: ✅ 2-way presence update completed for new contact: $senderId');
         } catch (e) {
-          print('🔑 KeyExchangeService: ⚠️ Failed to trigger presence update for new contact: $e');
+          print(
+              '🔑 KeyExchangeService: ⚠️ Failed to trigger presence update for new contact: $e');
         }
       } else {
         print('🔑 KeyExchangeService: ❌ Failed to create conversation locally');

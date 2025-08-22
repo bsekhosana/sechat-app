@@ -1,23 +1,22 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import '../../../core/services/se_session_service.dart';
-import '../../../core/services/encryption_service.dart';
 import '../services/message_storage_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
-import '../models/chat_conversation.dart';
-import '../providers/chat_list_provider.dart';
 import '../models/message.dart';
 import '../../../realtime/realtime_service_manager.dart';
 import '../../../realtime/typing_service.dart';
+import '../../../core/services/unified_message_service.dart' as unified_msg;
 import 'dart:async';
 import 'dart:convert';
-import '../../../core/utils/conversation_id_generator.dart';
 
 class SessionChatProvider extends ChangeNotifier {
   final SeSocketService _socketService = SeSocketService.instance;
+  final unified_msg.UnifiedMessageService _messageService =
+      unified_msg.UnifiedMessageService.instance;
+  final MessageStorageService _messageStorage = MessageStorageService.instance;
 
   // Realtime services
   TypingService? _typingService;
@@ -38,6 +37,8 @@ class SessionChatProvider extends ChangeNotifier {
   bool _isRecipientTyping = false;
   DateTime? _recipientLastSeen;
   bool _isRecipientOnline = false;
+
+  // No need for stream subscription - using ChangeNotifier pattern
 
   List<Chat> get chats => _chats;
   bool get isLoading => _isLoading;
@@ -96,6 +97,168 @@ class SessionChatProvider extends ChangeNotifier {
     return _typingUsers[userId] ?? false;
   }
 
+  /// Setup listener for UnifiedMessageService updates
+  void _setupMessageServiceListener() {
+    // Listen to UnifiedMessageService for new messages using ChangeNotifier
+    print(
+        '📱 SessionChatProvider: 🔍 Setting up listener on UnifiedMessageService instance: ${_messageService.hashCode}');
+    _messageService.addListener(_onMessageServiceUpdate);
+    print('📱 SessionChatProvider: ✅ Message service listener setup');
+  }
+
+  /// Stop message service listener
+  void _stopMessageServiceListener() {
+    _messageService.removeListener(_onMessageServiceUpdate);
+    print('📱 SessionChatProvider: ✅ Message service listener stopped');
+  }
+
+  /// Handle UnifiedMessageService updates
+  void _onMessageServiceUpdate() {
+    print('📱 SessionChatProvider: 🔔 UnifiedMessageService update received');
+    print(
+        '📱 SessionChatProvider: 🔍 Current conversation ID: $_currentConversationId');
+    if (_currentConversationId != null) {
+      print('📱 SessionChatProvider: 🔄 Triggering database refresh...');
+      _refreshMessagesFromDatabase();
+    } else {
+      print(
+          '📱 SessionChatProvider: ⚠️ No current conversation ID, skipping refresh');
+    }
+  }
+
+  /// Refresh messages from database for real-time updates
+  Future<void> _refreshMessagesFromDatabase() async {
+    try {
+      if (_currentConversationId == null) return;
+
+      print(
+          '📱 SessionChatProvider: 🔄 Refreshing messages from database for conversation: $_currentConversationId');
+
+      final loadedMessages = await _messageStorage
+          .getMessages(_currentConversationId!, limit: 100);
+      print(
+          '📱 SessionChatProvider: 🔄 Loaded ${loadedMessages.length} messages from database');
+
+      // Check if we have new messages
+      final currentMessageIds = _messages.map((m) => m.id).toSet();
+      final newMessages = loadedMessages
+          .where((m) => !currentMessageIds.contains(m.id))
+          .toList();
+
+      print(
+          '📱 SessionChatProvider: 🔄 Current messages in memory: ${_messages.length}');
+      print(
+          '📱 SessionChatProvider: 🔄 New messages found: ${newMessages.length}');
+
+      if (newMessages.isNotEmpty) {
+        print(
+            '📱 SessionChatProvider: 🔄 Found ${newMessages.length} new messages from database');
+
+        // Debug: Log the content of new messages
+        for (final message in newMessages) {
+          print('📱 SessionChatProvider: 🔄 New message: ${message.id}');
+          print(
+              '📱 SessionChatProvider: 🔄 Message content keys: ${message.content.keys.toList()}');
+          print(
+              '📱 SessionChatProvider: 🔄 Message text: ${message.content['text']}');
+          if (message.content.containsKey('encryptedText')) {
+            print(
+                '📱 SessionChatProvider: 🔄 Message was encrypted: ${message.content['encryptedText']?.toString().length ?? 0} chars');
+          }
+        }
+
+        // Add new messages
+        _messages.addAll(newMessages);
+
+        // Sort messages by timestamp
+        // CRITICAL: Sort messages by timestamp DESCENDING (newest first) for bottom-up display
+        _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+        // Update chat list with new messages
+        for (final message in newMessages) {
+          _updateOrCreateChat(message.conversationId, message);
+        }
+
+        // Notify listeners for UI update
+        notifyListeners();
+        print(
+            '📱 SessionChatProvider: ✅ Notified listeners after adding ${newMessages.length} new messages');
+      } else {
+        print('📱 SessionChatProvider: ℹ️ No new messages found in database');
+      }
+    } catch (e) {
+      print(
+          '📱 SessionChatProvider: ❌ Error refreshing messages from database: $e');
+    }
+  }
+
+  /// Handle chat message received from socket callback
+  void _handleChatMessageReceivedFromSocket(String senderId, String senderName,
+      String message, String conversationId, String messageId) {
+    try {
+      print(
+          '📱 SessionChatProvider: 🔔 Chat message callback received: $senderName -> $message (ID: $messageId)');
+
+      // Check if this message belongs to the current conversation
+      // Use more flexible matching to handle different conversation ID formats
+      bool isForCurrentConversation = false;
+
+      if (_currentConversationId != null &&
+          _currentConversationId!.isNotEmpty) {
+        // Direct match
+        if (_currentConversationId == conversationId) {
+          isForCurrentConversation = true;
+        } else {
+          // Check if the conversation ID contains the current user and the other participant
+          final currentUserId = SeSessionService().currentSessionId;
+          if (currentUserId != null) {
+            // Check if this is a conversation between current user and sender
+            if (conversationId.contains(currentUserId) &&
+                conversationId.contains(senderId)) {
+              isForCurrentConversation = true;
+            }
+            // Also check if current conversation ID contains the sender
+            if (_currentConversationId!.contains(senderId)) {
+              isForCurrentConversation = true;
+            }
+          }
+        }
+      }
+
+      if (isForCurrentConversation) {
+        // CRITICAL: Don't create a new message here - let UnifiedMessageService handle it
+        // The message should already be saved to the database by the time this callback is called
+        // Just refresh from database to get the decrypted content
+        print(
+            '📱 SessionChatProvider: 🔄 Message belongs to current conversation, refreshing from database');
+        _refreshMessagesFromDatabase();
+
+        // CRITICAL: Notify listeners to trigger auto-scroll to bottom
+        notifyListeners();
+      } else {
+        print(
+            '📱 SessionChatProvider: ℹ️ Message not for current conversation: $conversationId (current: $_currentConversationId)');
+      }
+    } catch (e) {
+      print(
+          '📱 SessionChatProvider: ❌ Error handling chat message callback: $e');
+    }
+  }
+
+  /// CRITICAL: Method to trigger auto-scroll to bottom when new messages arrive
+  void _triggerAutoScrollToBottom() {
+    // This will be called by the UI to scroll to bottom after messages update
+    print('📱 SessionChatProvider: 🔄 Triggering auto-scroll to bottom');
+    notifyListeners();
+  }
+
+  /// CRITICAL: Public method for UI to trigger auto-scroll to bottom
+  void triggerAutoScrollToBottom() {
+    print('📱 SessionChatProvider: 🔄 Public auto-scroll trigger called');
+    _triggerAutoScrollToBottom();
+  }
+
+  // Add missing methods
   User? getChatUser(String userId) {
     return _chatUsers[userId];
   }
@@ -192,7 +355,7 @@ class SessionChatProvider extends ChangeNotifier {
       String senderId, bool isOnline, String? lastSeen) {
     try {
       print(
-          '📱 SessionChatProvider: 🔔 Online status callback received: $senderId -> $isOnline (lastSeen: $lastSeen)');
+          '🔌 SessionChatProvider: 🔔 Online status callback received: $senderId -> $isOnline (lastSeen: $lastSeen)');
 
       // CRITICAL: Prevent sender from processing their own online status update
       final currentUserId = SeSessionService().currentSessionId;
@@ -242,76 +405,6 @@ class SessionChatProvider extends ChangeNotifier {
     }
   }
 
-  /// Handle chat message received from socket callback
-  void _handleChatMessageReceivedFromSocket(String senderId, String senderName,
-      String message, String conversationId, String messageId) {
-    try {
-      print(
-          '📱 SessionChatProvider: 🔔 Chat message callback received: $senderName -> $message (ID: $messageId)');
-
-      // Check if this message belongs to the current conversation
-      // Use more flexible matching to handle different conversation ID formats
-      bool isForCurrentConversation = false;
-
-      if (_currentConversationId != null &&
-          _currentConversationId!.isNotEmpty) {
-        // Direct match
-        if (_currentConversationId == conversationId) {
-          isForCurrentConversation = true;
-        } else {
-          // Check if the conversation ID contains the current user and the other participant
-          final currentUserId = SeSessionService().currentSessionId;
-          if (currentUserId != null) {
-            // Check if this is a conversation between current user and sender
-            if (conversationId.contains(currentUserId) &&
-                conversationId.contains(senderId)) {
-              isForCurrentConversation = true;
-            }
-            // Also check if current conversation ID contains the sender
-            if (_currentConversationId!.contains(senderId)) {
-              isForCurrentConversation = true;
-            }
-          }
-        }
-      }
-
-      if (isForCurrentConversation) {
-        // Create a new message object
-        final newMessage = Message(
-          id: messageId,
-          conversationId: conversationId,
-          senderId: senderId,
-          recipientId: SeSessionService().currentSessionId ?? '',
-          type: MessageType.text,
-          content: {'text': message},
-          status: MessageStatus.delivered,
-          timestamp: DateTime.now(),
-        );
-
-        // Add message to the messages list
-        _messages.add(newMessage);
-
-        // Sort messages by timestamp
-        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-        // Update the chat's last message
-        _updateOrCreateChat(conversationId, newMessage);
-
-        print(
-            '📱 SessionChatProvider: ✅ Message added to current conversation: $messageId');
-
-        // Notify listeners to update UI
-        notifyListeners();
-      } else {
-        print(
-            '📱 SessionChatProvider: ℹ️ Message not for current conversation: $conversationId (current: $_currentConversationId)');
-      }
-    } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error handling chat message callback: $e');
-    }
-  }
-
   // Send message using encrypted notifications
   Future<void> sendMessage({
     required String recipientId,
@@ -330,8 +423,8 @@ class SessionChatProvider extends ChangeNotifier {
       final messageId =
           'msg_${DateTime.now().millisecondsSinceEpoch}_$recipientId';
 
-      // Use the recipient ID as the conversation ID
-      final conversationId = recipientId;
+      // Use the current conversation ID to ensure consistency
+      final conversationId = _currentConversationId ?? recipientId;
 
       print(
           '📱 SessionChatProvider: 🔍 Sending message with conversation ID: $conversationId');
@@ -418,22 +511,22 @@ class SessionChatProvider extends ChangeNotifier {
         print('📱 SessionChatProvider: ⚠️ Error updating chat list: $e');
       }
 
-      // Send message via socket service with connectivity guard
-      if (_socketService.isConnected) {
-        _socketService.sendMessage(
-          messageId: messageId,
-          recipientId: recipientId,
-          body: content,
-          conversationId:
-              conversationId, // Use recipient's session ID as conversation ID
-        );
+      // Send message via unified message service (API-compliant)
+      final sendResult = await _messageService.sendMessage(
+        messageId: messageId,
+        recipientId: recipientId,
+        body: content,
+        conversationId:
+            conversationId, // Use recipient's session ID as conversation ID
+      );
 
+      if (sendResult.success) {
         print(
             '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $conversationId');
       } else {
         print(
-            '📱 SessionChatProvider: ⚠️ Socket not connected, cannot send message');
-        throw Exception('Socket not connected');
+            '📱 SessionChatProvider: ❌ Message send failed: ${sendResult.error}');
+        throw Exception('Message send failed: ${sendResult.error}');
       }
 
       _isLoading = false;
@@ -650,10 +743,13 @@ class SessionChatProvider extends ChangeNotifier {
 
     if (_currentConversationId == chatId || isOwnMessage) {
       _messages.add(message);
-      // Sort messages by timestamp
-      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      // CRITICAL: Sort messages by timestamp DESCENDING (newest first) for bottom-up display
+      _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       print(
           '📱 SessionChatProvider: ✅ Message added to messages list: ${message.id}');
+
+      // CRITICAL: Trigger auto-scroll to bottom for new messages
+      _triggerAutoScrollToBottom();
     } else {
       print(
           '📱 SessionChatProvider: ℹ️ Message not added to messages list - not current conversation and not own message');
@@ -832,6 +928,9 @@ class SessionChatProvider extends ChangeNotifier {
       // Initialize realtime typing service
       _setupTypingService();
 
+      // Setup message service listener for real-time updates
+      _setupMessageServiceListener();
+
       _isLoading = false;
       notifyListeners();
 
@@ -845,13 +944,37 @@ class SessionChatProvider extends ChangeNotifier {
     }
   }
 
+  @override
+  void dispose() {
+    // Clean up listener
+    _stopMessageServiceListener();
+    super.dispose();
+  }
+
   /// Load messages for a specific conversation
   Future<void> _loadMessagesForConversation(String conversationId) async {
     try {
+      print(
+          '📱 SessionChatProvider: 🔄 Loading messages for conversation: $conversationId');
+
       // Load messages from MessageStorageService
       final messageStorageService = MessageStorageService.instance;
       final loadedMessages =
           await messageStorageService.getMessages(conversationId, limit: 100);
+
+      print(
+          '📱 SessionChatProvider: 🔄 Loaded ${loadedMessages.length} messages from database');
+
+      // Debug: Log the content of loaded messages
+      for (final message in loadedMessages) {
+        print('📱 SessionChatProvider: 🔄 Loaded message: ${message.id}');
+        print(
+            '📱 SessionChatProvider: 🔄 Message content keys: ${message.content.keys.toList()}');
+        print(
+            '📱 SessionChatProvider: 🔄 Message text: ${message.content['text']}');
+        print(
+            '📱 SessionChatProvider: 🔄 Message encryptedText: ${message.content['encryptedText']}');
+      }
 
       // Merge with existing messages to avoid duplicates
       final existingMessageIds = _messages.map((m) => m.id).toSet();
@@ -859,11 +982,14 @@ class SessionChatProvider extends ChangeNotifier {
           .where((m) => !existingMessageIds.contains(m.id))
           .toList();
 
+      print(
+          '📱 SessionChatProvider: 🔄 New messages to add: ${newMessages.length}');
+
       // Add new messages to existing list
       _messages.addAll(newMessages);
 
-      // Sort messages by timestamp
-      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      // CRITICAL: Sort messages by timestamp DESCENDING (newest first) for bottom-up display
+      _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       print(
           '📱 SessionChatProvider: Loaded ${loadedMessages.length} messages for conversation: $conversationId');
@@ -873,6 +999,12 @@ class SessionChatProvider extends ChangeNotifier {
       print('📱 SessionChatProvider: ❌ Error loading messages: $e');
       // Don't clear existing messages on error
     }
+  }
+
+  /// Manually trigger message refresh (for testing)
+  Future<void> manualRefreshMessages() async {
+    print('📱 SessionChatProvider: 🔄 Manual refresh triggered');
+    await _refreshMessagesFromDatabase();
   }
 
   /// Load recipient user data
@@ -1044,23 +1176,22 @@ class SessionChatProvider extends ChangeNotifier {
         }
       }
 
-      // Send message via socket service
-      if (_socketService.isConnected) {
-        _socketService.sendMessage(
-          messageId: messageId,
-          recipientId: recipientId,
-          body: content,
-          conversationId:
-              recipientId, // Use recipient's session ID as conversation ID (per API docs)
-        );
+      // Send message via unified message service (API-compliant)
+      final sendResult = await _messageService.sendMessage(
+        messageId: messageId,
+        recipientId: recipientId,
+        body: content,
+        conversationId:
+            recipientId, // Use recipient's session ID as conversation ID (per API docs)
+      );
 
+      if (sendResult.success) {
         print(
             '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $recipientId');
       } else {
         print(
-            '📱 SessionChatProvider: ❌ Socket still not connected after retry attempt');
-        throw Exception(
-            'Unable to connect to chat server. Please check your internet connection and try again.');
+            '📱 SessionChatProvider: ❌ Message send failed: ${sendResult.error}');
+        throw Exception('Message send failed: ${sendResult.error}');
       }
 
       _isLoading = false;
