@@ -49,7 +49,8 @@ class _TypingIndicatorState extends State<TypingIndicator>
       curve: Curves.easeOutCubic,
     ));
 
-    _animationController.forward();
+    // Start the continuous typing animation
+    _animationController.repeat();
   }
 
   @override
@@ -71,10 +72,7 @@ class _TypingIndicatorState extends State<TypingIndicator>
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withOpacity(0.3),
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
@@ -92,7 +90,7 @@ class _TypingIndicatorState extends State<TypingIndicator>
               Text(
                 '${widget.typingUserName} is typing...',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: Colors.deepOrangeAccent,
                       fontStyle: FontStyle.italic,
                     ),
               ),
@@ -114,19 +112,22 @@ class _TypingIndicatorState extends State<TypingIndicator>
           return AnimatedBuilder(
             animation: _animationController,
             builder: (context, child) {
-              final delay = index * 0.2;
+              final delay = index * 0.3;
               final animationValue = (_animationController.value + delay) % 1.0;
-              final opacity = (animationValue * 2).clamp(0.0, 1.0);
+              // Create a wave effect: fade in, then fade out
+              final opacity = (animationValue < 0.5)
+                  ? (animationValue * 2)
+                  : ((1.0 - animationValue) * 2);
 
-              return Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withOpacity(opacity),
-                  shape: BoxShape.circle,
+              return Opacity(
+                opacity: opacity,
+                child: Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: Colors.deepOrangeAccent,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               );
             },

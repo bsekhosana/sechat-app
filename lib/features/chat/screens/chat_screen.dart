@@ -298,7 +298,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         }
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16, left: 20),
+          padding: const EdgeInsets.only(bottom: 16),
           child: TypingIndicator(
             typingUserName:
                 provider.currentRecipientName ?? widget.recipientName,
