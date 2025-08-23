@@ -387,6 +387,103 @@ class MessageStorageService {
     }
   }
 
+  /// Clean up malformed conversation IDs (fixes double chat_ prefix issues)
+  Future<void> cleanupMalformedConversationIds() async {
+    if (_database == null) {
+      throw Exception('Database not initialized');
+    }
+
+    try {
+      print('💾 MessageStorageService: 🧹 Starting conversation ID cleanup...');
+
+      // Get all conversations
+      final List<Map<String, dynamic>> maps =
+          await _database!.query('conversations');
+
+      int cleanedCount = 0;
+      for (final map in maps) {
+        final conversationId = map['id'] as String;
+
+        // Check if conversation ID has double chat_ prefix
+        if (conversationId.startsWith('chat_chat_')) {
+          print(
+              '💾 MessageStorageService: 🔍 Found malformed conversation ID: $conversationId');
+
+          // Extract the correct conversation ID by removing the extra chat_ prefix
+          final correctedId =
+              conversationId.replaceFirst('chat_chat_', 'chat_');
+          print('💾 MessageStorageService: 🔧 Corrected to: $correctedId');
+
+          // Update the conversation ID
+          await _database!.update(
+            'conversations',
+            {'id': correctedId},
+            where: 'id = ?',
+            whereArgs: [conversationId],
+          );
+
+          // Update all messages with this conversation ID
+          await _database!.update(
+            'messages',
+            {'conversation_id': correctedId},
+            where: 'conversation_id = ?',
+            whereArgs: [conversationId],
+          );
+
+          cleanedCount++;
+          print(
+              '💾 MessageStorageService: ✅ Cleaned conversation ID: $conversationId -> $correctedId');
+        }
+
+        // NEW: Check for complex malformed IDs with multiple session_ prefixes
+        else if (conversationId.startsWith('chat_') &&
+            conversationId.contains('session_') &&
+            conversationId.split('session_').length > 3) {
+          print(
+              '💾 MessageStorageService: 🔍 Found complex malformed conversation ID: $conversationId');
+
+          // Extract the first two session IDs to create a proper conversation ID
+          final parts = conversationId.split('session_');
+          if (parts.length >= 3) {
+            final firstSessionId = parts[1]; // First session ID after 'chat_'
+            final secondSessionId = parts[2]; // Second session ID
+
+            // Create proper conversation ID: chat_sessionId1_sessionId2
+            final correctedId = 'chat_${firstSessionId}_${secondSessionId}';
+            print('💾 MessageStorageService: 🔧 Corrected to: $correctedId');
+
+            // Update the conversation ID
+            await _database!.update(
+              'conversations',
+              {'id': correctedId},
+              where: 'id = ?',
+              whereArgs: [conversationId],
+            );
+
+            // Update all messages with this conversation ID
+            await _database!.update(
+              'messages',
+              {'conversation_id': correctedId},
+              where: 'conversation_id = ?',
+              whereArgs: [conversationId],
+            );
+
+            cleanedCount++;
+            print(
+                '💾 MessageStorageService: ✅ Cleaned complex conversation ID: $conversationId -> $correctedId');
+          }
+        }
+      }
+
+      print(
+          '💾 MessageStorageService: 🧹 Conversation ID cleanup completed. Cleaned $cleanedCount conversations.');
+    } catch (e) {
+      print(
+          '💾 MessageStorageService: ❌ Error during conversation ID cleanup: $e');
+      rethrow;
+    }
+  }
+
   /// Force recreate database (for testing/debugging)
   Future<void> forceRecreateDatabase() async {
     try {

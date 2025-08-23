@@ -9,6 +9,7 @@ import '../../../shared/widgets/connection_status_widget.dart';
 import '../../../shared/widgets/key_exchange_request_dialog.dart';
 import '../screens/chat_screen.dart';
 import '../../../core/services/contact_service.dart';
+import '../../../core/services/se_session_service.dart';
 
 /// Main screen for displaying the list of chat conversations
 class ChatListScreen extends StatefulWidget {
@@ -394,15 +395,19 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   /// Open chat conversation
   void _openChat(ChatConversation conversation, bool isOnline) {
-    // Use recipientId if available, otherwise fall back to participant2Id
-    // This handles cases where older conversations might not have recipientId populated
-    final effectiveRecipientId =
-        conversation.recipientId ?? conversation.participant2Id ?? 'unknown';
+    // SIMPLIFIED: Just use participant2Id directly - no conversation ID parsing!
+    final effectiveRecipientId = conversation.participant2Id ?? 'unknown';
 
     // Use recipientName if available, otherwise fall back to displayName
     final effectiveRecipientName = conversation.recipientName ??
         conversation.displayName ??
         'Unknown User';
+
+    print('📱 ChatListScreen: 🔍 Opening chat with:');
+    print('📱 ChatListScreen: 🔍 Conversation ID: ${conversation.id}');
+    print(
+        '📱 ChatListScreen: 🔍 Effective Recipient ID: $effectiveRecipientId');
+    print('📱 ChatListScreen: 🔍 Recipient Name: $effectiveRecipientName');
 
     Navigator.push(
       context,

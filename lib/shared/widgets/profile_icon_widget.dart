@@ -422,6 +422,10 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
         // Clear all database data (conversations and messages)
         final messageStorageService = MessageStorageService.instance;
         await messageStorageService.deleteAllChats();
+
+        // Clean up any malformed conversation IDs
+        await messageStorageService.cleanupMalformedConversationIds();
+
         print('🗑️ ProfileIconWidget: ✅ Database chats and messages cleared');
       } catch (e) {
         print(
@@ -572,6 +576,10 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
         // Clear all database data (conversations and messages)
         final messageStorageService = MessageStorageService.instance;
         await messageStorageService.deleteAllChats();
+
+        // Clean up any malformed conversation IDs
+        await messageStorageService.cleanupMalformedConversationIds();
+
         print('🗑️ ProfileIconWidget: ✅ Database cleared');
 
         // Force recreate database to ensure clean state

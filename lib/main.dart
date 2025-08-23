@@ -47,6 +47,7 @@ import 'package:sechat_app/shared/providers/socket_status_provider.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import 'package:sechat_app/core/services/unified_message_service.dart';
 import 'package:sechat_app/core/services/socket_notification_service.dart';
+import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 
 // Global navigator key to access context from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -407,6 +408,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             listen: false);
 
         // Find conversation by participant ID and update typing indicator
+        // This will show the typing indicator on the recipient's side (not the sender's)
         chatListProvider.updateTypingIndicatorByParticipant(senderId, isTyping);
 
         // Also notify SessionChatProvider if there's an active chat
@@ -417,14 +419,36 @@ void _setupSocketCallbacks(SeSocketService socketService) {
 
           // Check if this typing indicator is for the current conversation
           if (sessionChatProvider.currentRecipientId != null) {
-            // If the sender is the current recipient, update their typing state
-            if (sessionChatProvider.currentRecipientId == senderId) {
-              sessionChatProvider.updateRecipientTypingState(isTyping);
-              print(
-                  '🔌 Main: ✅ Typing indicator updated for current recipient: $senderId -> $isTyping');
+            final currentRecipientId = sessionChatProvider.currentRecipientId;
+
+            // CRITICAL: The typing indicator should be shown when:
+            // 1. The sender is the current recipient (meaning we're seeing someone else type)
+            // 2. The currentRecipientId contains the sender ID (conversation match)
+            bool shouldUpdate = false;
+
+            if (currentRecipientId == senderId) {
+              // Direct match with current recipient - show typing indicator
+              shouldUpdate = true;
+            } else if (currentRecipientId?.startsWith('chat_') == true &&
+                currentRecipientId?.contains(senderId) == true) {
+              // Conversation ID contains the sender ID - show typing indicator
+              shouldUpdate = true;
+            }
+
+            if (shouldUpdate) {
+              // CRITICAL: Only show typing indicator if the sender is NOT the current user
+              final currentUserId = SeSessionService().currentSessionId;
+              if (currentUserId != null && senderId != currentUserId) {
+                sessionChatProvider.updateRecipientTypingState(isTyping);
+                print(
+                    '🔌 Main: ✅ Typing indicator updated for current conversation: $senderId -> $isTyping');
+              } else {
+                print(
+                    '🔌 Main: ⚠️ Not showing typing indicator for own typing: $senderId');
+              }
             } else {
               print(
-                  '🔌 Main: ℹ️ Typing indicator from different user: $senderId (current recipient: ${sessionChatProvider.currentRecipientId})');
+                  '🔌 Main: ℹ️ Typing indicator from different conversation: $senderId (current: $currentRecipientId)');
             }
           } else {
             print('🔌 Main: ℹ️ No active chat conversation');
@@ -1080,10 +1104,8 @@ class SeChatApp extends StatelessWidget {
 /// This ensures messages appear in the same conversation for both users
 /// Updated to match server's new consistent ID format
 String _generateConsistentConversationId(String user1Id, String user2Id) {
-  // Sort user IDs alphabetically to ensure consistency
-  final sortedIds = [user1Id, user2Id]..sort();
-  // Server expects conversation IDs to start with 'chat_' prefix
-  return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+  return ConversationIdGenerator.generateConsistentConversationId(
+      user1Id, user2Id);
 }
 
 /// Ensure conversation exists before saving message

@@ -589,6 +589,16 @@ class ChatListProvider extends ChangeNotifier {
 
       if (index != -1) {
         final conversation = _conversations[index];
+
+        // CRITICAL: Only show typing indicator if the participant is NOT the current user
+        // This ensures typing indicators are shown on the recipient's side, not the sender's side
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null && participantId == currentUserId) {
+          print(
+              '📱 ChatListProvider: ⚠️ Not showing typing indicator for own conversation');
+          return; // Don't show typing indicator for own conversation
+        }
+
         final updatedConversation = conversation.copyWith(
           isTyping: isTyping,
           typingStartedAt: isTyping ? DateTime.now() : null,
@@ -1465,10 +1475,8 @@ class ChatListProvider extends ChangeNotifier {
   /// This ensures messages appear in the same conversation for both users
   /// Updated to match server's new consistent ID format
   String _generateConsistentConversationId(String user1Id, String user2Id) {
-    // Sort user IDs alphabetically to ensure consistency
-    final sortedIds = [user1Id, user2Id]..sort();
-    // Server expects conversation IDs to start with 'chat_' prefix
-    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+    return ConversationIdGenerator.generateConsistentConversationId(
+        user1Id, user2Id);
   }
 
   /// Ensure conversation exists, create if it doesn't

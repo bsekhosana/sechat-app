@@ -5,6 +5,7 @@ import 'package:sechat_app/core/services/socket_guard_service.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 import 'package:sechat_app/features/chat/models/message.dart' as msg;
 import 'package:sechat_app/core/services/encryption_service.dart';
+import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 
 /// Unified Message Service - Single source of truth for all message operations
 /// Replaces all duplicate message services with one consistent implementation
@@ -342,10 +343,8 @@ class UnifiedMessageService extends ChangeNotifier {
   /// This ensures messages appear in the same conversation for both users
   /// Updated to match server's new consistent ID format
   String _generateConsistentConversationId(String user1Id, String user2Id) {
-    // Sort user IDs alphabetically to ensure consistency
-    final sortedIds = [user1Id, user2Id]..sort();
-    // Server expects conversation IDs to start with 'chat_' prefix
-    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+    return ConversationIdGenerator.generateConsistentConversationId(
+        user1Id, user2Id);
   }
 }
 

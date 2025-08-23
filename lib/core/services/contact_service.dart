@@ -281,23 +281,45 @@ class ContactService extends ChangeNotifier {
 
         for (final conversation in conversations) {
           final conversationId = conversation.id;
-          if (conversationId.isNotEmpty && !isContact(conversationId)) {
-            print(
-                '📱 ContactService: 🔧 Creating contact from conversation: $conversationId');
 
-            // Create contact from conversation
-            final contact = Contact(
-              sessionId: conversationId,
-              displayName: conversation.getDisplayName(
-                  conversationId), // Pass conversationId as currentUserId
-              lastSeen: DateTime.now().subtract(
-                  const Duration(minutes: 5)), // Assume offline initially
+          // CRITICAL FIX: Create contacts for both participants, not the conversation ID
+          final participant1Id = conversation.participant1Id;
+          final participant2Id = conversation.participant2Id;
+
+          // Create contact for participant1 if not exists
+          if (participant1Id.isNotEmpty && !isContact(participant1Id)) {
+            print(
+                '📱 ContactService: 🔧 Creating contact for participant1: $participant1Id');
+
+            final contact1 = Contact(
+              sessionId: participant1Id, // ✅ Use actual user ID
+              displayName: conversation
+                  .getDisplayName(participant1Id), // ✅ Use actual user ID
+              lastSeen: DateTime.now().subtract(const Duration(minutes: 5)),
               createdAt: DateTime.now(),
             );
 
-            _contacts.add(contact);
+            _contacts.add(contact1);
             print(
-                '📱 ContactService: ✅ Contact created from conversation: ${contact.displayName}');
+                '📱 ContactService: ✅ Contact created for participant1: ${contact1.displayName}');
+          }
+
+          // Create contact for participant2 if not exists
+          if (participant2Id.isNotEmpty && !isContact(participant2Id)) {
+            print(
+                '📱 ContactService: 🔧 Creating contact for participant2: $participant2Id');
+
+            final contact2 = Contact(
+              sessionId: participant2Id, // ✅ Use actual user ID
+              displayName: conversation
+                  .getDisplayName(participant2Id), // ✅ Use actual user ID
+              lastSeen: DateTime.now().subtract(const Duration(minutes: 5)),
+              createdAt: DateTime.now(),
+            );
+
+            _contacts.add(contact2);
+            print(
+                '📱 ContactService: ✅ Contact created for participant2: ${contact2.displayName}');
           }
         }
 

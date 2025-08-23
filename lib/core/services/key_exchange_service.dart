@@ -9,6 +9,7 @@ import 'package:sechat_app/core/services/contact_service.dart';
 import 'package:sechat_app/features/chat/models/chat_conversation.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 import 'package:sechat_app/core/services/presence_manager.dart';
+import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 
 /// Service to handle secure key exchange between users
 class KeyExchangeService {
@@ -716,7 +717,10 @@ class KeyExchangeService {
             '🔑 KeyExchangeService: 📋 Received conversation ID: $receivedConversationId');
 
         await _createConversation(
-          recipientId: receivedConversationId,
+          recipientId:
+              userSessionId, // ✅ Use the actual user ID, not the conversation ID
+          conversationId:
+              receivedConversationId, // ✅ Pass the conversation ID separately
         );
 
         print('🔑 KeyExchangeService: ✅ Matching conversation created');
@@ -741,7 +745,8 @@ class KeyExchangeService {
   }
 
   /// Create conversation after successful key exchange
-  Future<void> _createConversation({required String recipientId}) async {
+  Future<void> _createConversation(
+      {required String recipientId, String? conversationId}) async {
     try {
       print('🔑 KeyExchangeService: Creating conversation: $recipientId');
 
@@ -765,18 +770,18 @@ class KeyExchangeService {
         displayName = 'User $recipientId';
       }
 
-      // CRITICAL: Use consistent conversation ID for both users
-      final consistentConversationId =
+      // CRITICAL: Use provided conversation ID if available, otherwise generate one
+      final finalConversationId = conversationId ??
           _generateConsistentConversationId(currentUserId, recipientId);
 
       print(
-          '🔑 KeyExchangeService: 🔍 Generated consistent conversation ID: $consistentConversationId');
+          '🔑 KeyExchangeService: 🔍 Using conversation ID: $finalConversationId');
       print('🔑 KeyExchangeService: 🔍 Current user ID: $currentUserId');
       print('🔑 KeyExchangeService: 🔍 Recipient ID: $recipientId');
 
       // Create conversation with proper display name and consistent ID
       final conversation = ChatConversation(
-        id: consistentConversationId, // Use consistent conversation ID
+        id: finalConversationId, // Use the final conversation ID
         participant1Id: currentUserId,
         participant2Id: recipientId,
         displayName: displayName, // Set the display name from user data
@@ -979,10 +984,8 @@ class KeyExchangeService {
   /// This ensures messages appear in the same conversation for both users
   /// Updated to match server's new consistent ID format
   String _generateConsistentConversationId(String user1Id, String user2Id) {
-    // Sort user IDs alphabetically to ensure consistency
-    final sortedIds = [user1Id, user2Id]..sort();
-    // Server expects conversation IDs to start with 'chat_' prefix
-    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+    return ConversationIdGenerator.generateConsistentConversationId(
+        user1Id, user2Id);
   }
 
   /// Handle user data exchange data received from socket

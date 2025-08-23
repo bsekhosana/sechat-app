@@ -547,15 +547,18 @@ class SessionChatProvider extends ChangeNotifier {
       // Ensure conversation ID is available
       _ensureConversationId();
 
+      // SIMPLIFIED: Just use the parameter directly - no complex logic needed!
+      final actualRecipientId = recipientId;
+
       // Validate recipient ID
-      if (recipientId.isEmpty || recipientId == 'unknown') {
+      if (actualRecipientId.isEmpty || actualRecipientId == 'unknown') {
         print(
-            '📱 SessionChatProvider: ❌ Invalid recipient ID for typing indicator: $recipientId');
+            '📱 SessionChatProvider: ❌ Invalid recipient ID for typing indicator: $actualRecipientId');
         return;
       }
 
       print(
-          '📱 SessionChatProvider: 🔍 Sending typing indicator to: $recipientId (isTyping: $isTyping)');
+          '📱 SessionChatProvider: 🔍 Sending typing indicator to: $actualRecipientId (isTyping: $isTyping)');
 
       // Check socket connection first
       if (!_socketService.isConnected) {
@@ -573,18 +576,21 @@ class SessionChatProvider extends ChangeNotifier {
         }
       }
 
-      // Use the recipient ID as the conversation ID (as per API docs)
-      final conversationId = recipientId;
+      // SIMPLIFIED: Just use the conversation ID directly
+      final conversationId = _currentConversationId ?? 'unknown';
+
+      print(
+          '📱 SessionChatProvider: 🔍 Using conversation ID: $conversationId for typing indicator');
 
       // Send typing indicator via socket service
       _socketService.sendTyping(
-        recipientId,
-        recipientId, // Use recipient's session ID as conversation ID (per API docs)
+        actualRecipientId, // Use the parameter directly
+        conversationId, // Use the conversation ID
         isTyping,
       );
 
       print(
-          '📱 SessionChatProvider: ✅ Typing indicator sent via socket: $recipientId - $isTyping');
+          '📱 SessionChatProvider: ✅ Typing indicator sent via socket: $actualRecipientId - $isTyping');
     } catch (e) {
       print(
           '📱 SessionChatProvider: ❌ Error sending typing indicator to $recipientId: $e');
@@ -914,7 +920,10 @@ class SessionChatProvider extends ChangeNotifier {
 
       // Set the conversation ID and recipient info
       _currentConversationId = conversationId;
+
+      // SIMPLIFIED: Just use the recipientId parameter directly - no parsing needed!
       _currentRecipientId = recipientId;
+
       _currentRecipientName = recipientName;
 
       // Ensure conversation ID is always set and consistent
