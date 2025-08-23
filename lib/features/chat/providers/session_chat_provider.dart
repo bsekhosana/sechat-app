@@ -871,7 +871,8 @@ class SessionChatProvider extends ChangeNotifier {
     return {
       'id': message.id,
       'sender_id': message.senderId,
-      'content': message.content['text'] ?? jsonEncode(message.content),
+      // Store encrypted content only - no decrypted text
+      'content': jsonEncode(message.content),
       'type': message.type.toString().split('.').last,
       'timestamp': message.timestamp.toIso8601String(),
       'status': message.status.name,

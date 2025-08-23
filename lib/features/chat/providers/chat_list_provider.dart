@@ -1010,6 +1010,10 @@ class ChatListProvider extends ChangeNotifier {
   String _getMessagePreview(Message message) {
     switch (message.type) {
       case MessageType.text:
+        // For encrypted messages, show generic preview
+        if (message.isEncrypted) {
+          return '[Encrypted Message]';
+        }
         return message.content['text'] as String? ?? '';
       case MessageType.reply:
         final replyText = message.content['reply_text'] as String? ?? '';

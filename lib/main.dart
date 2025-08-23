@@ -46,6 +46,7 @@ import 'core/services/encryption_service.dart';
 import 'package:sechat_app/shared/providers/socket_status_provider.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import 'package:sechat_app/core/services/unified_message_service.dart';
+import 'package:sechat_app/core/services/socket_notification_service.dart';
 
 // Global navigator key to access context from anywhere
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -279,6 +280,32 @@ Future<void> main() async {
   });
 }
 
+/// Show push notification for received message
+void _showMessageNotification(String senderName, String messageId) {
+  try {
+    // Use NotificationManagerService to show the notification
+    final notificationManager = NotificationManagerService();
+
+    notificationManager.createCustomNotification(
+      type: 'message_received',
+      title: senderName,
+      message: 'Has sent you an encrypted message',
+      senderId: null, // We don't have sender ID in this context
+      recipientId: null,
+      conversationId: null,
+      messageId: messageId,
+      metadata: {
+        'notificationType': 'encrypted_message',
+        'timestamp': DateTime.now().toIso8601String(),
+      },
+    );
+
+    print('🔔 Main: ✅ Push notification sent for message: $messageId');
+  } catch (e) {
+    print('🔔 Main: ❌ Failed to send push notification: $e');
+  }
+}
+
 // Set up socket callbacks
 void _setupSocketCallbacks(SeSocketService socketService) {
   // Set up callbacks for the socket service
@@ -308,6 +335,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         print('🔌 Main: 🔍 SenderId: $senderId');
         print('🔌 Main: 🔍 Using conversationId: $actualConversationId');
 
+        // Store message to database with encrypted text only
         unifiedMessageService.handleIncomingMessage(
           messageId: messageId,
           fromUserId: senderId,
@@ -319,6 +347,9 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         );
         print(
             '🔌 Main: ✅ Incoming message saved to database via UnifiedMessageService');
+
+        // Show push notification with sender name and generic body
+        _showMessageNotification(senderName, messageId);
       } else {
         print('🔌 Main: ⚠️ Invalid message data received');
       }

@@ -249,6 +249,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   /// Build messages list content
   Widget _buildMessagesListContent(SessionChatProvider provider) {
+    // Process messages for display (no decryption at this stage)
+    for (var element in provider.messages) {
+      try {
+        print('🟢 ChatScreen: 🔍 Message: ${element.id}');
+        print(
+            '🟢 ChatScreen: 🔍 Content keys: ${element.content.keys.toList()}');
+        print('🟢 ChatScreen: 🔍 Is encrypted: ${element.isEncrypted}');
+        print('🟢 ChatScreen: 🔍 Timestamp: ${element.timestamp}');
+        print('🟢 ChatScreen: 🔍 Sender: ${element.senderId}');
+        print('🟢 ChatScreen: 🔍 Conversation: ${element.conversationId}');
+      } catch (e) {
+        print('🟢 ChatScreen: ❌ Error processing message ${element.id}: $e');
+      }
+    }
+
+    // print('🟢 ChatScreen: 🔍 Messages: ${provider.messages}');
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SlideTransition(

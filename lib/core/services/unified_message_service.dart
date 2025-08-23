@@ -102,7 +102,8 @@ class UnifiedMessageService extends ChangeNotifier {
 
       // Save encrypted message to database first
       try {
-        // Store the encrypted message in database for security
+        // SIMPLIFIED: Store original text directly for sender's immediate access
+        // No need for complex local encryption - just store the plaintext locally
         final encryptedMessage = msg.Message(
           id: messageId,
           conversationId:
@@ -111,9 +112,9 @@ class UnifiedMessageService extends ChangeNotifier {
           recipientId: recipientId,
           type: msg.MessageType.text,
           content: {
-            'text':
-                encryptedResult['data']!, // Store encrypted text in database
-            'decryptedText': body, // Store decrypted text for quick access
+            'text': body, // Store original text for sender's immediate access
+            'transmissionEncrypted':
+                encryptedResult['data']!, // Keep transmission encrypted version
             'checksum': encryptedResult['checksum']!,
           },
           status: msg.MessageStatus.sending,
@@ -266,30 +267,20 @@ class UnifiedMessageService extends ChangeNotifier {
 
       String decryptedBody = body;
 
-      // CRITICAL: Decrypt message if it's encrypted
+      // CRITICAL: Do NOT decrypt message here - store only encrypted text
+      // Decryption will happen only when displaying the message content
       if (isEncrypted && body.isNotEmpty) {
-        try {
-          final decryptedData =
-              await EncryptionService.decryptAesCbcPkcs7(body);
-          if (decryptedData != null && decryptedData.containsKey('text')) {
-            decryptedBody = decryptedData['text'] as String;
-            print('📤 UnifiedMessageService: ✅ Message decrypted successfully');
-          } else {
-            print(
-                '📤 UnifiedMessageService: ⚠️ Failed to decrypt message or invalid format');
-            decryptedBody = '[Encrypted Message]'; // Fallback
-          }
-        } catch (e) {
-          print('📤 UnifiedMessageService: ❌ Failed to decrypt message: $e');
-          decryptedBody = '[Encrypted Message]'; // Fallback
-        }
+        print(
+            '📤 UnifiedMessageService: 🔐 Storing encrypted message without decryption');
+        // Keep the encrypted body as-is, no decryption at storage time
       }
 
       // CRITICAL: For incoming messages, conversation ID should be the SENDER's ID
       // This implements the bidirectional conversation system where each user maintains their own folder
       final senderConversationId = fromUserId;
 
-      // Create message object for incoming message - store ENCRYPTED in database
+      // SIMPLIFIED: For incoming messages, store the encrypted body directly
+      // The recipient will decrypt it using their own key when displaying
       final message = msg.Message(
         id: messageId,
         conversationId:
@@ -298,10 +289,9 @@ class UnifiedMessageService extends ChangeNotifier {
         recipientId: _sessionService.currentSessionId ?? '',
         type: msg.MessageType.text,
         content: {
-          'text': body, // Store encrypted text in database
-          'decryptedText':
-              decryptedBody, // Store decrypted text for quick access
-          'checksum': checksum, // Integrity check
+          'text': body, // Store the encrypted text as received
+          'checksum': checksum, // Keep the original checksum
+          'isIncomingEncrypted': true, // Flag to indicate this needs decryption
         },
         status: msg.MessageStatus.delivered,
         timestamp: timestamp,

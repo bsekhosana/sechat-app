@@ -154,6 +154,10 @@ class Message {
   String get previewText {
     switch (type) {
       case MessageType.text:
+        // For encrypted messages, show generic preview
+        if (isEncrypted) {
+          return '[Encrypted Message]';
+        }
         return content['text'] as String? ?? '';
       case MessageType.reply:
         final replyText = content['reply_text'] as String? ?? '';

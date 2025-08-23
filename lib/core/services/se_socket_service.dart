@@ -5,7 +5,9 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/key_exchange_service.dart';
 import 'package:sechat_app/core/services/ui_service.dart';
+import 'package:sechat_app/core/services/encryption_service.dart';
 import 'package:sechat_app/features/chat/providers/session_chat_provider.dart';
+import 'package:sechat_app/features/notifications/services/notification_manager_service.dart';
 
 class SeSocketService {
   SeSocketService._();
@@ -59,6 +61,61 @@ class SeSocketService {
 
     // Additional cleanup steps
     print('🔌 SeSocketService: ✅ Force cleanup completed');
+  }
+
+  /// Create push notification for socket events (excluding connect/disconnect)
+  Future<void> _createSocketEventNotification({
+    required String eventType,
+    required String title,
+    required String body,
+    String? senderId,
+    String? senderName,
+    String? conversationId,
+    String? messageId,
+    Map<String, dynamic>? metadata,
+    bool silent = false,
+  }) async {
+    try {
+      // Skip notifications for silent events
+      if (silent) {
+        print(
+            '🔌 SeSocketService: 🔇 Skipping notification for silent event: $eventType');
+        return;
+      }
+
+      // Skip notifications for connect/disconnect events
+      if (eventType == 'connect' ||
+          eventType == 'disconnect' ||
+          eventType == 'connect_error' ||
+          eventType == 'reconnect' ||
+          eventType == 'reconnect_failed') {
+        print(
+            '🔌 SeSocketService: 🔇 Skipping notification for connection event: $eventType');
+        return;
+      }
+
+      print(
+          '🔌 SeSocketService: 🔔 Creating notification for event: $eventType');
+
+      // Use NotificationManagerService to create the notification
+      final notificationManager = NotificationManagerService();
+
+      await notificationManager.createCustomNotification(
+        type: eventType,
+        title: title,
+        message: body,
+        senderId: senderId,
+        recipientId: _sessionId,
+        conversationId: conversationId,
+        messageId: messageId,
+        metadata: metadata,
+      );
+
+      print('🔌 SeSocketService: ✅ Notification created for event: $eventType');
+    } catch (e) {
+      print(
+          '🔌 SeSocketService: ❌ Failed to create notification for event $eventType: $e');
+    }
   }
 
   // Method to reset the service for new connections
@@ -295,8 +352,17 @@ class SeSocketService {
       }
     });
 
-    _socket!.on('session_registered', (data) {
+    _socket!.on('session_registered', (data) async {
       print('✅ SeSocketService: Session confirmed: ${data['sessionId']}');
+
+      // Create notification for session registered
+      await _createSocketEventNotification(
+        eventType: 'session_registered',
+        title: 'Session Established',
+        body: 'Real-time connection established successfully',
+        metadata: data,
+      );
+
       _sessionConfirmed = true;
       _ready = true;
       _startClientHeartbeat();
@@ -390,14 +456,26 @@ class SeSocketService {
     });
 
     // Key exchange events
-    _socket!.on('key_exchange:request', (data) {
+    _socket!.on('key_exchange:request', (data) async {
       print('🔑 SeSocketService: Key exchange request received');
+
+      // Create notification for key exchange request
+      await _createSocketEventNotification(
+        eventType: 'key_exchange:request',
+        title: 'Key Exchange Request',
+        body: 'New key exchange request received',
+        senderId: data['senderId']?.toString(),
+        senderName: data['senderName']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
+
       if (onKeyExchangeRequest != null) {
         onKeyExchangeRequest!(data);
       }
     });
 
-    _socket!.on('key_exchange:response', (data) {
+    _socket!.on('key_exchange:response', (data) async {
       print('🔑 SeSocketService: 🔍🔍🔍 KEY EXCHANGE RESPONSE EVENT RECEIVED!');
       print('🔑 SeSocketService: 🔍🔍🔍 Event data: $data');
       print('🔑 SeSocketService: 🔍🔍🔍 Data type: ${data.runtimeType}');
@@ -407,6 +485,17 @@ class SeSocketService {
       print('🔑 SeSocketService: 🔍🔍🔍 Session ID: $_sessionId');
       print(
           '🔑 SeSocketService: 🔍🔍🔍 onKeyExchangeResponse callback: ${onKeyExchangeResponse != null ? 'SET' : 'NULL'}');
+
+      // Create notification for key exchange response
+      await _createSocketEventNotification(
+        eventType: 'key_exchange:response',
+        title: 'Key Exchange Response',
+        body: 'Key exchange response received',
+        senderId: data['senderId']?.toString(),
+        senderName: data['senderName']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
 
       if (onKeyExchangeResponse != null) {
         print(
@@ -440,15 +529,27 @@ class SeSocketService {
       }
     });
 
-    _socket!.on('key_exchange:revoked', (data) {
+    _socket!.on('key_exchange:revoked', (data) async {
       print('🔑 SeSocketService: Key exchange revoked');
+
+      // Create notification for key exchange revoked
+      await _createSocketEventNotification(
+        eventType: 'key_exchange:revoked',
+        title: 'Key Exchange Revoked',
+        body: 'Key exchange has been revoked',
+        senderId: data['senderId']?.toString(),
+        senderName: data['senderName']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
+
       if (onKeyExchangeRevoked != null) {
         onKeyExchangeRevoked!(data);
       }
     });
 
     // User data exchange events
-    _socket!.on('user_data_exchange:data', (data) {
+    _socket!.on('user_data_exchange:data', (data) async {
       print('🔑 SeSocketService: User data exchange received');
       print('🔑 SeSocketService: 🔍 Event data: $data');
       print('🔑 SeSocketService: 🔍 Data type: ${data.runtimeType}');
@@ -461,6 +562,17 @@ class SeSocketService {
           '🔑 SeSocketService: 🔍 Socket transport: ${_socket?.io.engine?.transport?.name ?? 'unknown'}');
       print(
           '🔑 SeSocketService: 🔍 onUserDataExchange callback: ${onUserDataExchange != null ? 'SET' : 'NULL'}');
+
+      // Create notification for user data exchange
+      await _createSocketEventNotification(
+        eventType: 'user_data_exchange:data',
+        title: 'User Data Exchange',
+        body: 'New user data exchange received',
+        senderId: data['senderId']?.toString(),
+        senderName: data['senderName']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
 
       if (onUserDataExchange != null) {
         print('🔑 SeSocketService: 🚀 Calling onUserDataExchange callback...');
@@ -491,16 +603,39 @@ class SeSocketService {
     });
 
     // Conversation creation events
-    _socket!.on('conversation:created', (data) {
+    _socket!.on('conversation:created', (data) async {
       print('💬 SeSocketService: Conversation created event received');
+
+      // Create notification for conversation created
+      await _createSocketEventNotification(
+        eventType: 'conversation:created',
+        title: 'New Conversation',
+        body: 'New conversation created',
+        senderId: data['creatorId']?.toString(),
+        senderName: data['creatorName']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
+
       if (onConversationCreated != null) {
         onConversationCreated!(data);
       }
     });
 
     // User deletion events
-    _socket!.on('user:deleted', (data) {
+    _socket!.on('user:deleted', (data) async {
       print('🗑️ SeSocketService: User deleted event received');
+
+      // Create notification for user deleted
+      await _createSocketEventNotification(
+        eventType: 'user:deleted',
+        title: 'User Deleted',
+        body: 'A user has been deleted',
+        senderId: data['deletedUserId']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
+
       if (onUserDeleted != null) {
         onUserDeleted!(data);
       }
@@ -513,8 +648,24 @@ class SeSocketService {
       if (id.isNotEmpty) onMessageAcked?.call(id);
     });
 
-    _socket!.on('message:received', (data) {
+    _socket!.on('message:received', (data) async {
       print('💬 SeSocketService: Message received');
+
+      // Create notification for message received (only if not silent)
+      final bool silent = data['silent'] ?? false;
+      if (!silent) {
+        await _createSocketEventNotification(
+          eventType: 'message:received',
+          title: 'New Message',
+          body: 'New message received',
+          senderId: data['fromUserId']?.toString(),
+          conversationId: data['conversationId']?.toString(),
+          messageId: data['messageId']?.toString(),
+          metadata: data,
+          silent: silent,
+        );
+      }
+
       if (onMessageReceived != null) {
         onMessageReceived!(
           data['messageId'] ?? '',
@@ -525,8 +676,23 @@ class SeSocketService {
       }
     });
 
-    _socket!.on('message:delivered', (data) {
+    _socket!.on('message:delivered', (data) async {
       print('✅ SeSocketService: Message delivered');
+
+      // Create notification for message delivered (only if not silent)
+      final bool silent = data['silent'] ?? false;
+      if (!silent) {
+        await _createSocketEventNotification(
+          eventType: 'message:delivered',
+          title: 'Message Delivered',
+          body: 'Message has been delivered',
+          senderId: data['fromUserId']?.toString(),
+          messageId: data['messageId']?.toString(),
+          metadata: data,
+          silent: silent,
+        );
+      }
+
       if (onDelivered != null) {
         onDelivered!(
           data['messageId'] ?? '',
@@ -536,8 +702,23 @@ class SeSocketService {
       }
     });
 
-    _socket!.on('message:read', (data) {
+    _socket!.on('message:read', (data) async {
       print('👁️ SeSocketService: Message read');
+
+      // Create notification for message read (only if not silent)
+      final bool silent = data['silent'] ?? false;
+      if (!silent) {
+        await _createSocketEventNotification(
+          eventType: 'message:read',
+          title: 'Message Read',
+          body: 'Message has been read',
+          senderId: data['fromUserId']?.toString(),
+          messageId: data['messageId']?.toString(),
+          metadata: data,
+          silent: silent,
+        );
+      }
+
       if (onRead != null) {
         onRead!(
           data['messageId'] ?? '',
@@ -548,9 +729,23 @@ class SeSocketService {
     });
 
     // Presence events - CONSOLIDATED FLOW
-    _socket!.on('presence:update', (data) {
+    _socket!.on('presence:update', (data) async {
       print('🟢 SeSocketService: Presence update received');
       print('🟢 SeSocketService: 🔍 Presence data: $data');
+
+      // Create notification for presence update (only if not silent)
+      final bool silent = data['silent'] ?? false;
+      if (!silent) {
+        final bool isOnline = data['isOnline'] ?? false;
+        await _createSocketEventNotification(
+          eventType: 'presence:update',
+          title: isOnline ? 'User Online' : 'User Offline',
+          body: isOnline ? 'User came online' : 'User went offline',
+          senderId: data['sessionId']?.toString(),
+          metadata: data,
+          silent: silent,
+        );
+      }
 
       // Call the main presence callback (mapped to onPresence via setOnOnlineStatusUpdate)
       if (onPresence != null) {
@@ -569,9 +764,19 @@ class SeSocketService {
     });
 
     // Contact management events
-    _socket!.on('contacts:added', (data) {
+    _socket!.on('contacts:added', (data) async {
       print('🔗 SeSocketService: Contact added event received');
       print('🔗 SeSocketService: 🔍 Contact data: $data');
+
+      // Create notification for contact added
+      await _createSocketEventNotification(
+        eventType: 'contacts:added',
+        title: 'Contact Added',
+        body: 'New contact has been added',
+        senderId: data['contactId']?.toString(),
+        senderName: data['contactName']?.toString(),
+        metadata: data,
+      );
 
       // This event is sent when a contact is successfully added
       // The client should update their local contact list
@@ -583,7 +788,7 @@ class SeSocketService {
     });
 
     // Enhanced message status updates (silent)
-    _socket!.on('message:status_update', (data) {
+    _socket!.on('message:status_update', (data) async {
       final String messageId = data['messageId'];
       final String status = data['status'];
       final String recipientId = data['recipientId'];
@@ -612,11 +817,23 @@ class SeSocketService {
       // Notify listeners about status change (silent)
       if (silent) {
         _notifyMessageStatusChange(messageId, status, recipientId);
+      } else {
+        // Create notification for non-silent message status updates
+        await _createSocketEventNotification(
+          eventType: 'message:status_update',
+          title: 'Message Status Update',
+          body: 'Message status: $status',
+          senderId: fromUserId,
+          messageId: messageId,
+          conversationId: conversationId,
+          metadata: data,
+          silent: silent,
+        );
       }
     });
 
     // Enhanced typing status updates (silent)
-    _socket!.on('typing:status_update', (data) {
+    _socket!.on('typing:status_update', (data) async {
       final String fromUserId = data['fromUserId'];
       final String recipientId = data['recipientId'];
       final bool isTyping = data['isTyping'];
@@ -635,12 +852,33 @@ class SeSocketService {
       if (silent) {
         _notifyTypingStatusChange(
             fromUserId, recipientId, isTyping, delivered, autoStopped);
+      } else {
+        // Create notification for non-silent typing status updates
+        await _createSocketEventNotification(
+          eventType: 'typing:status_update',
+          title: isTyping ? 'User Typing' : 'User Stopped Typing',
+          body: isTyping ? 'User is typing...' : 'User stopped typing',
+          senderId: fromUserId,
+          conversationId: recipientId,
+          metadata: data,
+          silent: silent,
+        );
       }
     });
 
-    _socket!.on('contacts:removed', (data) {
+    _socket!.on('contacts:removed', (data) async {
       print('🔗 SeSocketService: Contact removed event received');
       print('🔗 SeSocketService: 🔍 Contact data: $data');
+
+      // Create notification for contact removed
+      await _createSocketEventNotification(
+        eventType: 'contacts:removed',
+        title: 'Contact Removed',
+        body: 'Contact has been removed',
+        senderId: data['contactId']?.toString(),
+        senderName: data['contactName']?.toString(),
+        metadata: data,
+      );
 
       // This event is sent when a contact is successfully removed
       // The client should update their local contact list
@@ -652,11 +890,26 @@ class SeSocketService {
     });
 
     // Typing events
-    _socket!.on('typing:update', (data) {
+    _socket!.on('typing:update', (data) async {
       print('⌨️ SeSocketService: Typing indicator received');
       print('⌨️ SeSocketService: 🔍 Typing data: $data');
       print(
           '⌨️ SeSocketService: 🔍 onTyping callback: ${onTyping != null ? 'SET' : 'NULL'}');
+
+      // Create notification for typing update (only if not silent)
+      final bool silent = data['silent'] ?? false;
+      if (!silent) {
+        final bool isTyping = data['isTyping'] ?? false;
+        await _createSocketEventNotification(
+          eventType: 'typing:update',
+          title: isTyping ? 'User Typing' : 'User Stopped Typing',
+          body: isTyping ? 'User is typing...' : 'User stopped typing',
+          senderId: data['fromUserId']?.toString(),
+          conversationId: data['conversationId']?.toString(),
+          metadata: data,
+          silent: silent,
+        );
+      }
 
       if (onTyping != null) {
         onTyping!(
@@ -887,7 +1140,7 @@ class SeSocketService {
     required String recipientId,
     required String body,
     String? conversationId, // This will be the recipient's sessionId
-  }) {
+  }) async {
     if (!isConnected || _sessionId == null) {
       print(
           '🔌 SeSocketService: ❌ Cannot send message - not connected or no session');
@@ -905,14 +1158,40 @@ class SeSocketService {
         return;
       }
 
+      // Encrypt the message body before sending
+      Map<String, String> encryptedResult;
+      try {
+        // Create message data map for encryption
+        final messageData = {
+          'text': body,
+          'timestamp': DateTime.now().toIso8601String(),
+          'messageId': messageId,
+        };
+
+        encryptedResult = await EncryptionService.encryptAesCbcPkcs7(
+            messageData, recipientId);
+        print('🔌 SeSocketService: ✅ Message encrypted successfully');
+      } catch (e) {
+        print('🔌 SeSocketService: ❌ Failed to encrypt message: $e');
+        return;
+      }
+
       final payload = {
+        'type': 'message:send',
         'messageId': messageId,
-        'fromUserId': _sessionId,
         'conversationId':
-            recipientId, // MUST be sender's sessionId per updated API docs
-        'body': body,
+            recipientId, // CORRECT: This should be the recipient's ID
+        'fromUserId': _sessionId, // CORRECT: This should be the sender's ID
         'toUserIds': [recipientId],
+        'body': encryptedResult['data']!,
+        'checksum': encryptedResult['checksum']!,
         'timestamp': DateTime.now().toIso8601String(),
+        'metadata': {
+          'encrypted': true,
+          'version': '2.0',
+          'encryptionType': 'AES-256-CBC',
+          'checksum': encryptedResult['checksum']!,
+        },
       };
 
       // Track message locally for status updates
