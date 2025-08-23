@@ -346,11 +346,15 @@ class KeyExchangeService {
       final senderId = response['senderId'] as String?;
       final senderPublicKey = response['publicKey'] as String?;
       final responseType = response['type'] as String?;
+      final responseStatus =
+          response['response'] as String?; // Add response status check
 
       print('🔑 KeyExchangeService: 🔍 Extracted senderId: $senderId');
       print(
           '🔑 KeyExchangeService: 🔍 Extracted senderPublicKey: $senderPublicKey');
       print('🔑 KeyExchangeService: 🔍 Extracted responseType: $responseType');
+      print(
+          '🔑 KeyExchangeService: 🔍 Extracted responseStatus: $responseStatus');
 
       if (senderId == null || senderPublicKey == null) {
         throw Exception('Invalid key exchange response');
@@ -397,15 +401,71 @@ class KeyExchangeService {
       // Remove from pending exchanges
       await _removePendingExchange(senderId);
 
-      // If this is an acceptance response, send encrypted user data to complete the exchange
-      if (responseType == 'key_exchange_accepted' ||
-          responseType == 'key_exchange_response') {
+      // If this is an acceptance response, process the encrypted user data and create conversation
+      // Check both responseType (legacy) and responseStatus (new format)
+      final isAccepted = (responseType == 'key_exchange_accepted' ||
+          responseType == 'key_exchange_response' ||
+          responseStatus == 'accepted');
+
+      if (isAccepted) {
         print(
-            '🔑 KeyExchangeService: ✅ Key exchange accepted, sending encrypted user data');
-        await _sendInitialUserData(senderId);
+            '🔑 KeyExchangeService: ✅ Key exchange accepted, processing encrypted user data');
+        print(
+            '🔑 KeyExchangeService: 🔍 Response type: $responseType, Response status: $responseStatus');
+
+        // Check if the response includes encrypted user data
+        final encryptedUserData = response['encryptedUserData'] as String?;
+        final receivedConversationId = response['conversationId'] as String?;
+
+        print(
+            '🔑 KeyExchangeService: 🔍 Encrypted user data present: ${encryptedUserData != null}');
+        print(
+            '🔑 KeyExchangeService: 🔍 Received conversation ID: $receivedConversationId');
+
+        if (encryptedUserData != null) {
+          print(
+              '🔑 KeyExchangeService: 🔍 Found encrypted user data, processing...');
+
+          // Generate conversation ID locally if not provided by server
+          final conversationId = receivedConversationId ??
+              _generateConsistentConversationId(
+                  SeSessionService().currentSessionId!, senderId);
+
+          print(
+              '🔑 KeyExchangeService: 🔍 Using conversation ID: $conversationId');
+
+          // Process the encrypted user data to create conversation
+          print(
+              '🔑 KeyExchangeService: 🚀 About to call processUserDataExchange...');
+          print(
+              '🔑 KeyExchangeService: 🔍 Parameters - senderId: $senderId, encryptedData: ${encryptedUserData.substring(0, 50)}..., conversationId: $conversationId');
+          final success = await processUserDataExchange(
+            senderId: senderId,
+            encryptedData: encryptedUserData,
+            conversationId: conversationId,
+          );
+          print(
+              '🔑 KeyExchangeService: 🔍 processUserDataExchange returned: $success');
+
+          if (success) {
+            print(
+                '🔑 KeyExchangeService: ✅ Conversation created from accept event');
+
+            // Send back our user data to complete the exchange
+            await _sendInitialUserData(senderId);
+          } else {
+            print(
+                '🔑 KeyExchangeService: ❌ Failed to create conversation from accept event');
+          }
+        } else {
+          print(
+              '🔑 KeyExchangeService: ℹ️ No encrypted user data in accept event, using fallback');
+          // Fallback to old method
+          await _sendInitialUserData(senderId);
+        }
       } else {
         print(
-            '🔑 KeyExchangeService: ℹ️ Response type is not acceptance: $responseType');
+            '🔑 KeyExchangeService: ℹ️ Response is not acceptance - Type: $responseType, Status: $responseStatus');
       }
 
       return true;
@@ -595,20 +655,44 @@ class KeyExchangeService {
       print(
           '🔑 KeyExchangeService: 🔍 Encrypted data length: ${encryptedData.length}');
       print('🔑 KeyExchangeService: 🔍 Conversation ID: $conversationId');
+      print(
+          '🔑 KeyExchangeService: 🔍 Current session ID: ${SeSessionService().currentSessionId}');
+      print(
+          '🔑 KeyExchangeService: 🔍 Method parameters validated successfully');
+      print(
+          '🔑 KeyExchangeService: 🔍 Method entry point reached successfully');
 
       // Decrypt the user data
+      print('🔑 KeyExchangeService: 🔐 Attempting to decrypt user data...');
+      print('🔑 KeyExchangeService: 🔐 Encrypted data: $encryptedData');
+      print(
+          '🔑 KeyExchangeService: 🔐 Calling EncryptionService.decryptData...');
       final decryptedData = await EncryptionService.decryptData(encryptedData);
+      print('🔑 KeyExchangeService: 🔐 Decryption result: $decryptedData');
+      print(
+          '🔑 KeyExchangeService: 🔐 Decryption completed, checking result...');
 
       if (decryptedData == null) {
         print('🔑 KeyExchangeService: ❌ Failed to decrypt user data');
         return false;
       }
 
+      print('🔑 KeyExchangeService: 🔐 User data decrypted successfully');
+      print('🔑 KeyExchangeService: 🔐 Decrypted data: $decryptedData');
+
       // Parse the decrypted data
       final userData = Map<String, dynamic>.from(decryptedData);
+      print('🔑 KeyExchangeService: 🔐 Parsed user data: $userData');
+
       final userName = userData['userName'] as String?;
       final userSessionId = userData['sessionId'] as String?;
       final receivedConversationId = userData['conversationId'] as String?;
+
+      print('🔑 KeyExchangeService: 🔐 Extracted userName: $userName');
+      print(
+          '🔑 KeyExchangeService: 🔐 Extracted userSessionId: $userSessionId');
+      print(
+          '🔑 KeyExchangeService: 🔐 Extracted receivedConversationId: $receivedConversationId');
 
       if (userName == null || userSessionId == null) {
         print('🔑 KeyExchangeService: ❌ Invalid user data format');
@@ -617,6 +701,13 @@ class KeyExchangeService {
 
       print(
           '🔑 KeyExchangeService: ✅ Decrypted user data: $userName ($userSessionId)');
+
+      // Store decrypted data for conversation creation
+      print(
+          '🔑 KeyExchangeService: 💾 Storing decrypted user data for conversation creation...');
+      _decryptedUserData = decryptedData;
+      print(
+          '🔑 KeyExchangeService: 💾 _decryptedUserData set to: $_decryptedUserData');
 
       // If we received a conversation ID, this is the final response from the recipient
       // Create a matching conversation using their ID
@@ -662,15 +753,30 @@ class KeyExchangeService {
 
       // Get display name from decrypted user data if available
       String? displayName;
+      print(
+          '🔑 KeyExchangeService: 🔍 _decryptedUserData: $_decryptedUserData');
       if (_decryptedUserData != null) {
         displayName = _decryptedUserData!['userName'] as String?;
         print(
             '🔑 KeyExchangeService: 🔍 Using display name from user data: $displayName');
+      } else {
+        print(
+            '🔑 KeyExchangeService: ⚠️ _decryptedUserData is null, will use fallback display name');
+        displayName = 'User $recipientId';
       }
 
-      // Create conversation with proper display name and ID
+      // CRITICAL: Use consistent conversation ID for both users
+      final consistentConversationId =
+          _generateConsistentConversationId(currentUserId, recipientId);
+
+      print(
+          '🔑 KeyExchangeService: 🔍 Generated consistent conversation ID: $consistentConversationId');
+      print('🔑 KeyExchangeService: 🔍 Current user ID: $currentUserId');
+      print('🔑 KeyExchangeService: 🔍 Recipient ID: $recipientId');
+
+      // Create conversation with proper display name and consistent ID
       final conversation = ChatConversation(
-        id: recipientId, // Use recipient's session ID as conversation ID
+        id: consistentConversationId, // Use consistent conversation ID
         participant1Id: currentUserId,
         participant2Id: recipientId,
         displayName: displayName, // Set the display name from user data
@@ -685,12 +791,24 @@ class KeyExchangeService {
         },
       );
 
+      print(
+          '🔑 KeyExchangeService: 🔍 Created conversation object: ${conversation.id}');
+      print(
+          '🔑 KeyExchangeService: 🔍 Conversation participants: ${conversation.participant1Id} <-> ${conversation.participant2Id}');
+
       // Save to storage
+      print(
+          '🔑 KeyExchangeService: 💾 Saving conversation to MessageStorageService...');
       await MessageStorageService.instance.saveConversation(conversation);
-      print('🔑 KeyExchangeService: ✅ Conversation created: $recipientId');
+      print(
+          '🔑 KeyExchangeService: ✅ Conversation saved to storage: ${conversation.id}');
 
       // Notify UI that conversation was created
+      print(
+          '🔑 KeyExchangeService: 🔔 Checking conversation creation callback...');
       if (_onConversationCreated != null) {
+        print(
+            '🔑 KeyExchangeService: 🔔 Calling conversation creation callback...');
         _onConversationCreated!(conversation);
         print('🔑 KeyExchangeService: ✅ UI notified of conversation creation');
       } else {
@@ -724,11 +842,17 @@ class KeyExchangeService {
       print(
           '🔑 KeyExchangeService: 🔍 Current user: $userName ($currentUserId)');
 
+      // CRITICAL: Generate consistent conversation ID for both users
+      final consistentConversationId =
+          _generateConsistentConversationId(currentUserId, recipientId);
+
       // Create user data payload
       final userData = {
         'userName': userName,
         'sessionId': currentUserId,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'conversationId':
+            consistentConversationId, // Include conversation ID for matching
       };
 
       print('🔑 KeyExchangeService: 📋 User data payload: $userData');
@@ -756,12 +880,19 @@ class KeyExchangeService {
 
           // Use SeSocketService for user data exchange
           try {
+            // CRITICAL: Generate consistent conversation ID for both users
+            final currentUserIdForExchange =
+                SeSessionService().currentSessionId ?? '';
+            final consistentConversationId = _generateConsistentConversationId(
+                currentUserIdForExchange, recipientId);
+
             SeSocketService.instance.sendUserDataExchange(
               recipientId: recipientId,
               encryptedData: encryptedData,
+              conversationId: consistentConversationId, // Add conversation ID
             );
             print(
-                '🔑 KeyExchangeService: ✅ Initial user data sent to $recipientId using SeSocketService');
+                '🔑 KeyExchangeService: ✅ Initial user data sent to $recipientId using SeSocketService with conversationId: $consistentConversationId');
           } catch (e) {
             print(
                 '🔑 KeyExchangeService: ⚠️ Warning: Could not send user data exchange: $e');
@@ -795,13 +926,17 @@ class KeyExchangeService {
       final currentSession = SeSessionService().currentSession;
       final userName = currentSession?.displayName ?? 'User $currentUserId';
 
+      // CRITICAL: Generate consistent conversation ID for both users
+      final consistentConversationId =
+          _generateConsistentConversationId(currentUserId, recipientId);
+
       // Create user data payload
       final userData = {
         'userName': userName,
         'sessionId': currentUserId,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'conversationId':
-            conversationId, // Include conversation ID for matching
+            consistentConversationId, // Include conversation ID for matching
       };
 
       // Encrypt the user data
@@ -819,7 +954,7 @@ class KeyExchangeService {
               'recipientId': recipientId,
               'senderId': currentUserId,
               'encryptedData': encryptedData,
-              'conversationId': conversationId,
+              'conversationId': consistentConversationId,
               'timestamp': DateTime.now().toIso8601String(),
             });
             print(
@@ -840,10 +975,22 @@ class KeyExchangeService {
     }
   }
 
+  /// Generate consistent conversation ID that both users will have
+  /// This ensures messages appear in the same conversation for both users
+  /// Updated to match server's new consistent ID format
+  String _generateConsistentConversationId(String user1Id, String user2Id) {
+    // Sort user IDs alphabetically to ensure consistency
+    final sortedIds = [user1Id, user2Id]..sort();
+    // Server expects conversation IDs to start with 'chat_' prefix
+    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+  }
+
   /// Handle user data exchange data received from socket
   Future<void> handleUserDataExchange(Map<String, dynamic> data) async {
     try {
-      print('🔑 KeyExchangeService: 🔍 User data exchange received: $data');
+      print('🔑 KeyExchangeService: 🔍🔍🔍 USER DATA EXCHANGE HANDLER CALLED!');
+      print('🔑 KeyExchangeService: 🔍🔍🔍 Data: $data');
+      print('🔑 KeyExchangeService: 🔍🔍🔍 Data keys: ${data.keys.toList()}');
 
       final senderId = data['senderId'] as String?;
       final encryptedData = data['encryptedData'] as String?;
@@ -863,14 +1010,21 @@ class KeyExchangeService {
         return;
       }
 
-      // Check if we already have a conversation with this user to prevent duplicates
-      final existingConversations =
-          await MessageStorageService.instance.getUserConversations(senderId);
+      // CRITICAL: Check if we already have a conversation using consistent conversation ID
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId != null) {
+        final consistentConversationId =
+            _generateConsistentConversationId(currentUserId, senderId);
 
-      if (existingConversations.isNotEmpty) {
-        print(
-            '🔑 KeyExchangeService: ℹ️ Conversation already exists with $senderId, skipping creation');
-        return;
+        // Check if conversation already exists by consistent ID
+        final existingConversation = await MessageStorageService.instance
+            .getConversation(consistentConversationId);
+
+        if (existingConversation != null) {
+          print(
+              '🔑 KeyExchangeService: ℹ️ Conversation already exists with consistent ID: $consistentConversationId, skipping creation');
+          return;
+        }
       }
 
       // Decrypt the user data
@@ -881,15 +1035,26 @@ class KeyExchangeService {
       }
 
       // Store decrypted data for conversation creation
+      print(
+          '🔑 KeyExchangeService: 💾 Storing decrypted user data for conversation creation...');
       _decryptedUserData = decryptedData;
+      print(
+          '🔑 KeyExchangeService: 💾 _decryptedUserData set to: $_decryptedUserData');
 
       print('🔑 KeyExchangeService: ✅ User data decrypted successfully');
 
       // Create conversation
       await _createConversation(recipientId: senderId);
 
+      // CRITICAL: Generate consistent conversation ID for response
+      final currentUserIdForResponse = SeSessionService().currentSessionId;
+      final consistentConversationId = currentUserIdForResponse != null
+          ? _generateConsistentConversationId(
+              currentUserIdForResponse, senderId)
+          : null;
+
       // Send response user data
-      await _sendUserDataResponse(senderId, encryptedData);
+      await _sendUserDataResponse(senderId, consistentConversationId ?? '');
 
       // CRITICAL: Add contact after successful key exchange
       _addContactAfterKeyExchange(senderId, decryptedData);
@@ -948,8 +1113,9 @@ class KeyExchangeService {
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) return null;
 
-      // Use the participant's ID as the conversation ID (not current user's ID)
-      final conversationId = participantId;
+      // CRITICAL: Use consistent conversation ID for both users
+      final conversationId =
+          _generateConsistentConversationId(currentUserId, participantId);
 
       // Create conversation in database
       final conversation = ChatConversation(

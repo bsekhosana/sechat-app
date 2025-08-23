@@ -550,18 +550,24 @@ class SeSocketService {
 
     // User data exchange events
     _socket!.on('user_data_exchange:data', (data) async {
-      print('🔑 SeSocketService: User data exchange received');
-      print('🔑 SeSocketService: 🔍 Event data: $data');
-      print('🔑 SeSocketService: 🔍 Data type: ${data.runtimeType}');
-      print('🔑 SeSocketService: 🔍 Socket connected: ${_socket?.connected}');
-      print('🔑 SeSocketService: 🔍 Socket ready: $_ready');
-      print('🔑 SeSocketService: 🔍 Session ID: $_sessionId');
-      print('🔑 SeSocketService: 🔍 Session confirmed: $_sessionConfirmed');
-      print('🔑 SeSocketService: 🔍 Socket ID: ${_socket?.id}');
+      print('🔑 SeSocketService: 🔍🔍🔍 USER DATA EXCHANGE EVENT RECEIVED!');
+      print('🔑 SeSocketService: 🔍🔍🔍 Event: user_data_exchange:data');
+      print('🔑 SeSocketService: 🔍🔍🔍 Data: $data');
+      print('🔑 SeSocketService: 🔍🔍🔍 Data type: ${data.runtimeType}');
       print(
-          '🔑 SeSocketService: 🔍 Socket transport: ${_socket?.io.engine?.transport?.name ?? 'unknown'}');
+          '🔑 SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
+      print('🔑 SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
+      print('🔑 SeSocketService: 🔍🔍🔍 Session ID: $_sessionId');
+      print('🔑 SeSocketService: 🔍🔍🔍 Session confirmed: $_sessionConfirmed');
+      print('🔑 SeSocketService: 🔍🔍🔍 Socket ID: ${_socket?.id}');
       print(
-          '🔑 SeSocketService: 🔍 onUserDataExchange callback: ${onUserDataExchange != null ? 'SET' : 'NULL'}');
+          '🔑 SeSocketService: 🔍🔍🔍 Socket transport: ${_socket?.io.engine?.transport?.name ?? 'unknown'}');
+      print(
+          '🔑 SeSocketService: 🔍🔍🔍 onUserDataExchange callback: ${onUserDataExchange != null ? 'SET' : 'NULL'}');
+      print(
+          '🔑 SeSocketService: 🔍🔍🔍 Current timestamp: ${DateTime.now().toIso8601String()}');
+      print(
+          '🔑 SeSocketService: 🔍🔍🔍 Event received on recipient side: ${_sessionId == data['recipientId'] ? 'YES' : 'NO'}');
 
       // Create notification for user data exchange
       await _createSocketEventNotification(
@@ -592,9 +598,24 @@ class SeSocketService {
         try {
           print(
               '🔑 SeSocketService: 🔄 Attempting fallback processing with KeyExchangeService...');
-          KeyExchangeService.instance.handleUserDataExchange(data);
-          print(
-              '🔑 SeSocketService: ✅ Fallback processing completed successfully');
+
+          // Extract the required parameters from the socket data
+          final senderId = data['senderId']?.toString();
+          final encryptedData = data['encryptedData']?.toString();
+          final conversationId = data['conversationId']?.toString();
+
+          if (senderId != null && encryptedData != null) {
+            await KeyExchangeService.instance.processUserDataExchange(
+              senderId: senderId,
+              encryptedData: encryptedData,
+              conversationId: conversationId,
+            );
+            print(
+                '🔑 SeSocketService: ✅ Fallback processing completed successfully');
+          } else {
+            print(
+                '🔑 SeSocketService: ❌ Invalid user data exchange data: senderId=$senderId, encryptedData=${encryptedData != null}');
+          }
         } catch (e) {
           print('🔑 SeSocketService: ❌ Fallback processing failed: $e');
           print('🔑 SeSocketService: 🚨 This user data exchange will be lost!');
@@ -1091,19 +1112,23 @@ class SeSocketService {
     }
 
     try {
-      // CRITICAL FIX: conversationId MUST be the SENDER's sessionId per updated API docs
-      final senderConversationId = _sessionId;
+      // CRITICAL: Use consistent conversation ID for both users
+      final currentUserId = _sessionId;
 
       // Validate that we have a valid sender ID
-      if (senderConversationId == null || senderConversationId.isEmpty) {
+      if (currentUserId == null || currentUserId.isEmpty) {
         print('🔌 SeSocketService: ❌ ERROR: Invalid sender session ID');
         return;
       }
 
+      final consistentConversationId =
+          _generateConsistentConversationId(currentUserId, recipientId);
+
       final payload = {
         'fromUserId': _sessionId,
         'conversationId':
-            recipientId, // MUST be sender's sessionId per updated API docs
+            consistentConversationId, // Use consistent conversation ID
+        'recipientId': recipientId, // Add recipient ID for server routing
         'isTyping': isTyping,
         'timestamp': DateTime.now().toIso8601String(),
       };
@@ -1123,7 +1148,7 @@ class SeSocketService {
           '🔌 SeSocketService: ⌨️ Sending typing indicator: ${isTyping ? 'started' : 'stopped'} to $recipientId');
       print('🔌 SeSocketService: 🔍 Payload: $payload');
       print(
-          '🔌 SeSocketService: 🔍 conversationId (sender): $senderConversationId');
+          '🔌 SeSocketService: 🔍 conversationId (consistent): $consistentConversationId');
       print('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
 
       _socket!.emit('typing:update', payload);
@@ -1139,7 +1164,7 @@ class SeSocketService {
     required String messageId,
     required String recipientId,
     required String body,
-    String? conversationId, // This will be the recipient's sessionId
+    String? conversationId, // This will be the consistent conversation ID
   }) async {
     if (!isConnected || _sessionId == null) {
       print(
@@ -1148,15 +1173,17 @@ class SeSocketService {
     }
 
     try {
-      // CRITICAL FIX: conversationId MUST be the SENDER's sessionId per updated API docs
-      // The server expects conversationId to be the sender's sessionId for message delivery
-      final senderConversationId = _sessionId;
+      // CRITICAL: Use consistent conversation ID for both users
+      final currentUserId = _sessionId;
 
       // Validate that we have a valid sender ID
-      if (senderConversationId == null || senderConversationId.isEmpty) {
+      if (currentUserId == null || currentUserId.isEmpty) {
         print('🔌 SeSocketService: ❌ ERROR: Invalid sender session ID');
         return;
       }
+
+      final consistentConversationId =
+          _generateConsistentConversationId(currentUserId, recipientId);
 
       // Encrypt the message body before sending
       Map<String, String> encryptedResult;
@@ -1180,8 +1207,9 @@ class SeSocketService {
         'type': 'message:send',
         'messageId': messageId,
         'conversationId':
-            recipientId, // CORRECT: This should be the recipient's ID
+            consistentConversationId, // Use consistent conversation ID
         'fromUserId': _sessionId, // CORRECT: This should be the sender's ID
+        'recipientId': recipientId, // Add recipient ID for server routing
         'toUserIds': [recipientId],
         'body': encryptedResult['data']!,
         'checksum': encryptedResult['checksum']!,
@@ -1202,7 +1230,7 @@ class SeSocketService {
           '🔌 SeSocketService: 📤 Sending message: $messageId to $recipientId');
       print('🔌 SeSocketService: 🔍 Payload: $payload');
       print(
-          '🔌 SeSocketService: 🔍 conversationId (sender): $senderConversationId');
+          '🔌 SeSocketService: 🔍 conversationId (consistent): $consistentConversationId');
       print('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
 
       _socket!.emit('message:send', payload);
@@ -1215,12 +1243,19 @@ class SeSocketService {
 
   void sendReadReceipt(String toUserId, String messageId) {
     if (!isConnected || _sessionId == null) return;
+
+    // CRITICAL: Use consistent conversation ID for both users
+    final currentUserId = _sessionId!;
+    final consistentConversationId =
+        _generateConsistentConversationId(currentUserId, toUserId);
+
     _socket!.emit('receipt:read', {
       'messageId': messageId,
       'fromUserId': _sessionId,
       'toUserId': toUserId,
       'conversationId':
-          _sessionId, // Server expects sender's sessionId as conversationId
+          consistentConversationId, // Use consistent conversation ID
+      'recipientId': toUserId, // Add recipient ID for server routing
       'timestamp': DateTime.now().toIso8601String()
     });
   }
@@ -1273,13 +1308,34 @@ class SeSocketService {
       {required String recipientId,
       required String encryptedData,
       String? conversationId}) {
-    if (!isConnected || _sessionId == null) return;
-    _socket!.emit('user_data_exchange:send', {
-      'recipientId': recipientId,
-      'senderId': _sessionId,
-      'encryptedData': encryptedData,
-      'conversationId': conversationId ?? ''
-    });
+    print('🔑 SeSocketService: 🔍🔍🔍 SENDING USER DATA EXCHANGE EVENT!');
+    print('🔑 SeSocketService: 🔍🔍🔍 Event: user_data_exchange:send');
+    print(
+        '🔑 SeSocketService: 🔍🔍🔍 Data: {recipientId: $recipientId, senderId: $_sessionId, encryptedData: ${encryptedData.substring(0, 50)}..., conversationId: $conversationId}');
+    print('🔑 SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
+    print('🔑 SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
+    print('🔑 SeSocketService: 🔍🔍🔍 Session ID: $_sessionId');
+    print('🔑 SeSocketService: 🔍🔍🔍 Session confirmed: $_sessionConfirmed');
+    print('🔑 SeSocketService: 🔍🔍🔍 Socket ID: ${_socket?.id}');
+
+    if (!isConnected || _sessionId == null) {
+      print(
+          '🔑 SeSocketService: ❌ Cannot send - socket not connected or session ID null');
+      return;
+    }
+
+    try {
+      _socket!.emit('user_data_exchange:send', {
+        'recipientId': recipientId,
+        'senderId': _sessionId,
+        'encryptedData': encryptedData,
+        'conversationId': conversationId ?? ''
+      });
+      print('🔑 SeSocketService: ✅ User data exchange event sent successfully');
+    } catch (e) {
+      print(
+          '🔑 SeSocketService: ❌ Failed to send user data exchange event: $e');
+    }
   }
 
   void notifyConversationCreated(
@@ -2227,5 +2283,15 @@ class SeSocketService {
       print(
           '⌨️ SeSocketService: ❌ Error updating typing status via SessionChatProvider: $e');
     }
+  }
+
+  /// Generate consistent conversation ID that both users will have
+  /// This ensures messages appear in the same conversation for both users
+  /// Updated to match server's new consistent ID format
+  String _generateConsistentConversationId(String user1Id, String user2Id) {
+    // Sort user IDs alphabetically to ensure consistency
+    final sortedIds = [user1Id, user2Id]..sort();
+    // Server expects conversation IDs to start with 'chat_' prefix
+    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
   }
 }

@@ -102,12 +102,15 @@ class UnifiedMessageService extends ChangeNotifier {
 
       // Save encrypted message to database first
       try {
-        // SIMPLIFIED: Store original text directly for sender's immediate access
-        // No need for complex local encryption - just store the plaintext locally
+        // CRITICAL: Use consistent conversation ID for both users
+        final currentUserId = _sessionService.currentSessionId ?? '';
+        final consistentConversationId =
+            _generateConsistentConversationId(currentUserId, recipientId);
+
         final encryptedMessage = msg.Message(
           id: messageId,
           conversationId:
-              senderConversationId, // Store locally with sender's ID per bidirectional system
+              consistentConversationId, // Use consistent conversation ID
           senderId: _sessionService.currentSessionId ?? '',
           recipientId: recipientId,
           type: msg.MessageType.text,
@@ -275,16 +278,17 @@ class UnifiedMessageService extends ChangeNotifier {
         // Keep the encrypted body as-is, no decryption at storage time
       }
 
-      // CRITICAL: For incoming messages, conversation ID should be the SENDER's ID
-      // This implements the bidirectional conversation system where each user maintains their own folder
-      final senderConversationId = fromUserId;
+      // CRITICAL: Use consistent conversation ID for both users
+      final currentUserId = _sessionService.currentSessionId ?? '';
+      final consistentConversationId =
+          _generateConsistentConversationId(currentUserId, fromUserId);
 
       // SIMPLIFIED: For incoming messages, store the encrypted body directly
       // The recipient will decrypt it using their own key when displaying
       final message = msg.Message(
         id: messageId,
         conversationId:
-            senderConversationId, // Use sender's ID as conversation ID per bidirectional system
+            consistentConversationId, // Use consistent conversation ID
         senderId: fromUserId,
         recipientId: _sessionService.currentSessionId ?? '',
         type: msg.MessageType.text,
@@ -332,6 +336,16 @@ class UnifiedMessageService extends ChangeNotifier {
   void dispose() {
     _messageStates.clear();
     super.dispose();
+  }
+
+  /// Generate consistent conversation ID that both users will have
+  /// This ensures messages appear in the same conversation for both users
+  /// Updated to match server's new consistent ID format
+  String _generateConsistentConversationId(String user1Id, String user2Id) {
+    // Sort user IDs alphabetically to ensure consistency
+    final sortedIds = [user1Id, user2Id]..sort();
+    // Server expects conversation IDs to start with 'chat_' prefix
+    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
   }
 }
 

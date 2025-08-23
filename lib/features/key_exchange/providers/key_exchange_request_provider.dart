@@ -21,6 +21,16 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
   final SeSocketService _socketService = SeSocketService.instance;
 
+  /// Generate consistent conversation ID that both users will have
+  /// This ensures messages appear in the same conversation for both users
+  /// Updated to match server's new consistent ID format
+  String _generateConsistentConversationId(String user1Id, String user2Id) {
+    // Sort user IDs alphabetically to ensure consistency
+    final sortedIds = [user1Id, user2Id]..sort();
+    // Server expects conversation IDs to start with 'chat_' prefix
+    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+  }
+
   /// Initialize the provider and load saved requests
   Future<void> initialize() async {
     await _loadSavedRequests();
@@ -563,22 +573,53 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         return false;
       }
 
+      // CRITICAL: Generate consistent conversation ID for both users
+      final consistentConversationId = _generateConsistentConversationId(
+          currentUserId, request.fromSessionId);
+
+      // Get current user's display name
+      final currentUserDisplayName =
+          SeSessionService().currentSession?.displayName ??
+              'User $currentUserId';
+
+      // CRITICAL: Create and encrypt user data to include in the accept event
+      final userData = {
+        'userName': currentUserDisplayName,
+        'sessionId': currentUserId,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'conversationId': consistentConversationId,
+      };
+
+      // Encrypt user data with requester's public key
+      final encryptedUserData =
+          await EncryptionService.encryptData(userData, request.fromSessionId);
+
+      if (encryptedUserData == null) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ❌ Failed to encrypt user data for accept event');
+        return false;
+      }
+
       _socketService.emit('key_exchange:accept', {
         'requestId': request.id,
         'recipientId': currentUserId, // The acceptor (us)
         'senderId': request.fromSessionId, // The requester
         'publicKey': currentUserPublicKey, // CRITICAL: Include our public key
+        'encryptedUserData':
+            encryptedUserData, // CRITICAL: Include encrypted user data
+        'conversationId':
+            consistentConversationId, // CRITICAL: Include conversation ID
         'timestamp': DateTime.now().toIso8601String(),
       });
 
       print(
-          '🔑 KeyExchangeRequestProvider: ✅ Key exchange accept event sent to server');
-
-      // Now we can immediately send encrypted user data since we have Bob's public key!
+          '🔑 KeyExchangeRequestProvider: ✅ Key exchange accept event sent to server with encrypted user data');
       print(
-          '🔑 KeyExchangeRequestProvider: Acceptor public key stored, sending encrypted user data immediately');
-      await _sendEncryptedUserData(
-          request.fromSessionId); // Use request.fromSessionId as recipient
+          '🔑 KeyExchangeRequestProvider: ✅ Conversation ID included: $consistentConversationId');
+
+      // No need to send separate user data exchange - it's now included in the accept event
+      print(
+          '🔑 KeyExchangeRequestProvider: ℹ️ User data included in accept event, no separate exchange needed');
 
       // Mark the request as accepted
       request.status = 'accepted';

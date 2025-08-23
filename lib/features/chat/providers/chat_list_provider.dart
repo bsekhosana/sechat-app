@@ -430,10 +430,10 @@ class ChatListProvider extends ChangeNotifier {
         try {
           final currentUserId = SeSessionService().currentSessionId;
           if (currentUserId != null) {
-            // Use the senderId (other user) as the conversation ID
+            // CRITICAL: Use consistent conversation ID for both users
             final senderId = conversationData['senderId'] ?? '';
             final conversationId =
-                senderId; // Use sender's ID as conversation ID
+                _generateConsistentConversationId(currentUserId, senderId);
 
             // Create a basic conversation - the display name will be updated when user data is available
             final conversation = ChatConversation(
@@ -769,7 +769,7 @@ class ChatListProvider extends ChangeNotifier {
       // Method 1: Try to find by conversationId from context (sender's ID per updated API docs)
       if (conversation == null && conversationId != null) {
         try {
-          // CRITICAL: conversationId is now the SENDER's sessionId, not the conversation ID
+          // CRITICAL: conversationId is now the consistent conversation ID for both users
           // We need to find the conversation where this sender is a participant
           conversation = _conversations.firstWhere(
             (conv) =>
@@ -1006,13 +1006,33 @@ class ChatListProvider extends ChangeNotifier {
     }
   }
 
-  /// Get message preview text
+  /// Get message preview text with smart decryption
   String _getMessagePreview(Message message) {
     switch (message.type) {
       case MessageType.text:
-        // For encrypted messages, show generic preview
+        // Check if this is an encrypted message that needs decryption
         if (message.isEncrypted) {
-          return '[Encrypted Message]';
+          // Check if it's from current user (show without decryption)
+          final currentUserId = _getCurrentUserId();
+          if (message.senderId == currentUserId) {
+            // Your own message - show original text
+            final text = message.content['text'] as String?;
+            if (text != null && text.isNotEmpty) {
+              return text;
+            } else {
+              return '[Your message]';
+            }
+          } else {
+            // Other user's message - check if it's incoming encrypted
+            if (message.content.containsKey('isIncomingEncrypted') &&
+                (message.content['isIncomingEncrypted'] == true ||
+                    message.content['isIncomingEncrypted'] == 'true')) {
+              return '[Encrypted Message]';
+            } else {
+              // Regular message from other user
+              return message.content['text'] as String? ?? '[Message]';
+            }
+          }
         }
         return message.content['text'] as String? ?? '';
       case MessageType.reply:
@@ -1285,28 +1305,19 @@ class ChatListProvider extends ChangeNotifier {
         return;
       }
 
-      // Check if conversation exists by ID first, then by participant
+      // CRITICAL: Only find conversation by consistent ID
       ChatConversation? existingConversation;
 
-      // First try to find by exact conversation ID
       try {
         existingConversation = _conversations.firstWhere(
           (conv) => conv.id == conversationId,
         );
         print(
-            '📱 ChatListProvider: ✅ Found conversation by ID: $conversationId');
+            '📱 ChatListProvider: ✅ Found conversation by consistent ID: $conversationId');
       } catch (e) {
-        // If not found by ID, try to find by participant
-        try {
-          existingConversation = _conversations.firstWhere(
-            (conv) => conv.isParticipant(senderId),
-          );
-          print(
-              '📱 ChatListProvider: ✅ Found conversation by participant: $senderId');
-        } catch (e) {
-          existingConversation = null;
-          print('📱 ChatListProvider: ⚠️ No existing conversation found');
-        }
+        existingConversation = null;
+        print(
+            '📱 ChatListProvider: ⚠️ No existing conversation found for ID: $conversationId');
       }
 
       if (existingConversation != null) {
@@ -1397,8 +1408,10 @@ class ChatListProvider extends ChangeNotifier {
   void _addNewConversationByRecipient(
       String recipientId, String recipientName) {
     try {
-      // Use recipient ID as conversation ID
-      final conversationId = recipientId;
+      // CRITICAL: Use consistent conversation ID for both users
+      final senderUserId = _getCurrentUserId();
+      final conversationId =
+          _generateConsistentConversationId(senderUserId, recipientId);
 
       // Check if conversation already exists
       if (_conversations.any((conv) => conv.id == conversationId)) {
@@ -1448,12 +1461,87 @@ class ChatListProvider extends ChangeNotifier {
     }
   }
 
+  /// Generate consistent conversation ID that both users will have
+  /// This ensures messages appear in the same conversation for both users
+  /// Updated to match server's new consistent ID format
+  String _generateConsistentConversationId(String user1Id, String user2Id) {
+    // Sort user IDs alphabetically to ensure consistency
+    final sortedIds = [user1Id, user2Id]..sort();
+    // Server expects conversation IDs to start with 'chat_' prefix
+    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+  }
+
+  /// Ensure conversation exists, create if it doesn't
+  Future<void> ensureConversationExists(
+      String conversationId, String senderId, String senderName) async {
+    try {
+      // Check if conversation already exists
+      ChatConversation? existingConversation;
+      try {
+        existingConversation = _conversations.firstWhere(
+          (conv) => conv.id == conversationId,
+        );
+      } catch (e) {
+        existingConversation = null;
+      }
+
+      if (existingConversation == null) {
+        // Create new conversation
+        final currentUserId = _getCurrentUserId();
+        final newConversation = ChatConversation(
+          id: conversationId,
+          participant1Id: currentUserId,
+          participant2Id: senderId,
+          displayName: senderName,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          lastMessageAt: null,
+          lastMessageId: null,
+          lastMessagePreview: null,
+          lastMessageType: null,
+          unreadCount: 0,
+          isArchived: false,
+          isMuted: false,
+          isPinned: false,
+          metadata: null,
+          lastSeen: null,
+          isOnline: false,
+          isTyping: false,
+          typingStartedAt: null,
+          notificationsEnabled: true,
+          soundEnabled: true,
+          vibrationEnabled: true,
+          readReceiptsEnabled: true,
+          typingIndicatorsEnabled: true,
+          lastSeenEnabled: true,
+        );
+
+        // Save to storage
+        await _storageService.saveConversation(newConversation);
+
+        // Add to local state
+        _conversations.add(newConversation);
+        _applySearchFilter();
+        notifyListeners();
+
+        print('📱 ChatListProvider: ✅ Created conversation: $conversationId');
+      } else {
+        print(
+            '📱 ChatListProvider: ℹ️ Conversation already exists: $conversationId');
+      }
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Failed to ensure conversation: $e');
+    }
+  }
+
   /// Handle outgoing message
   void handleOutgoingMessage(
       String recipientId, String content, String messageId) {
     try {
-      // Use recipient ID as conversation ID
-      final conversationId = recipientId;
+      // CRITICAL: Use consistent conversation ID for both users
+      final currentUserId = _getCurrentUserId();
+      final conversationId =
+          _generateConsistentConversationId(currentUserId, recipientId);
 
       // Find existing conversation
       final conversationIndex =
@@ -1472,7 +1560,7 @@ class ChatListProvider extends ChangeNotifier {
       } else {
         // Create new conversation if it doesn't exist
         _addNewConversationByRecipient(
-            recipientId, recipientId); // Use recipient ID as name for now
+            recipientId, 'User ${recipientId.substring(0, 8)}...');
 
         // Update the newly created conversation
         final newConversationIndex =

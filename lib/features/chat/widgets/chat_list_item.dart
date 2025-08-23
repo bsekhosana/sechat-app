@@ -184,14 +184,25 @@ class ChatListItem extends StatelessWidget {
                             )
                           else if (conversation.lastMessagePreview != null &&
                               conversation.lastMessagePreview!.isNotEmpty)
-                            Text(
-                              conversation.lastMessagePreview!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    conversation.lastMessagePreview!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                // Show message status for outgoing messages
+                                if (conversation.lastMessageId != null)
+                                  _buildMessageStatus(
+                                      conversation.lastMessageId!,
+                                      currentUserId),
+                              ],
                             )
                           else
                             Text(
@@ -327,6 +338,33 @@ class ChatListItem extends StatelessWidget {
     } else {
       return 'just now';
     }
+  }
+
+  /// Build message status for chat list preview
+  Widget _buildMessageStatus(String messageId, String currentUserId) {
+    return Consumer<ChatListProvider>(
+      builder: (context, provider, child) {
+        return FutureBuilder<Message?>(
+          future: provider.getLatestMessage(conversation.id),
+          builder: (context, snapshot) {
+            if (snapshot.hasData && snapshot.data != null) {
+              final message = snapshot.data!;
+
+              // Only show status for messages sent by current user
+              if (message.senderId == currentUserId) {
+                return Container(
+                  margin: const EdgeInsets.only(left: 4),
+                  child: _buildStatusIcon(message.status),
+                );
+              }
+            }
+
+            // Return empty container if no message or not sent by current user
+            return const SizedBox.shrink();
+          },
+        );
+      },
+    );
   }
 
   /// Build tick status indicator for message

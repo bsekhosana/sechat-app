@@ -327,13 +327,17 @@ void _setupSocketCallbacks(SeSocketService socketService) {
       // If the message payload contains encryption info, extract it
       // This would come from the socket event data structure
       if (messageId.isNotEmpty && message.isNotEmpty) {
-        // CRITICAL: Use the ORIGINAL conversation ID from the socket event
-        // This ensures messages appear in the correct conversation
-        final actualConversationId = conversationId;
+        // CRITICAL: Use consistent conversation ID for both users
+        final currentUserId = SeSessionService().currentSessionId ?? '';
+        final actualConversationId =
+            _generateConsistentConversationId(currentUserId, senderId);
 
         print('🔌 Main: 🔍 Socket conversationId: $conversationId');
         print('🔌 Main: 🔍 SenderId: $senderId');
         print('🔌 Main: 🔍 Using conversationId: $actualConversationId');
+
+        // CRITICAL: Ensure conversation exists before saving message
+        _ensureConversationExists(actualConversationId, senderId, senderName);
 
         // Store message to database with encrypted text only
         unifiedMessageService.handleIncomingMessage(
@@ -657,7 +661,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         print('🔌 Main: 🚀 Processing key exchange response...');
-        await KeyExchangeService.instance.handleKeyExchangeResponse(data);
+        await KeyExchangeService.instance.processKeyExchangeResponse(data);
         print('🔌 Main: ✅ Key exchange response processed successfully');
       } catch (e) {
         print('🔌 Main: ❌ Failed to process key exchange response: $e');
@@ -680,7 +684,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
       // Process with KeyExchangeService
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
-          await KeyExchangeService.instance.handleKeyExchangeResponse(data);
+          await KeyExchangeService.instance.processKeyExchangeResponse(data);
           print('🔌 Main: ✅ Fallback callback processed successfully');
         } catch (e) {
           print('🔌 Main: ❌ Fallback callback failed: $e');
@@ -711,8 +715,43 @@ void _setupSocketCallbacks(SeSocketService socketService) {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         print('🔑 Main: 🚀 Starting to process user data exchange...');
-        await KeyExchangeService.instance.handleUserDataExchange(data);
-        print('🔑 Main: ✅ User data exchange processed successfully');
+
+        // Extract the required parameters from the socket data
+        final senderId = data['senderId']?.toString();
+        final encryptedData = data['encryptedData']?.toString();
+        final conversationId = data['conversationId']?.toString();
+
+        if (senderId != null && encryptedData != null) {
+          await KeyExchangeService.instance.processUserDataExchange(
+            senderId: senderId,
+            encryptedData: encryptedData,
+            conversationId: conversationId,
+          );
+          print('🔑 Main: ✅ User data exchange processed successfully');
+        } else {
+          print(
+              '🔑 Main: ❌ Invalid user data exchange data: senderId=$senderId, encryptedData=${encryptedData != null}');
+        }
+
+        // CRITICAL: Also update the conversation display name in ChatListProvider
+        try {
+          final senderId = data['senderId']?.toString();
+          final displayName = data['displayName']?.toString() ?? 'Unknown User';
+
+          if (senderId != null) {
+            final chatListProvider = Provider.of<ChatListProvider>(
+                navigatorKey.currentContext!,
+                listen: false);
+
+            // Update the conversation display name
+            chatListProvider.handleUserDataExchange(senderId, displayName);
+            print(
+                '🔑 Main: ✅ Conversation display name updated via ChatListProvider');
+          }
+        } catch (e) {
+          print(
+              '🔑 Main: ⚠️ Warning: Failed to update conversation display name: $e');
+        }
       } catch (e) {
         print('🔑 Main: ❌ Failed to process user data exchange: $e');
         print('🔑 Main: ❌ Stack trace: ${StackTrace.current}');
@@ -762,26 +801,9 @@ void _setupSocketCallbacks(SeSocketService socketService) {
       });
 
       // CRITICAL: Connect user data exchange to update conversation display names
-      KeyExchangeService.instance
-          .setOnUserDataExchange((senderId, displayName) {
-        print(
-            '🔑 Main: 🚀 User data exchange, updating conversation display name...');
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          try {
-            final chatListProvider = Provider.of<ChatListProvider>(
-                navigatorKey.currentContext!,
-                listen: false);
-
-            // Update the conversation display name
-            chatListProvider.handleUserDataExchange(senderId, displayName);
-            print(
-                '🔑 Main: ✅ Conversation display name updated via ChatListProvider');
-          } catch (e) {
-            print('🔑 Main: ❌ Failed to update conversation display name: $e');
-          }
-        });
-      });
+      // This is now handled directly in the socket service callback to avoid conflicts
+      print(
+          '🔑 Main: ℹ️ User data exchange callback handled by socket service directly');
 
       print('🔑 Main: ✅ KeyExchangeService conversation callback connected');
     } catch (e) {
@@ -1051,6 +1073,40 @@ class SeChatApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
       ),
     );
+  }
+}
+
+/// Generate consistent conversation ID that both users will have
+/// This ensures messages appear in the same conversation for both users
+/// Updated to match server's new consistent ID format
+String _generateConsistentConversationId(String user1Id, String user2Id) {
+  // Sort user IDs alphabetically to ensure consistency
+  final sortedIds = [user1Id, user2Id]..sort();
+  // Server expects conversation IDs to start with 'chat_' prefix
+  return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+}
+
+/// Ensure conversation exists before saving message
+Future<void> _ensureConversationExists(
+    String conversationId, String senderId, String senderName) async {
+  try {
+    // Get ChatListProvider to create/update conversation
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Create conversation if it doesn't exist
+        await chatListProvider.ensureConversationExists(
+            conversationId, senderId, senderName);
+        print('🔌 Main: ✅ Conversation ensured: $conversationId');
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to ensure conversation: $e');
+      }
+    });
+  } catch (e) {
+    print('🔌 Main: ❌ Error in _ensureConversationExists: $e');
   }
 }
 
