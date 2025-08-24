@@ -453,121 +453,305 @@ class _ChatListScreenState extends State<ChatListScreen>
   void _showConversationOptions(ChatConversation conversation) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => _buildConversationOptions(conversation),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        final screenHeight = MediaQuery.of(context).size.height;
+
+        return Container(
+          height: screenHeight * 0.95,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: _buildConversationOptions(conversation),
+        );
+      },
     );
   }
 
   /// Build conversation options bottom sheet
   Widget _buildConversationOptions(ChatConversation conversation) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurfaceVariant
-                  .withOpacity(0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 20),
+    final currentUserId = SeSessionService().currentSessionId;
+    final otherParticipantId =
+        conversation.getOtherParticipantId(currentUserId ?? '');
+    final displayName = conversation.getDisplayName(currentUserId ?? '');
 
-          // Conversation info
-          ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              child: Text(
-                (conversation.recipientName?.isNotEmpty ?? false)
-                    ? conversation.recipientName![0].toUpperCase()
-                    : '?',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimary,
-                  fontWeight: FontWeight.bold,
+    return Column(
+      children: [
+        // Handle bar
+        Container(
+          margin: const EdgeInsets.only(top: 8),
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: Colors.grey[300],
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Profile Header Section (98% same style as profile icon widget)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            children: [
+              // Profile Avatar
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onPrimary,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            title: Text(
-              conversation.recipientName ?? 'Unknown User',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+              const SizedBox(height: 16),
+
+              // Display Name
+              Text(
+                displayName.isNotEmpty ? displayName : 'Unknown User',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey,
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+
+              // Session ID
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.2),
                   ),
-            ),
-            subtitle: Text(
-              'Messages',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.key,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        otherParticipantId ?? 'Unknown',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey,
+                              fontFamily: 'monospace',
+                            ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Conversation Details
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.1),
                   ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Conversation ID
+                    _buildDetailRow(
+                      icon: Icons
+                          .chat_bubble_outline, // blue color icon for conversation id
+                      label: 'Conversation ID',
+                      value: conversation.id,
+                      isMonospace: true,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Created At
+                    _buildDetailRow(
+                      icon: Icons.schedule,
+                      label: 'Created',
+                      value: _formatDateTime(conversation.createdAt),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Last Message
+                    if (conversation.lastMessageAt != null)
+                      _buildDetailRow(
+                        icon: Icons.message,
+                        label: 'Last Message',
+                        value: _formatDateTime(conversation.lastMessageAt!),
+                      ),
+
+                    // Message Count (using unread count as approximation)
+                    _buildDetailRow(
+                      icon: Icons.chat, // orange color icon for messages
+                      label: 'Messages',
+                      value:
+                          '${conversation.unreadCount + (conversation.hasUnreadMessages ? 1 : 0)}',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  /// Build detail row for conversation information
+  Widget _buildDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    bool isMonospace = false,
+  }) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 18,
+          color: Colors.orange,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                maxLines: 3,
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.black54,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontFamily: isMonospace ? 'monospace' : null,
+                      fontSize: isMonospace ? 11 : null,
+                    ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build action button for conversation options
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      width: double.infinity,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: color.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  color: color,
+                  size: 20,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w500,
+                        ),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: color.withValues(alpha: 0.6),
+                  size: 16,
+                ),
+              ],
             ),
           ),
-
-          const Divider(),
-
-          // Options
-          ListTile(
-            leading: Icon(
-              Icons.notifications,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            title: Text(
-              conversation.isMuted
-                  ? 'Unmute notifications'
-                  : 'Mute notifications',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              _toggleMuteNotifications(conversation);
-            },
-          ),
-
-          ListTile(
-            leading: Icon(
-              Icons.block,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            title: Text(
-              'Block user',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              _blockUser(conversation);
-            },
-          ),
-
-          ListTile(
-            leading: Icon(
-              Icons.delete_forever,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            title: Text(
-              'Delete conversation',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              _deleteConversation(conversation);
-            },
-          ),
-
-          const SizedBox(height: 20),
-        ],
+        ),
       ),
     );
+  }
+
+  /// Format date time for display
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hours ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minutes ago';
+    } else {
+      return 'Just now';
+    }
   }
 
   /// Toggle mute notifications for conversation

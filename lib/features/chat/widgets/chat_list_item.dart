@@ -245,19 +245,11 @@ class ChatListItem extends StatelessWidget {
                         ],
                       ),
                     ),
+
                     // Right side: conversation ID, unread badge and time
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        // Conversation ID (top right)
-                        Text(
-                          'ID: ${conversation.id.substring(0, 20)}...',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Colors.grey[400],
-                          ),
-                          textAlign: TextAlign.end,
-                        ),
                         const SizedBox(height: 4),
                         // Unread badge
                         if (hasUnread)
