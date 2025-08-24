@@ -339,13 +339,23 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   /// Send text message
   Future<void> _sendTextMessage(
       String text, SessionChatProvider provider) async {
-    if (text.trim().isEmpty) return;
+    print('📱 ChatScreen: 🔧 _sendTextMessage called with: "$text"');
+    print('📱 ChatScreen: 🔍 provider: ${provider.hashCode}');
+    print('📱 ChatScreen: 🔍 provider type: ${provider.runtimeType}');
+
+    if (text.trim().isEmpty) {
+      print('📱 ChatScreen: ❌ Text is empty, returning early');
+      return;
+    }
 
     try {
+      print('📱 ChatScreen: 🔧 Calling provider.sendTextMessage...');
       await provider.sendTextMessage(text.trim());
+      print('📱 ChatScreen: ✅ provider.sendTextMessage completed successfully');
       _textController.clear();
       _scrollToBottom();
     } catch (e) {
+      print('📱 ChatScreen: ❌ Error in _sendTextMessage: $e');
       _showErrorSnackBar('Failed to send message: $e');
     }
   }

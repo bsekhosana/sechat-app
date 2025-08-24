@@ -82,11 +82,16 @@ class UnifiedMessageService extends ChangeNotifier {
       }
 
       // Create API-compliant payload with encrypted body
+      // CRITICAL: Use the same conversationId for both database save and socket payload
+      final effectiveConversationId = conversationId ??
+          _generateConsistentConversationId(
+              _sessionService.currentSessionId ?? '', recipientId);
+
       final payload = {
         'type': 'message:send', // Required by current server
         'messageId': messageId,
         'conversationId':
-            senderConversationId, // Server expects sender's sessionId per updated API docs
+            effectiveConversationId, // Use the passed conversationId parameter
         'fromUserId': _sessionService.currentSessionId,
         'toUserIds': [recipientId], // Required by current server
         'body': encryptedResult['data']!, // Use encrypted data
@@ -103,15 +108,22 @@ class UnifiedMessageService extends ChangeNotifier {
 
       // Save encrypted message to database first
       try {
-        // CRITICAL: Use consistent conversation ID for both users
-        final currentUserId = _sessionService.currentSessionId ?? '';
-        final consistentConversationId =
-            _generateConsistentConversationId(currentUserId, recipientId);
+        // CRITICAL: Use the passed conversationId parameter for consistent conversation IDs
+        // This ensures both users share the same conversation ID format
+        final effectiveConversationId = conversationId ??
+            _generateConsistentConversationId(
+                _sessionService.currentSessionId ?? '', recipientId);
+
+        print('📤 UnifiedMessageService: 🔍 Database save:');
+        print(
+            '📤 UnifiedMessageService: 🔍 Passed conversationId: $conversationId');
+        print(
+            '📤 UnifiedMessageService: 🔍 Effective conversationId: $effectiveConversationId');
 
         final encryptedMessage = msg.Message(
           id: messageId,
           conversationId:
-              consistentConversationId, // Use consistent conversation ID
+              effectiveConversationId, // Use the passed conversationId parameter
           senderId: _sessionService.currentSessionId ?? '',
           recipientId: recipientId,
           type: msg.MessageType.text,
@@ -169,18 +181,24 @@ class UnifiedMessageService extends ChangeNotifier {
   /// Send message via socket with retry logic
   Future<bool> _sendViaSocket(Map<String, dynamic> payload) async {
     try {
+      print(
+          '📤 UnifiedMessageService: 🔧 Calling SeSocketService.sendMessage...');
+
       // Use the existing SeSocketService.sendMessage method
       _socketService.sendMessage(
         messageId: payload['messageId'],
         recipientId: payload['toUserIds']
             [0], // Get recipient from toUserIds array
         body: payload['body'],
-        conversationId: null, // Let SeSocketService handle conversationId
+        conversationId:
+            payload['conversationId'], // Pass the conversationId from payload
       );
 
+      print(
+          '📤 UnifiedMessageService: ✅ SeSocketService.sendMessage called successfully');
       return true;
     } catch (e) {
-      print('📤 UnifiedMessageService: Socket send error: $e');
+      print('📤 UnifiedMessageService: ❌ Socket send error: $e');
       return false;
     }
   }
@@ -192,15 +210,22 @@ class UnifiedMessageService extends ChangeNotifier {
     required String body,
     String? conversationId,
   }) {
-    // CRITICAL: Use sender's ID as conversation ID per bidirectional system
-    // Each user maintains their own conversation folder with the other person's messages
-    final senderConversationId = _sessionService.currentSessionId ?? '';
+    // CRITICAL: Use the passed conversationId parameter for consistent conversation IDs
+    // This ensures both users share the same conversation ID format
+    final effectiveConversationId =
+        conversationId ?? _sessionService.currentSessionId ?? '';
     final fromUserId = _sessionService.currentSessionId ?? '';
+
+    print('📤 UnifiedMessageService: 🔍 _createMessageObject:');
+    print(
+        '📤 UnifiedMessageService: 🔍 Passed conversationId: $conversationId');
+    print(
+        '📤 UnifiedMessageService: 🔍 Effective conversationId: $effectiveConversationId');
 
     return msg.Message(
       id: messageId,
       conversationId:
-          senderConversationId, // Use sender's ID as conversation ID per bidirectional system
+          effectiveConversationId, // Use the passed conversationId parameter
       senderId: fromUserId,
       recipientId: recipientId,
       type: msg.MessageType.text,

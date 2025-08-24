@@ -1248,6 +1248,11 @@ class SeSocketService {
     required String body,
     String? conversationId, // This will be the consistent conversation ID
   }) async {
+    print('🔌 SeSocketService: 🔧 sendMessage called with:');
+    print('🔌 SeSocketService: 🔍 messageId: $messageId');
+    print('🔌 SeSocketService: 🔍 recipientId: $recipientId');
+    print('🔌 SeSocketService: 🔍 body: $body');
+    print('🔌 SeSocketService: 🔍 conversationId: $conversationId');
     if (!isConnected || _sessionId == null) {
       print(
           '🔌 SeSocketService: ❌ Cannot send message - not connected or no session');
@@ -1264,8 +1269,16 @@ class SeSocketService {
         return;
       }
 
-      final consistentConversationId =
-          _generateConsistentConversationId(currentUserId, recipientId);
+      // Use the passed conversationId if provided, otherwise generate one
+      final consistentConversationId = conversationId?.isNotEmpty == true
+          ? conversationId!
+          : _generateConsistentConversationId(currentUserId, recipientId);
+
+      print('🔌 SeSocketService: 🔍 Passed conversationId: $conversationId');
+      print(
+          '🔌 SeSocketService: 🔍 Generated consistentConversationId: $consistentConversationId');
+      print(
+          '🔌 SeSocketService: 🔍 Using conversationId: $consistentConversationId');
 
       // Encrypt the message body before sending
       Map<String, String> encryptedResult;

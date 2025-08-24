@@ -1114,6 +1114,12 @@ class SessionChatProvider extends ChangeNotifier {
 
   /// Send text message
   Future<void> sendTextMessage(String content) async {
+    print('📱 SessionChatProvider: 🔧 sendTextMessage called with: "$content"');
+    print(
+        '📱 SessionChatProvider: 🔍 _currentRecipientId: $_currentRecipientId');
+    print(
+        '📱 SessionChatProvider: 🔍 _currentConversationId: $_currentConversationId');
+
     try {
       _isLoading = true;
       _error = null;
@@ -1124,10 +1130,12 @@ class SessionChatProvider extends ChangeNotifier {
 
       // Validate content
       if (content.trim().isEmpty) {
+        print('📱 SessionChatProvider: ❌ Message content is empty');
         throw Exception('Message content cannot be empty');
       }
 
       final recipientId = _currentRecipientId!;
+      print('📱 SessionChatProvider: 🔍 Using recipientId: $recipientId');
 
       print(
           '📱 SessionChatProvider: 🚀 Sending text message to $recipientId in conversation $_currentConversationId');
@@ -1176,18 +1184,28 @@ class SessionChatProvider extends ChangeNotifier {
         }
       }
 
+      print(
+          '📱 SessionChatProvider: 🔧 Calling _messageService.sendMessage...');
+      print('📱 SessionChatProvider: 🔍 messageId: $messageId');
+      print('📱 SessionChatProvider: 🔍 recipientId: $recipientId');
+      print('📱 SessionChatProvider: 🔍 body: $content');
+      print(
+          '📱 SessionChatProvider: 🔍 conversationId: $_currentConversationId');
+
       // Send message via unified message service (API-compliant)
       final sendResult = await _messageService.sendMessage(
         messageId: messageId,
         recipientId: recipientId,
         body: content,
-        conversationId: SeSessionService()
-            .currentSessionId!, // ✅ FIX: Use SENDER's sessionId as conversationId (per API docs)
+        conversationId:
+            _currentConversationId!, // Use the consistent conversation ID
       );
+
+      print('📱 SessionChatProvider: 🔍 sendResult: $sendResult');
 
       if (sendResult.success) {
         print(
-            '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: ${SeSessionService().currentSessionId} (sender sessionId)');
+            '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $_currentConversationId');
       } else {
         print(
             '📱 SessionChatProvider: ❌ Message send failed: ${sendResult.error}');
@@ -1198,6 +1216,11 @@ class SessionChatProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
     } catch (e) {
+      print(
+          '📱 SessionChatProvider: ❌ Exception caught in sendTextMessage: $e');
+      print('📱 SessionChatProvider: 🔍 Exception type: ${e.runtimeType}');
+      print('📱 SessionChatProvider: 🔍 Stack trace: ${StackTrace.current}');
+
       _error = 'Failed to send message: $e';
       _isLoading = false;
       notifyListeners();

@@ -325,12 +325,15 @@ void _setupSocketCallbacks(SeSocketService socketService) {
       bool isEncrypted = true;
       String? checksum;
 
+      // CRITICAL: Declare conversation ID outside the if block for use in callback
+      String? actualConversationId;
+
       // If the message payload contains encryption info, extract it
       // This would come from the socket event data structure
       if (messageId.isNotEmpty && message.isNotEmpty) {
         // CRITICAL: Use consistent conversation ID for both users
         final currentUserId = SeSessionService().currentSessionId ?? '';
-        final actualConversationId =
+        actualConversationId =
             _generateConsistentConversationId(currentUserId, senderId);
 
         print('🔌 Main: 🔍 Socket conversationId: $conversationId');
@@ -355,36 +358,54 @@ void _setupSocketCallbacks(SeSocketService socketService) {
 
         // Show push notification with sender name and generic body
         _showMessageNotification(senderName, messageId);
+
+        // CRITICAL: Update conversation with new message and decrypt preview
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            final indicatorService = Provider.of<IndicatorService>(
+                navigatorKey.currentContext!,
+                listen: false);
+
+            final chatListProvider = Provider.of<ChatListProvider>(
+                navigatorKey.currentContext!,
+                listen: false);
+
+            try {
+              // Call handleIncomingMessage to decrypt the message preview
+              if (actualConversationId != null) {
+                chatListProvider.handleIncomingMessage(
+                  senderId: senderId,
+                  senderName: senderName,
+                  message: message,
+                  conversationId: actualConversationId,
+                  messageId: messageId,
+                );
+                print(
+                    '🔌 Main: ✅ Conversation updated with decrypted message preview');
+              }
+            } catch (e) {
+              print(
+                  '🔌 Main: ⚠️ Failed to update conversation with decrypted preview: $e');
+            }
+
+            // Count unread conversations
+            final unreadCount = chatListProvider.conversations
+                .where((conv) => conv.unreadCount > 0)
+                .length;
+
+            // Update the indicator service
+            indicatorService.updateCounts(unreadChats: unreadCount);
+            print('🔌 Main: ✅ Chat badge count updated for new message');
+          } catch (e) {
+            print('🔌 Main: ❌ Failed to update chat badge count: $e');
+          }
+        });
       } else {
         print('🔌 Main: ⚠️ Invalid message data received');
       }
     } catch (e) {
       print('🔌 Main: ❌ Failed to save incoming message to database: $e');
     }
-
-    // Update badge counts for new messages
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        final indicatorService = Provider.of<IndicatorService>(
-            navigatorKey.currentContext!,
-            listen: false);
-
-        final chatListProvider = Provider.of<ChatListProvider>(
-            navigatorKey.currentContext!,
-            listen: false);
-
-        // Count unread conversations
-        final unreadCount = chatListProvider.conversations
-            .where((conv) => conv.unreadCount > 0)
-            .length;
-
-        // Update the indicator service
-        indicatorService.updateCounts(unreadChats: unreadCount);
-        print('🔌 Main: ✅ Chat badge count updated for new message');
-      } catch (e) {
-        print('🔌 Main: ❌ Failed to update chat badge count: $e');
-      }
-    });
   });
 
   print('🔌 Main: 🔧 Setting up typing indicator callback...');

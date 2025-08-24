@@ -166,8 +166,15 @@ class _ChatInputAreaState extends State<ChatInputArea> {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
 
+    print('📱 ChatInputArea: 🔧 _sendTextMessage called with: "$text"');
+    print(
+        '📱 ChatInputArea: 🔍 onTextMessageSent callback: ${widget.onTextMessageSent != null ? 'SET' : 'NULL'}');
+    print('📱 ChatInputArea: 🔍 Text length: ${text.length}');
+
     widget.onTextMessageSent(text);
     _textController.clear();
+
+    print('📱 ChatInputArea: ✅ Message sent to callback, text cleared');
 
     // Hide keyboard and remove focus
     _focusNode.unfocus();
