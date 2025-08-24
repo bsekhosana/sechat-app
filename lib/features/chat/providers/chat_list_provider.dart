@@ -194,6 +194,9 @@ class ChatListProvider extends ChangeNotifier {
           // Load last messages for all conversations to populate previews
           await _loadLastMessagesForAllConversations();
 
+          // Clear all typing indicators to remove stale data
+          clearAllTypingIndicators();
+
           _applySearchFilter();
           databaseReady = true;
 
@@ -569,6 +572,32 @@ class ChatListProvider extends ChangeNotifier {
       _conversations[index] = updatedConversation;
       _applySearchFilter();
       notifyListeners();
+    }
+  }
+
+  /// Clear all typing indicators (call this when app loads to clear stale data)
+  void clearAllTypingIndicators() {
+    try {
+      print('📱 ChatListProvider: 🔄 Clearing all typing indicators');
+
+      bool hasChanges = false;
+      for (int i = 0; i < _conversations.length; i++) {
+        if (_conversations[i].isTyping == true) {
+          _conversations[i] = _conversations[i].copyWith(
+            isTyping: false,
+            typingStartedAt: null,
+          );
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        _applySearchFilter();
+        notifyListeners();
+        print('📱 ChatListProvider: ✅ All typing indicators cleared');
+      }
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error clearing typing indicators: $e');
     }
   }
 
@@ -1392,6 +1421,9 @@ class ChatListProvider extends ChangeNotifier {
   /// Refresh chat list order based on latest message times
   void refreshChatListOrder() {
     try {
+      // Clear all typing indicators to remove stale data
+      clearAllTypingIndicators();
+
       // Sort conversations by last message time (newest first)
       _conversations.sort((a, b) {
         final aTime = a.lastMessageAt ?? a.createdAt;

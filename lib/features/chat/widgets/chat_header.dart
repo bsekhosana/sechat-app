@@ -76,16 +76,6 @@ class ChatHeader extends StatelessWidget {
               ),
             ),
           ),
-
-          // More options button
-          IconButton(
-            onPressed: onMorePressed,
-            icon: Icon(
-              Icons.more_vert,
-              color: Colors.grey[700], // Dark grey more button
-            ),
-            tooltip: 'More options',
-          ),
         ],
       ),
     );
