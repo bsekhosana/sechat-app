@@ -95,6 +95,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             Provider.of<ChatListProvider>(context, listen: false);
         chatListProvider.markConversationAsRead(widget.conversationId);
 
+        // CRITICAL: Register this SessionChatProvider for real-time status updates
+        chatProvider.registerWithChatListProvider(chatListProvider);
+
         // CRITICAL: Scroll to bottom after messages are loaded
         // Use a delay to ensure messages are rendered first
         Future.delayed(const Duration(milliseconds: 300), () {
@@ -106,6 +109,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    // Unregister from ChatListProvider for real-time updates
+    try {
+      final chatProvider = context.read<SessionChatProvider>();
+      final chatListProvider = context.read<ChatListProvider>();
+      chatProvider.unregisterFromChatListProvider(chatListProvider);
+    } catch (e) {
+      // Ignore errors during dispose
+    }
+
     _fadeController.dispose();
     _slideController.dispose();
     _scrollController.dispose();
@@ -380,6 +392,29 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       await provider.sendTextMessage(text.trim());
       print('📱 ChatScreen: ✅ provider.sendTextMessage completed successfully');
       _textController.clear();
+
+      // CRITICAL: Update chat list to show sent message as latest
+      try {
+        final chatListProvider =
+            Provider.of<ChatListProvider>(context, listen: false);
+        final messageId =
+            'msg_${DateTime.now().millisecondsSinceEpoch}_${_getCurrentUserId()}';
+
+        // Update chat list with new message
+        chatListProvider.handleNewMessageArrival(
+          messageId: messageId,
+          senderId: _getCurrentUserId(),
+          content: text.trim(),
+          conversationId: provider.conversationId ?? widget.conversationId,
+          timestamp: DateTime.now(),
+          messageType: MessageType.text,
+        );
+
+        print(
+            '📱 ChatScreen: ✅ Chat list updated with sent message: $messageId');
+      } catch (e) {
+        print('📱 ChatScreen: ⚠️ Could not update chat list: $e');
+      }
 
       // CRITICAL: Scroll to bottom after sending message
       // Use a small delay to ensure the message is added to the UI

@@ -553,6 +553,34 @@ class MessageStorageService {
     }
   }
 
+  /// Mark all messages sent TO the current user in a conversation as read
+  Future<void> markConversationMessagesAsRead(
+      String conversationId, String currentUserId) async {
+    if (_database == null) {
+      throw Exception('Database not initialized');
+    }
+
+    try {
+      final now = DateTime.now().toIso8601String();
+      await _database!.update(
+        'messages',
+        {
+          'status': MessageStatus.read.name,
+          'read_at': now,
+        },
+        where: 'conversation_id = ? AND recipient_id = ? AND status != ?',
+        whereArgs: [conversationId, currentUserId, MessageStatus.read.name],
+      );
+
+      print(
+          '💾 MessageStorageService: ✅ Messages sent TO user marked as read: $conversationId');
+    } catch (e) {
+      print(
+          '💾 MessageStorageService: ❌ Failed to mark conversation messages as read: $e');
+      rethrow;
+    }
+  }
+
   /// Delete a message
   Future<void> deleteMessage(String messageId) async {
     if (_database == null) {

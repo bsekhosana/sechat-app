@@ -10,9 +10,11 @@ import '../../../realtime/presence_service.dart';
 import '../services/message_storage_service.dart';
 import '../services/message_status_tracking_service.dart';
 import '../models/message.dart';
+import '../models/message_status.dart' as msg_status;
 import '../models/chat_conversation.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
+import 'session_chat_provider.dart';
 
 /// Provider for managing chat list state and operations
 class ChatListProvider extends ChangeNotifier {
@@ -26,6 +28,9 @@ class ChatListProvider extends ChangeNotifier {
 
   // Callback for online status updates to notify other providers
   Function(String, bool, DateTime?)? _onOnlineStatusChanged;
+
+  // Reference to active SessionChatProvider for real-time updates
+  SessionChatProvider? _activeSessionChatProvider;
 
   // State
   List<ChatConversation> _conversations = [];
@@ -41,19 +46,126 @@ class ChatListProvider extends ChangeNotifier {
     _onOnlineStatusChanged = callback;
   }
 
+  /// Set the active SessionChatProvider for real-time updates
+  void setActiveSessionChatProvider(SessionChatProvider? provider) {
+    _activeSessionChatProvider = provider;
+    print(
+        '📱 ChatListProvider: ${provider != null ? '✅ Set' : '❌ Cleared'} active SessionChatProvider');
+  }
+
   /// Process message status update from external source
   void processMessageStatusUpdate(MessageStatusUpdate update) {
     _updateMessageStatus(update);
   }
 
   /// Process message status update with additional context for better conversation lookup
-  void processMessageStatusUpdateWithContext(
+  Future<void> processMessageStatusUpdateWithContext(
     MessageStatusUpdate update, {
     String? conversationId,
     String? recipientId,
-  }) {
-    _updateMessageStatusWithContext(update,
+  }) async {
+    // First, update the chat list (conversation metadata)
+    await _updateMessageStatusWithContext(update,
         conversationId: conversationId, recipientId: recipientId);
+
+    // Then, forward the update to the active SessionChatProvider for real-time UI updates
+    if (_activeSessionChatProvider != null) {
+      try {
+        await _activeSessionChatProvider!.handleMessageStatusUpdate(update);
+        print(
+            '📱 ChatListProvider: ✅ Forwarded message status update to active SessionChatProvider');
+      } catch (e) {
+        print(
+            '📱 ChatListProvider: ⚠️ Failed to forward status update to SessionChatProvider: $e');
+      }
+    } else {
+      print(
+          '📱 ChatListProvider: ℹ️ No active SessionChatProvider to forward status update to');
+    }
+  }
+
+  /// Handle new message arrival and update chat list in real-time
+  Future<void> handleNewMessageArrival({
+    required String messageId,
+    required String senderId,
+    required String content,
+    required String conversationId,
+    required DateTime timestamp,
+    required MessageType messageType,
+  }) async {
+    try {
+      print('📱 ChatListProvider: 🔄 Handling new message arrival: $messageId');
+
+      // Find the conversation
+      final conversationIndex = _conversations.indexWhere(
+        (conv) => conv.id == conversationId,
+      );
+
+      if (conversationIndex != -1) {
+        // Update the conversation with new message info
+        final oldConversation = _conversations[conversationIndex];
+        final updatedConversation = oldConversation.copyWith(
+          lastMessageId: messageId,
+          lastMessagePreview: _truncateMessagePreview(content),
+          lastMessageAt: timestamp,
+          lastMessageType: messageType,
+          updatedAt: DateTime.now(),
+        );
+
+        _conversations[conversationIndex] = updatedConversation;
+
+        // Move this conversation to the top (most recent)
+        _moveConversationToTop(conversationIndex);
+
+        // Apply search filter and notify listeners
+        _applySearchFilter();
+        notifyListeners();
+
+        print(
+            '📱 ChatListProvider: ✅ Chat list updated with new message: $messageId');
+      } else {
+        print(
+            '📱 ChatListProvider: ⚠️ Conversation not found for new message: $conversationId');
+      }
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error handling new message arrival: $e');
+    }
+  }
+
+  /// Move conversation to top of list (most recent)
+  void _moveConversationToTop(int conversationIndex) {
+    if (conversationIndex > 0) {
+      final conversation = _conversations.removeAt(conversationIndex);
+      _conversations.insert(0, conversation);
+      print(
+          '📱 ChatListProvider: ✅ Moved conversation to top: ${conversation.id}');
+    }
+  }
+
+  /// Truncate message preview to reasonable length
+  String _truncateMessagePreview(String content) {
+    const maxLength = 50;
+    if (content.length <= maxLength) return content;
+    return '${content.substring(0, maxLength)}...';
+  }
+
+  /// Convert MessageDeliveryStatus to MessageStatus
+  MessageStatus _convertDeliveryStatusToMessageStatus(
+      msg_status.MessageDeliveryStatus deliveryStatus) {
+    switch (deliveryStatus) {
+      case msg_status.MessageDeliveryStatus.pending:
+        return MessageStatus.pending;
+      case msg_status.MessageDeliveryStatus.sent:
+        return MessageStatus.sent;
+      case msg_status.MessageDeliveryStatus.delivered:
+        return MessageStatus.delivered;
+      case msg_status.MessageDeliveryStatus.read:
+        return MessageStatus.read;
+      case msg_status.MessageDeliveryStatus.failed:
+        return MessageStatus.failed;
+      case msg_status.MessageDeliveryStatus.retrying:
+        return MessageStatus.sending; // Map retrying to sending
+    }
   }
 
   /// Update conversation online status from external source
@@ -716,7 +828,7 @@ class ChatListProvider extends ChangeNotifier {
   }
 
   /// Update message status for a conversation - FIXED conversation lookup
-  void _updateMessageStatus(MessageStatusUpdate update) {
+  Future<void> _updateMessageStatus(MessageStatusUpdate update) async {
     try {
       print(
           '📱 ChatListProvider: Message status update received for message: ${update.messageId}');
@@ -768,6 +880,20 @@ class ChatListProvider extends ChangeNotifier {
         // Update in storage
         _storageService.saveConversation(updatedConversation);
 
+        // CRITICAL FIX: Update the actual message status in the database
+        try {
+          // Convert MessageDeliveryStatus to MessageStatus
+          final messageStatus =
+              _convertDeliveryStatusToMessageStatus(update.status);
+          await _storageService.updateMessageStatus(
+              update.messageId, messageStatus);
+          print(
+              '📱 ChatListProvider: ✅ Message status updated in database: ${update.messageId} -> ${messageStatus}');
+        } catch (e) {
+          print(
+              '📱 ChatListProvider: ⚠️ Failed to update message status in database: $e');
+        }
+
         // Update local state
         final index =
             _conversations.indexWhere((c) => c.id == conversation!.id);
@@ -795,11 +921,11 @@ class ChatListProvider extends ChangeNotifier {
   }
 
   /// Update message status with additional context for better conversation lookup
-  void _updateMessageStatusWithContext(
+  Future<void> _updateMessageStatusWithContext(
     MessageStatusUpdate update, {
     String? conversationId,
     String? recipientId,
-  }) {
+  }) async {
     try {
       print(
           '📱 ChatListProvider: Message status update with context for message: ${update.messageId}');
@@ -890,6 +1016,20 @@ class ChatListProvider extends ChangeNotifier {
 
         // Update in storage
         _storageService.saveConversation(updatedConversation);
+
+        // CRITICAL FIX: Update the actual message status in the database
+        try {
+          // Convert MessageDeliveryStatus to MessageStatus
+          final messageStatus =
+              _convertDeliveryStatusToMessageStatus(update.status);
+          await _storageService.updateMessageStatus(
+              update.messageId, messageStatus);
+          print(
+              '📱 ChatListProvider: ✅ Message status updated in database: ${update.messageId} -> ${messageStatus}');
+        } catch (e) {
+          print(
+              '📱 ChatListProvider: ⚠️ Failed to update message status in database: $e');
+        }
 
         // Update local state
         final index =

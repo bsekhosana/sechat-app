@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../services/message_storage_service.dart';
@@ -9,6 +10,9 @@ import '../models/message.dart';
 import '../../../realtime/realtime_service_manager.dart';
 import '../../../realtime/typing_service.dart';
 import '../../../core/services/unified_message_service.dart' as unified_msg;
+import '../services/message_status_tracking_service.dart';
+import '../models/message_status.dart' as msg_status;
+import 'chat_list_provider.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -888,17 +892,35 @@ class SessionChatProvider extends ChangeNotifier {
   // Mark message as read
   Future<void> markMessageAsRead(String messageId, String senderId) async {
     try {
-      // For now, we'll just log the read receipt
-      // In the future, this can be implemented to send status updates via the channel socket
       print(
           '📱 SessionChatProvider: 📊 Message marked as read: $messageId from $senderId');
 
-      // Update local message status if needed
-      // This would typically update the message in storage
+      // Update local message status in storage
+      final messageStorageService = MessageStorageService.instance;
+      await messageStorageService.updateMessageStatus(
+          messageId, MessageStatus.read);
 
-      print('📱 SessionChatProvider: Message marked as read: $messageId');
+      // Update local message status in memory
+      final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
+      if (messageIndex != -1) {
+        _messages[messageIndex] = _messages[messageIndex].copyWith(
+          status: MessageStatus.read,
+          readAt: DateTime.now(),
+        );
+      }
+
+      // Send read status update back to the sender via socket
+      final socketService = SeSocketService.instance;
+      await socketService.sendMessageStatusUpdate(
+        recipientId: senderId,
+        messageId: messageId,
+        status: 'read',
+      );
+
+      print(
+          '📱 SessionChatProvider: ✅ Message marked as read and status sent: $messageId');
     } catch (e) {
-      print('📱 SessionChatProvider: Error marking message as read: $e');
+      print('📱 SessionChatProvider: ❌ Error marking message as read: $e');
     }
   }
 
@@ -940,6 +962,14 @@ class SessionChatProvider extends ChangeNotifier {
 
       // Setup message service listener for real-time updates
       _setupMessageServiceListener();
+
+      // Setup socket callbacks for message status updates
+      _setupSocketCallbacks();
+
+      // Note: ChatListProvider registration will be handled by the ChatScreen
+      // when it has access to the BuildContext
+      print(
+          '📱 SessionChatProvider: ℹ️ ChatListProvider registration will be handled by ChatScreen');
 
       _isLoading = false;
       notifyListeners();
@@ -1051,9 +1081,34 @@ class SessionChatProvider extends ChangeNotifier {
   Future<void> markAsRead() async {
     try {
       if (_currentRecipientId != null) {
-        // Mark all messages as read
+        print(
+            '📱 SessionChatProvider: 🔄 Marking all unread messages as read...');
+
+        // Efficiently mark all unread messages sent TO me in the conversation as read
+        final messageStorageService = MessageStorageService.instance;
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null) {
+          await messageStorageService.markConversationMessagesAsRead(
+            _currentConversationId ?? _currentRecipientId!,
+            currentUserId,
+          );
+        }
+
+        // Also mark messages currently in memory as read (for immediate UI update)
+        if (currentUserId != null) {
+          for (final message in _messages) {
+            if (message.recipientId ==
+                    currentUserId && // Only messages sent TO me
+                message.status != MessageStatus.read) {
+              await markMessageAsRead(message.id, message.senderId);
+            }
+          }
+        }
+
+        // Also mark messages currently in memory as read
         for (final message in _messages) {
-          if (message.senderId != _currentRecipientId) {
+          if (message.senderId != _currentRecipientId &&
+              message.status != MessageStatus.read) {
             await markMessageAsRead(message.id, message.senderId);
           }
         }
@@ -1061,7 +1116,7 @@ class SessionChatProvider extends ChangeNotifier {
         // Update unread count
         _unreadCounts[_currentConversationId ?? ''] = 0;
 
-        print('📱 SessionChatProvider: ✅ Conversation marked as read');
+        print('📱 SessionChatProvider: ✅ All unread messages marked as read');
         notifyListeners();
       }
     } catch (e) {
@@ -1206,6 +1261,28 @@ class SessionChatProvider extends ChangeNotifier {
       if (sendResult.success) {
         print(
             '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $_currentConversationId');
+
+        // Update message status to 'sent' after successful send
+        final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
+        if (messageIndex != -1) {
+          _messages[messageIndex] = _messages[messageIndex].copyWith(
+            status: MessageStatus.sent,
+          );
+
+          // Update message status in database
+          final messageStorageService = MessageStorageService.instance;
+          await messageStorageService.updateMessageStatus(
+              messageId, MessageStatus.sent);
+
+          print(
+              '📱 SessionChatProvider: ✅ Message status updated to sent: $messageId');
+          notifyListeners(); // Update UI immediately
+        }
+
+        // Note: Chat list update will be handled by the ChatScreen
+        // when it has access to the BuildContext
+        print(
+            '📱 SessionChatProvider: ℹ️ Chat list update will be handled by ChatScreen');
       } else {
         print(
             '📱 SessionChatProvider: ❌ Message send failed: ${sendResult.error}');
@@ -1347,6 +1424,52 @@ class SessionChatProvider extends ChangeNotifier {
     }
   }
 
+  /// Setup socket callbacks for message status updates
+  void _setupSocketCallbacks() {
+    try {
+      print('📱 SessionChatProvider: 🔧 Setting up socket callbacks...');
+
+      // Set up message acknowledgment callback
+      _socketService.setOnMessageAcked((messageId) {
+        print(
+            '📱 SessionChatProvider: ✅ Message acknowledged by server: $messageId');
+
+        // Update message status to 'sent' when acknowledged by server
+        final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
+        if (messageIndex != -1) {
+          _messages[messageIndex] = _messages[messageIndex].copyWith(
+            status: MessageStatus.sent,
+          );
+
+          // Update message status in database
+          _updateMessageStatusInDatabase(messageId, MessageStatus.sent);
+
+          print(
+              '📱 SessionChatProvider: ✅ Message status updated to sent after acknowledgment: $messageId');
+          notifyListeners(); // Update UI immediately
+        }
+      });
+
+      print('📱 SessionChatProvider: ✅ Socket callbacks set up successfully');
+    } catch (e) {
+      print('📱 SessionChatProvider: ❌ Failed to set up socket callbacks: $e');
+    }
+  }
+
+  /// Update message status in database
+  Future<void> _updateMessageStatusInDatabase(
+      String messageId, MessageStatus status) async {
+    try {
+      final messageStorageService = MessageStorageService.instance;
+      await messageStorageService.updateMessageStatus(messageId, status);
+      print(
+          '📱 SessionChatProvider: ✅ Message status updated in database: $messageId -> $status');
+    } catch (e) {
+      print(
+          '📱 SessionChatProvider: ❌ Failed to update message status in database: $e');
+    }
+  }
+
   /// Handle text input for typing indicators
   void onTextInput(String text) {
     if (_currentConversationId != null &&
@@ -1415,6 +1538,80 @@ class SessionChatProvider extends ChangeNotifier {
   void sendPresenceToCurrentRecipient(bool isOnline) {
     if (_currentRecipientId != null) {
       sendPresenceUpdate(isOnline, [_currentRecipientId!]);
+    }
+  }
+
+  /// Register this provider with ChatListProvider for real-time updates
+  void registerWithChatListProvider(ChatListProvider chatListProvider) {
+    chatListProvider.setActiveSessionChatProvider(this);
+    print(
+        '📱 SessionChatProvider: ✅ Registered with ChatListProvider for real-time updates');
+  }
+
+  /// Unregister this provider from ChatListProvider
+  void unregisterFromChatListProvider(ChatListProvider chatListProvider) {
+    chatListProvider.setActiveSessionChatProvider(null);
+    print('📱 SessionChatProvider: ❌ Unregistered from ChatListProvider');
+  }
+
+  /// Get current conversation ID for external use
+  String? get conversationId => _currentConversationId;
+
+  /// Handle real-time message status updates (called from ChatListProvider)
+  Future<void> handleMessageStatusUpdate(MessageStatusUpdate update) async {
+    try {
+      // Since MessageStatusUpdate doesn't have conversationId, we'll process all updates
+      // and let the message lookup filter by conversation
+      print(
+          '📱 SessionChatProvider: 🔄 Processing message status update: ${update.messageId} -> ${update.status}');
+
+      // Find the message in memory and update its status
+      final messageIndex =
+          _messages.indexWhere((msg) => msg.id == update.messageId);
+      if (messageIndex != -1) {
+        // Update the message status in memory
+        _messages[messageIndex] = _messages[messageIndex].copyWith(
+          status: _convertDeliveryStatusToMessageStatus(update.status),
+        );
+
+        // Update the message status in the database
+        final messageStorageService = MessageStorageService.instance;
+        await messageStorageService.updateMessageStatus(
+          update.messageId,
+          _convertDeliveryStatusToMessageStatus(update.status),
+        );
+
+        print(
+            '📱 SessionChatProvider: ✅ Message status updated in memory and database: ${update.messageId} -> ${update.status}');
+
+        // Notify listeners to update the UI immediately
+        notifyListeners();
+      } else {
+        print(
+            '📱 SessionChatProvider: ⚠️ Message not found in memory: ${update.messageId}');
+      }
+    } catch (e) {
+      print(
+          '📱 SessionChatProvider: ❌ Error handling message status update: $e');
+    }
+  }
+
+  /// Convert MessageDeliveryStatus to MessageStatus
+  MessageStatus _convertDeliveryStatusToMessageStatus(
+      msg_status.MessageDeliveryStatus deliveryStatus) {
+    switch (deliveryStatus) {
+      case msg_status.MessageDeliveryStatus.pending:
+        return MessageStatus.pending;
+      case msg_status.MessageDeliveryStatus.sent:
+        return MessageStatus.sent;
+      case msg_status.MessageDeliveryStatus.delivered:
+        return MessageStatus.delivered;
+      case msg_status.MessageDeliveryStatus.read:
+        return MessageStatus.read;
+      case msg_status.MessageDeliveryStatus.failed:
+        return MessageStatus.failed;
+      case msg_status.MessageDeliveryStatus.retrying:
+        return MessageStatus.sending;
     }
   }
 }

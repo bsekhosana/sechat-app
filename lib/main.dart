@@ -396,6 +396,18 @@ void _setupSocketCallbacks(SeSocketService socketService) {
                 );
                 print(
                     '🔌 Main: ✅ Conversation updated with decrypted message preview');
+
+                // CRITICAL: Also update chat list in real-time with new message
+                chatListProvider.handleNewMessageArrival(
+                  messageId: messageId,
+                  senderId: senderId,
+                  content: message,
+                  conversationId: actualConversationId,
+                  timestamp: DateTime.now(),
+                  messageType: MessageType.text,
+                );
+                print(
+                    '🔌 Main: ✅ Chat list updated in real-time with new message');
               }
             } catch (e) {
               print(
