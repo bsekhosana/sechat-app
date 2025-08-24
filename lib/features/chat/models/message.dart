@@ -9,12 +9,16 @@ enum MessageType {
 }
 
 /// Enum for message status
+/// Aligned with server flow: Sending → Sent → Delivered → Read
+/// With Failed (retry) and Queued (recipient offline) states
 enum MessageStatus {
+  pending, // Message waiting to be sent (local only, not yet sent)
   sending, // Message is being sent
-  sent, // Message sent to server (1 tick)
-  delivered, // Message delivered to recipient (2 ticks)
-  read, // Message read by recipient (2 blue ticks)
-  failed, // Message failed to send
+  sent, // Step 1: Message sent to server (1 tick)
+  delivered, // Step 2: Message delivered to recipient's device (2 ticks)
+  read, // Step 3: Message read by recipient (2 blue ticks)
+  queued, // Message queued (recipient offline)
+  failed, // Error occurred during sending (with retry)
   deleted, // Message deleted
 }
 
@@ -170,6 +174,8 @@ class Message {
   /// Get status display text
   String get statusDisplayText {
     switch (status) {
+      case MessageStatus.pending:
+        return 'Pending...';
       case MessageStatus.sending:
         return 'Sending...';
       case MessageStatus.sent:
@@ -178,6 +184,8 @@ class Message {
         return '✓✓';
       case MessageStatus.read:
         return '✓✓';
+      case MessageStatus.queued:
+        return 'Queued';
       case MessageStatus.failed:
         return '✗';
       case MessageStatus.deleted:
@@ -188,6 +196,8 @@ class Message {
   /// Get status color
   String get statusColor {
     switch (status) {
+      case MessageStatus.pending:
+        return '#FFA500'; // Orange
       case MessageStatus.sending:
         return '#FFA500'; // Orange
       case MessageStatus.sent:
@@ -196,6 +206,8 @@ class Message {
         return '#808080'; // Gray
       case MessageStatus.read:
         return '#2196F3'; // Blue
+      case MessageStatus.queued:
+        return '#FFA500'; // Orange
       case MessageStatus.failed:
         return '#F44336'; // Red
       case MessageStatus.deleted:

@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 enum MessageType { text, image, voice, file }
 
 /// Status for WhatsApp-style message delivery/read handshake
+/// Aligned with server flow: Sending → Sent → Delivered → Read
+/// With Failed (retry) and Queued (recipient offline) states
 enum MessageStatus {
   pending, // Message waiting to be sent (local only, not yet sent)
   sending, // Message is being sent
   sent, // Step 1: Message sent to server (1 tick)
   delivered, // Step 2: Message delivered to recipient's device (2 ticks)
   read, // Step 3: Message read by recipient (2 blue ticks)
-  error // Error occurred during sending
+  queued, // Message queued (recipient offline)
+  failed, // Error occurred during sending (with retry)
+  error // Legacy error status (deprecated, use failed instead)
 }
 
 class Message {
@@ -145,7 +149,7 @@ class Message {
 
   // Convert a status string to enum
   static MessageStatus _parseStatusString(String status) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'pending':
         return MessageStatus.pending;
       case 'sending':
@@ -156,8 +160,12 @@ class Message {
         return MessageStatus.delivered;
       case 'read':
         return MessageStatus.read;
+      case 'queued':
+        return MessageStatus.queued;
+      case 'failed':
+        return MessageStatus.failed;
       case 'error':
-        return MessageStatus.error;
+        return MessageStatus.failed; // Map legacy 'error' to 'failed'
       default:
         return MessageStatus.sent; // Default to sent for backward compatibility
     }
@@ -170,27 +178,38 @@ class Message {
   bool get isDelivered =>
       status == 'delivered' || messageStatus == MessageStatus.delivered;
   bool get isRead => status == 'read' || messageStatus == MessageStatus.read;
-  bool get isError => status == 'error' || messageStatus == MessageStatus.error;
+  bool get isQueued =>
+      status == 'queued' || messageStatus == MessageStatus.queued;
+  bool get isFailed =>
+      status == 'failed' || messageStatus == MessageStatus.failed;
+  bool get isError =>
+      status == 'error' ||
+      messageStatus == MessageStatus.error ||
+      messageStatus == MessageStatus.failed;
   bool get isPendingStatus =>
       status == 'pending' || messageStatus == MessageStatus.pending;
 
   // Get the appropriate icon for message status (WhatsApp-style)
   IconData get statusIcon {
-    if (isError) return Icons.error;
+    if (isFailed) return Icons.error_outline;
+    if (isQueued) return Icons.schedule_send;
     if (isRead) return Icons.done_all; // 2 blue ticks - handled by color
     if (isDelivered) return Icons.done_all; // 2 ticks
     if (isSent) return Icons.done; // 1 tick
     if (isSending) return Icons.access_time;
-    return Icons.schedule; // For pending
+    if (isPendingStatus) return Icons.schedule;
+    return Icons.schedule; // Default fallback
   }
 
   // Get the appropriate color for message status
   Color getStatusColor(Color baseColor) {
-    if (isError) return Colors.red;
+    if (isFailed) return Colors.red;
+    if (isQueued) return Colors.orange;
     if (isRead) return Colors.blue; // Blue ticks for read messages
     if (isDelivered) return baseColor;
     if (isPendingStatus) return Colors.orange;
     if (isSending) return Colors.orange;
+    if (isError) return Colors.red; // Legacy error support
     return baseColor.withOpacity(0.5);
   }
 

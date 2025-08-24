@@ -115,6 +115,10 @@ class MessageBubble extends StatelessWidget {
     Color color;
 
     switch (message.status) {
+      case MessageStatus.pending:
+        icon = Icons.schedule;
+        color = Colors.orange; // Orange for pending
+        break;
       case MessageStatus.sending:
         icon = Icons.schedule;
         color = Colors.grey[500]!; // Grey for sending
@@ -131,6 +135,10 @@ class MessageBubble extends StatelessWidget {
         icon = Icons.done_all; // Double blue ticks
         color =
             Theme.of(context).colorScheme.primary; // Use theme primary color
+        break;
+      case MessageStatus.queued:
+        icon = Icons.schedule_send;
+        color = Colors.orange; // Orange for queued
         break;
       case MessageStatus.failed:
         icon = Icons.error_outline;

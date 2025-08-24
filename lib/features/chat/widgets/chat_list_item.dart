@@ -190,19 +190,18 @@ class ChatListItem extends StatelessWidget {
                               conversation.lastMessagePreview!.isNotEmpty)
                             Row(
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    conversation.lastMessagePreview!.length > 30
-                                        ? '${conversation.lastMessagePreview!.substring(0, 30)}...'
-                                        : conversation.lastMessagePreview!,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                Text(
+                                  conversation.lastMessagePreview!.length > 30
+                                      ? '${conversation.lastMessagePreview!.substring(0, 30)}...'
+                                      : conversation.lastMessagePreview!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
+
                                 const SizedBox(width: 8),
                                 // Show message status for outgoing messages
                                 if (conversation.lastMessageId != null)
@@ -363,7 +362,7 @@ class ChatListItem extends StatelessWidget {
               if (message.senderId == currentUserId) {
                 return Container(
                   margin: const EdgeInsets.only(left: 4),
-                  child: _buildStatusIcon(message.status),
+                  child: _buildStatusIcon(message.status ?? MessageStatus.sent),
                 );
               }
             }
@@ -411,6 +410,10 @@ class ChatListItem extends StatelessWidget {
     Color color;
 
     switch (status) {
+      case MessageStatus.pending:
+        icon = Icons.schedule;
+        color = Colors.orange;
+        break;
       case MessageStatus.sending:
         icon = Icons.schedule;
         color = Colors.grey[500]!;
@@ -426,6 +429,10 @@ class ChatListItem extends StatelessWidget {
       case MessageStatus.read:
         icon = Icons.done_all;
         color = Colors.blue;
+        break;
+      case MessageStatus.queued:
+        icon = Icons.schedule_send;
+        color = Colors.orange;
         break;
       case MessageStatus.failed:
         icon = Icons.error_outline;
