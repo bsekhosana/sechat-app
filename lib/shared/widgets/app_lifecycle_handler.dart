@@ -5,7 +5,7 @@ import '../../core/services/se_session_service.dart';
 import '../../core/services/se_socket_service.dart';
 import '../../features/chat/services/message_storage_service.dart';
 import '../../core/services/app_state_service.dart';
-import '../../features/notifications/services/notification_manager_service.dart';
+
 import '../../core/services/ui_service.dart';
 import '../../realtime/realtime_service_manager.dart';
 
@@ -110,9 +110,9 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
     // Check notification permissions on resume (silent, no UI feedback)
     try {
-      await NotificationManagerService().checkNotificationPermissions();
+      // Notification permissions are now handled by LocalNotificationBadgeService
       print(
-          '🔌 AppLifecycleHandler: ✅ Notification permissions checked silently');
+          '🔌 AppLifecycleHandler: ✅ Notification permissions handled by new system');
     } catch (e) {
       print(
           '🔌 AppLifecycleHandler: ⚠️ Could not check notification permissions: $e');
@@ -143,9 +143,9 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
       // Silent permission check when going to background (no test notifications)
       try {
-        await NotificationManagerService().checkNotificationPermissions();
+        // Notification permissions are now handled by LocalNotificationBadgeService
         print(
-            '🔌 AppLifecycleHandler: ✅ Permissions checked when going to background');
+            '🔌 AppLifecycleHandler: ✅ Permissions handled by new system when going to background');
       } catch (e) {
         print(
             '🔌 AppLifecycleHandler: ⚠️ Could not check permissions when going to background: $e');

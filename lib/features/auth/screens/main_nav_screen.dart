@@ -19,7 +19,8 @@ import '../../settings/screens/settings_screen.dart';
 import '../../chat/screens/chat_list_screen.dart';
 import '../../key_exchange/providers/key_exchange_request_provider.dart';
 import '../../chat/providers/chat_list_provider.dart';
-import '../../notifications/services/notification_manager_service.dart';
+
+import '../../notifications/services/local_notification_badge_service.dart';
 import 'package:sechat_app/main.dart' show updateCurrentScreenIndex;
 import 'package:sechat_app/shared/widgets/global_socket_status_banner.dart';
 
@@ -198,10 +199,13 @@ Download now and let's chat securely!
       final pendingKeyExchangeCount =
           keyExchangeProvider.receivedRequests.length;
 
-      // Update notification count from NotificationManagerService
-      final notificationManager = NotificationManagerService();
+      // Update notification count from LocalNotificationBadgeService
+      final localNotificationBadgeService = LocalNotificationBadgeService();
       final unreadNotificationsCount =
-          await notificationManager.getUnreadCount();
+          await localNotificationBadgeService.getUnreadCount();
+
+      print(
+          '🔔 MainNavScreen: 📱 Local notification count: $unreadNotificationsCount');
 
       // Update indicator service
       indicatorService.updateCounts(

@@ -37,7 +37,8 @@ import 'core/services/ui_service.dart';
 import 'core/services/presence_manager.dart';
 import 'core/services/contact_service.dart';
 import 'core/services/app_lifecycle_manager.dart';
-import 'features/notifications/services/notification_manager_service.dart';
+import 'features/notifications/services/local_notification_items_service.dart';
+import 'features/notifications/services/local_notification_badge_service.dart';
 import 'realtime/realtime_service_manager.dart';
 import 'realtime/realtime_test.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
@@ -46,7 +47,7 @@ import 'core/services/encryption_service.dart';
 import 'package:sechat_app/shared/providers/socket_status_provider.dart';
 import 'package:sechat_app/core/services/network_service.dart';
 import 'package:sechat_app/core/services/unified_message_service.dart';
-import 'package:sechat_app/core/services/socket_notification_service.dart';
+
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 
 // Global navigator key to access context from anywhere
@@ -110,8 +111,20 @@ Future<void> main() async {
     LocalStorageService.instance.initialize(),
     SeSharedPreferenceService().initialize(),
     MessageStorageService.instance.initialize(),
-    NotificationManagerService().initialize(),
   ]);
+
+  // Initialize local notification services
+  try {
+    final localNotificationService = LocalNotificationItemsService();
+    final localNotificationBadgeService = LocalNotificationBadgeService();
+
+    // Force reset any old notification counts first
+    await localNotificationBadgeService.forceResetAndReinitialize();
+
+    print('🔌 Main: ✅ Local notification services initialized successfully');
+  } catch (e) {
+    print('🔌 Main: ⚠️ Failed to initialize local notification services: $e');
+  }
 
   // Initialize presence management system
   try {
@@ -282,21 +295,20 @@ Future<void> main() async {
 }
 
 /// Show push notification for received message
-void _showMessageNotification(String senderName, String messageId) {
+Future<void> _showMessageNotification(
+    String senderName, String messageId) async {
   try {
-    // Use NotificationManagerService to show the notification
-    final notificationManager = NotificationManagerService();
+    // Show notification using our new local notification system
+    final localNotificationBadgeService = LocalNotificationBadgeService();
 
-    notificationManager.createCustomNotification(
-      type: 'message_received',
+    await localNotificationBadgeService.showKerNotification(
       title: senderName,
-      message: 'Has sent you an encrypted message',
-      senderId: null, // We don't have sender ID in this context
-      recipientId: null,
-      conversationId: null,
-      messageId: messageId,
-      metadata: {
+      body: 'Has sent you an encrypted message',
+      type: 'message_received',
+      payload: {
         'notificationType': 'encrypted_message',
+        'senderName': senderName,
+        'messageId': messageId,
         'timestamp': DateTime.now().toIso8601String(),
       },
     );
@@ -1047,6 +1059,19 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         // Set up presence system for the new session
         presenceManager.onSessionRegistered();
 
+        // Create welcome notification for the new user
+        try {
+          final sessionId = data['sessionId'] as String?;
+          if (sessionId != null) {
+            final notificationService = LocalNotificationItemsService();
+            await notificationService.createWelcomeNotification(sessionId);
+            print(
+                '🔌 Main: ✅ Welcome notification created for new user: $sessionId');
+          }
+        } catch (e) {
+          print('🔌 Main: ⚠️ Failed to create welcome notification: $e');
+        }
+
         print('🔌 Main: ✅ Presence system initialized for new session');
       } catch (e) {
         print('🔌 Main: ⚠️ Failed to initialize presence system: $e');
@@ -1084,7 +1109,7 @@ class SeChatApp extends StatelessWidget {
     UIService().attachNavigatorKey(navigatorKey);
 
     // Set navigator key for notification deep linking
-    NotificationManagerService.setNavigatorKey(navigatorKey);
+    // Navigator key is set globally, no need for NotificationManagerService
 
     return AppLifecycleHandler(
       child: MaterialApp(

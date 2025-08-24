@@ -7,7 +7,9 @@ import 'package:sechat_app/core/services/key_exchange_service.dart';
 import 'package:sechat_app/core/services/ui_service.dart';
 import 'package:sechat_app/core/services/encryption_service.dart';
 import 'package:sechat_app/features/chat/providers/session_chat_provider.dart';
-import 'package:sechat_app/features/notifications/services/notification_manager_service.dart';
+import 'package:sechat_app/features/notifications/services/local_notification_badge_service.dart';
+import 'package:sechat_app/core/services/contact_service.dart';
+
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 
 class SeSocketService {
@@ -98,18 +100,22 @@ class SeSocketService {
       print(
           '🔌 SeSocketService: 🔔 Creating notification for event: $eventType');
 
-      // Use NotificationManagerService to create the notification
-      final notificationManager = NotificationManagerService();
+      // Use new local notification system
+      final localNotificationBadgeService = LocalNotificationBadgeService();
 
-      await notificationManager.createCustomNotification(
-        type: eventType,
+      await localNotificationBadgeService.showKerNotification(
         title: title,
-        message: body,
-        senderId: senderId,
-        recipientId: _sessionId,
-        conversationId: conversationId,
-        messageId: messageId,
-        metadata: metadata,
+        body: body,
+        type: eventType,
+        payload: {
+          'type': eventType,
+          'senderId': senderId,
+          'recipientId': _sessionId,
+          'conversationId': conversationId,
+          'messageId': messageId,
+          'metadata': metadata,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
       );
 
       print('🔌 SeSocketService: ✅ Notification created for event: $eventType');
@@ -464,7 +470,8 @@ class SeSocketService {
       await _createSocketEventNotification(
         eventType: 'key_exchange:request',
         title: 'Key Exchange Request',
-        body: 'New key exchange request received',
+        body:
+            'You received a key exchange request to start a secure conversation.',
         senderId: data['senderId']?.toString(),
         senderName: data['senderName']?.toString(),
         conversationId: data['conversationId']?.toString(),
@@ -673,21 +680,6 @@ class SeSocketService {
     _socket!.on('message:received', (data) async {
       print('💬 SeSocketService: Message received');
 
-      // Create notification for message received (only if not silent)
-      final bool silent = data['silent'] ?? false;
-      if (!silent) {
-        await _createSocketEventNotification(
-          eventType: 'message:received',
-          title: 'New Message',
-          body: 'New message received',
-          senderId: data['fromUserId']?.toString(),
-          conversationId: data['conversationId']?.toString(),
-          messageId: data['messageId']?.toString(),
-          metadata: data,
-          silent: silent,
-        );
-      }
-
       if (onMessageReceived != null) {
         onMessageReceived!(
           data['messageId'] ?? '',
@@ -893,18 +885,7 @@ class SeSocketService {
       if (silent) {
         // Silent updates still need to update the UI
         print('⌨️ SeSocketService: 🔔 Silent typing update - updating UI only');
-      } else {
-        // Create notification for non-silent typing status updates
-        await _createSocketEventNotification(
-          eventType: 'typing:status_update',
-          title: isTyping ? 'User Typing' : 'User Stopped Typing',
-          body: isTyping ? 'User is typing...' : 'User stopped typing',
-          senderId: fromUserId,
-          conversationId: conversationId,
-          metadata: data,
-          silent: silent,
-        );
-      }
+      } else {}
     });
 
     _socket!.on('contacts:removed', (data) async {
@@ -940,18 +921,6 @@ class SeSocketService {
 
       // Create notification for typing update (only if not silent)
       final bool silent = data['silent'] ?? false;
-      if (!silent) {
-        final bool isTyping = data['isTyping'] ?? false;
-        await _createSocketEventNotification(
-          eventType: 'typing:update',
-          title: isTyping ? 'User Typing' : 'User Stopped Typing',
-          body: isTyping ? 'User is typing...' : 'User stopped typing',
-          senderId: data['fromUserId']?.toString(),
-          conversationId: data['conversationId']?.toString(),
-          metadata: data,
-          silent: silent,
-        );
-      }
 
       // CRITICAL: Only call typing callback if we should show the typing indicator
       final currentSessionId = _sessionId;
@@ -1507,7 +1476,20 @@ class SeSocketService {
     // Map the existing callback to the new format
     if (callback != null) {
       onMessageReceived = (messageId, fromUserId, conversationId, body) {
-        callback(fromUserId, '', body, conversationId, messageId);
+        // Try to get sender name from contact service or use userId as fallback
+        String senderName = fromUserId; // Default to userId
+
+        try {
+          // Get contact display name from contact service
+          final contact = ContactService.instance.getContact(fromUserId);
+          if (contact != null && contact.displayName != null) {
+            senderName = contact.displayName!;
+          }
+        } catch (e) {
+          print('🔌 SeSocketService: ⚠️ Could not get sender name: $e');
+        }
+
+        callback(fromUserId, senderName, body, conversationId, messageId);
       };
     }
   }

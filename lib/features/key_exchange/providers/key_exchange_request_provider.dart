@@ -8,7 +8,8 @@ import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:sechat_app/core/services/ui_service.dart';
 import 'package:sechat_app/core/utils/guid_generator.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
-import 'package:sechat_app/features/notifications/services/notification_manager_service.dart';
+
+import 'package:sechat_app/features/notifications/services/local_notification_items_service.dart';
 import 'package:sechat_app/shared/models/key_exchange_request.dart';
 import 'dart:convert'; // Added for base64 decoding
 import 'package:flutter/material.dart'; // Added for ScaffoldMessenger
@@ -127,24 +128,6 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     }
   }
 
-  /// Add notification item for key exchange activities
-  Future<void> _addNotificationItem(String title, String body, String type,
-      Map<String, dynamic>? data) async {
-    try {
-      // Create notification through NotificationManagerService
-      await NotificationManagerService().createKeyExchangeNotification(
-        type: type,
-        senderId: data?['sender_id'] ?? data?['recipient_id'] ?? 'unknown',
-        senderName: title,
-        message: body,
-        metadata: data,
-      );
-      print('🔑 KeyExchangeRequestProvider: ✅ Notification created: $title');
-    } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: ❌ Error creating notification: $e');
-    }
-  }
-
   /// Send a key exchange request to another user
   Future<bool> sendKeyExchangeRequest(
     String recipientSessionId, {
@@ -242,18 +225,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Notify about new items for badge indicators
       _notifyNewItems();
 
-      // Add notification item for sent request
-      await _addNotificationItem(
-        'Key Exchange Request Sent',
-        'Request sent to establish secure connection',
-        'key_exchange_sent',
-        {
-          'request_id': request.id,
-          'recipient_id': recipientSessionId,
-          'request_phrase': requestPhrase,
-          'timestamp': request.timestamp.millisecondsSinceEpoch,
-        },
-      );
+      // Create local notification for sent request
+      try {
+        final notificationService = LocalNotificationItemsService();
+        await notificationService.createKerSentNotification(
+          senderId: currentUserId,
+          recipientId: recipientSessionId,
+          requestPhrase: requestPhrase,
+        );
+        print(
+            '🔑 KeyExchangeRequestProvider: ✅ Local notification created for sent KER');
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+      }
 
       // Send via KeyExchangeService which handles the proper data structure
       final success = await KeyExchangeService.instance.requestKeyExchange(
@@ -396,18 +381,23 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Notify about new items for badge indicators
       _notifyNewItems();
 
-      // Add notification item for received request
-      await _addNotificationItem(
-        'Key Exchange Request Received',
-        'New key exchange request received',
-        'key_exchange_request',
-        {
-          'request_id': request.id,
-          'sender_id': senderId,
-          'request_phrase': requestPhrase,
-          'timestamp': request.timestamp.millisecondsSinceEpoch,
-        },
-      );
+      // Create local notification for received request
+      try {
+        final notificationService = LocalNotificationItemsService();
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null) {
+          await notificationService.createKerReceivedNotification(
+            senderId: senderId,
+            recipientId: currentUserId,
+            requestPhrase: requestPhrase,
+          );
+          print(
+              '🔑 KeyExchangeRequestProvider: ✅ Local notification created for received KER');
+        }
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+      }
 
       // Save to local storage for persistence
       await _saveReceivedRequest(request);
@@ -627,18 +617,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Save the final status
       await _saveReceivedRequest(request);
 
-      // Add notification item for accepted request (recipient's perspective)
-      await _addNotificationItem(
-        'Key Exchange Accepted',
-        'You accepted a key exchange request from ${request.fromSessionId.substring(0, 18)}...',
-        'key_exchange_accepted',
-        {
-          'request_id': request.id,
-          'recipient_id': currentUserId,
-          'sender_id': request.fromSessionId,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
-      );
+      // Create local notification for accepted request
+      try {
+        final notificationService = LocalNotificationItemsService();
+        await notificationService.createKerAcceptedNotification(
+          senderId: request.fromSessionId,
+          recipientId: currentUserId,
+          requestPhrase: request.requestPhrase,
+        );
+        print(
+            '🔑 KeyExchangeRequestProvider: ✅ Local notification created for accepted KER');
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+      }
 
       return true;
     } catch (e) {
@@ -710,18 +702,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Save the final status
       await _saveReceivedRequest(request);
 
-      // Add notification item for declined request (recipient's perspective)
-      await _addNotificationItem(
-        'Key Exchange Declined',
-        'You declined a key exchange request from ${request.fromSessionId.substring(0, 18)}...',
-        'key_exchange_declined',
-        {
-          'request_id': requestId,
-          'recipient_id': currentUserId,
-          'sender_id': request.fromSessionId,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
-      );
+      // Create local notification for declined request
+      try {
+        final notificationService = LocalNotificationItemsService();
+        await notificationService.createKerDeclinedNotification(
+          senderId: request.fromSessionId,
+          recipientId: currentUserId,
+          requestPhrase: request.requestPhrase,
+        );
+        print(
+            '🔑 KeyExchangeRequestProvider: ✅ Local notification created for declined KER');
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+      }
 
       return true;
     } catch (e) {
@@ -757,16 +751,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Save the failed status
       await _saveReceivedRequest(request);
 
-      // Add notification item for failed request
-      await _addNotificationItem(
-        'Key Exchange Failed',
-        'Key exchange request failed',
-        'key_exchange_failed',
-        {
-          'request_id': requestId,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
-      );
+      // Create local notification for failed request
+      try {
+        final notificationService = LocalNotificationItemsService();
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null) {
+          // For failed requests, we'll create a simple notification
+          // This could be enhanced with a specific failed notification type
+          print(
+              '🔑 KeyExchangeRequestProvider: ℹ️ Key exchange request failed - no notification created');
+        }
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+      }
 
       print('🔑 KeyExchangeRequestProvider: ✅ Request marked as failed');
     } catch (e) {
@@ -792,16 +790,23 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Save the reset status
       await _saveReceivedRequest(request);
 
-      // Add notification item for retry
-      await _addNotificationItem(
-        'Key Exchange Retry',
-        'Key exchange request reset for retry',
-        'key_exchange_retry',
-        {
-          'request_id': requestId,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
-      );
+      // Create local notification for retry
+      try {
+        final notificationService = LocalNotificationItemsService();
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null) {
+          await notificationService.createKerResentNotification(
+            senderId: currentUserId,
+            recipientId: request.toSessionId,
+            requestPhrase: request.requestPhrase,
+          );
+          print(
+              '🔑 KeyExchangeRequestProvider: ✅ Local notification created for retry KER');
+        }
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+      }
 
       print('🔑 KeyExchangeRequestProvider: ✅ Request reset for retry');
       return true;
@@ -850,17 +855,23 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         // Save updated request to storage
         await _saveUpdatedRequest(updatedRequest);
 
-        // Add notification item
-        _addNotificationItem(
-          'Key Exchange Request Resent',
-          'Request resent successfully',
-          'key_exchange_resent',
-          {
-            'request_id': requestId,
-            'recipient_id': request.toSessionId,
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          },
-        );
+        // Create local notification for resent request
+        try {
+          final notificationService = LocalNotificationItemsService();
+          final currentUserId = SeSessionService().currentSessionId;
+          if (currentUserId != null) {
+            await notificationService.createKerResentNotification(
+              senderId: currentUserId,
+              recipientId: request.toSessionId,
+              requestPhrase: request.requestPhrase,
+            );
+            print(
+                '🔑 KeyExchangeRequestProvider: ✅ Local notification created for resent KER');
+          }
+        } catch (e) {
+          print(
+              '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+        }
 
         print('🔑 KeyExchangeRequestProvider: ✅ Request resent successfully');
         return true;
@@ -988,17 +999,23 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       print(
           '🔑 KeyExchangeRequestProvider: ✅ Key exchange request marked as declined');
 
-      // Add notification item for declined request
-      _addNotificationItem(
-        'Key Exchange Declined',
-        'Your key exchange request was declined',
-        'key_exchange_declined',
-        {
-          'request_id': requestId,
-          'recipient_id': recipientId,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
-      );
+      // Create local notification for declined request (sender's perspective)
+      try {
+        final notificationService = LocalNotificationItemsService();
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null) {
+          await notificationService.createKerDeclinedNotification(
+            senderId: currentUserId,
+            recipientId: recipientId,
+            requestPhrase: request.requestPhrase,
+          );
+          print(
+              '🔑 KeyExchangeRequestProvider: ✅ Local notification created for declined KER (sender)');
+        }
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+      }
     } catch (e) {
       print('🔑 KeyExchangeRequestProvider: Error processing decline: $e');
     }

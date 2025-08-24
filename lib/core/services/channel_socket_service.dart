@@ -7,8 +7,9 @@ import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/key_exchange_service.dart';
 import 'package:sechat_app/core/services/encryption_service.dart';
 import 'package:sechat_app/features/chat/services/enhanced_chat_encryption_service.dart';
-import 'package:sechat_app/features/notifications/services/notification_manager_service.dart';
+
 import 'package:sechat_app/core/services/app_state_service.dart';
+import 'package:sechat_app/features/notifications/services/local_notification_badge_service.dart';
 import 'package:sechat_app/core/services/ui_service.dart';
 import 'package:sechat_app/realtime/realtime_service_manager.dart';
 
@@ -44,8 +45,8 @@ class ChannelSocketService {
   Stream<bool> get connectionStateStream => _connectionStateController.stream;
 
   // Notification manager
-  final NotificationManagerService _notificationManager =
-      NotificationManagerService();
+  final LocalNotificationBadgeService _notificationManager =
+      LocalNotificationBadgeService();
 
   // Dynamic event listeners management
   final Map<String, List<String>> _activeListeners = {};
@@ -163,12 +164,6 @@ class ChannelSocketService {
       _isConnecting = false;
       _reconnectAttempts = 0;
       _connectionStateController.add(_isConnected);
-
-      // Create connection notification
-      _notificationManager.createConnectionNotification(
-        event: 'connected',
-        message: 'Real-time connection established',
-      );
     });
 
     _socket!.on('disconnect', (data) {
@@ -180,12 +175,6 @@ class ChannelSocketService {
       refreshConnectionStatus();
 
       _scheduleReconnect();
-
-      // Create disconnection notification
-      _notificationManager.createConnectionNotification(
-        event: 'disconnected',
-        message: 'Connection lost, attempting to reconnect...',
-      );
     });
 
     _socket!.on('connect_error', (error) {
@@ -198,12 +187,6 @@ class ChannelSocketService {
       refreshConnectionStatus();
 
       _scheduleReconnect();
-
-      // Create connection error notification
-      _notificationManager.createConnectionNotification(
-        event: 'error',
-        message: 'Connection error occurred: $error',
-      );
     });
 
     // Session events
@@ -401,13 +384,21 @@ class ChannelSocketService {
 
           // Create notification if app is in background
           if (!AppStateService().isForeground) {
-            _notificationManager.createMessageNotification(
-              senderId: contactSessionId,
-              senderName: decryptedData['sender_name'] ?? contactSessionId,
-              message: content,
-              conversationId: conversationId,
-              messageId: messageId,
-              metadata: Map<String, dynamic>.from(decryptedData),
+            _notificationManager.showKerNotification(
+              title:
+                  'New Message from ${decryptedData['sender_name'] ?? contactSessionId}',
+              body: content,
+              type: 'new_message',
+              payload: {
+                'type': 'new_message',
+                'senderId': contactSessionId,
+                'senderName': decryptedData['sender_name'] ?? contactSessionId,
+                'message': content,
+                'conversationId': conversationId,
+                'messageId': messageId,
+                'metadata': Map<String, dynamic>.from(decryptedData),
+                'timestamp': DateTime.now().toIso8601String(),
+              },
             );
           }
         }
@@ -884,9 +875,14 @@ class ChannelSocketService {
     disconnect();
 
     // Notify UI about session expiration
-    _notificationManager.createConnectionNotification(
-      event: 'session_expired',
-      message: 'Session expired, please log in again',
+    _notificationManager.showKerNotification(
+      title: 'Session Expired',
+      body: 'Session expired, please log in again',
+      type: 'session_expired',
+      payload: {
+        'event': 'session_expired',
+        'timestamp': DateTime.now().toIso8601String(),
+      },
     );
   }
 
@@ -896,9 +892,14 @@ class ChannelSocketService {
     disconnect();
 
     // Notify UI about invalid session
-    _notificationManager.createConnectionNotification(
-      event: 'session_invalid',
-      message: 'Invalid session, please log in again',
+    _notificationManager.showKerNotification(
+      title: 'Invalid Session',
+      body: 'Invalid session, please log in again',
+      type: 'session_invalid',
+      payload: {
+        'event': 'session_invalid',
+        'timestamp': DateTime.now().toIso8601String(),
+      },
     );
   }
 

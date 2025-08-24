@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/indicator_service.dart';
-import 'package:sechat_app/features/notifications/models/socket_notification.dart';
-import 'package:sechat_app/features/notifications/services/notification_database_service.dart';
+import '../models/local_notification_item.dart';
+import '../models/notification_icons.dart';
+import '../services/local_notification_items_service.dart';
+import '../services/local_notification_badge_service.dart';
+import '../widgets/notification_action_screen.dart';
 
-/// Notifications screen
-/// Shows notifications from the database (socket events are now handled by ChannelSocketService)
+/// Local Notifications Screen
+/// Shows local notification items from the new database system
 class SocketNotificationsScreen extends StatefulWidget {
   const SocketNotificationsScreen({Key? key}) : super(key: key);
 
@@ -15,24 +18,18 @@ class SocketNotificationsScreen extends StatefulWidget {
 }
 
 class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
-  final NotificationDatabaseService _databaseService =
-      NotificationDatabaseService();
-  List<SocketNotification> _notifications = [];
+  final LocalNotificationItemsService _notificationService =
+      LocalNotificationItemsService();
+  final LocalNotificationBadgeService _badgeService =
+      LocalNotificationBadgeService();
+
+  List<LocalNotificationItem> _notifications = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadNotifications();
-
-    // Listen for new notifications
-    _databaseService.getNotifications().then((notifications) {
-      if (mounted) {
-        setState(() {
-          _notifications = notifications;
-        });
-      }
-    });
   }
 
   Future<void> _loadNotifications() async {
@@ -41,8 +38,8 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
     });
 
     try {
-      // Load notifications from database
-      final notifications = await _databaseService.getNotifications(limit: 100);
+      // Load notifications from the new database
+      final notifications = await _notificationService.getAllNotifications();
 
       setState(() {
         _notifications = notifications;
@@ -53,9 +50,48 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
         _isLoading = false;
       });
       if (mounted) {
+        print('❌ SocketNotificationsScreen: Failed to load notifications: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to load notifications: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: _loadNotifications,
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _clearAllNotifications() async {
+    try {
+      await _badgeService.clearAllAndUpdateBadge();
+
+      setState(() {
+        _notifications.clear();
+      });
+
+      // Clear indicators in the service
+      final indicatorService = context.read<IndicatorService>();
+      indicatorService.clearNotificationIndicator();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All notifications cleared'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to clear notifications: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -63,31 +99,38 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
     }
   }
 
-  void _markAsRead(String notificationId) {
-    setState(() {
-      final notificationIndex =
-          _notifications.indexWhere((n) => n.id == notificationId);
-      if (notificationIndex != -1) {
-        _notifications[notificationIndex] =
-            _notifications[notificationIndex].copyWith(isRead: true);
+  void _showNotificationAction(LocalNotificationItem notification) async {
+    // Automatically mark as read when showing the action screen
+    if (notification.status == 'unread') {
+      try {
+        await _badgeService.markAsReadAndUpdateBadge(notification.id);
+
+        // Update local state
+        setState(() {
+          final index =
+              _notifications.indexWhere((n) => n.id == notification.id);
+          if (index != -1) {
+            _notifications[index] =
+                _notifications[index].copyWith(status: 'read');
+          }
+        });
+      } catch (e) {
+        print(
+            '❌ SocketNotificationsScreen: Failed to mark notification as read: $e');
       }
-    });
+    }
 
-    // Mark as read in database
-    _databaseService.markAsRead(notificationId);
-  }
-
-  void _clearAllNotifications() async {
-    setState(() {
-      _notifications.clear();
-    });
-
-    // Clear all notifications from database
-    await _databaseService.clearAllNotifications();
-
-    // Clear indicators in the service
-    final indicatorService = context.read<IndicatorService>();
-    indicatorService.clearNotificationIndicator();
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => NotificationActionScreen(
+        notification: notification,
+        onNotificationRead: () {
+          // Refresh the list after marking as read
+          _loadNotifications();
+        },
+      ),
+    );
   }
 
   @override
@@ -103,7 +146,7 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
+                  color: Colors.grey.withValues(alpha: 0.1),
                   spreadRadius: 1,
                   blurRadius: 3,
                   offset: const Offset(0, 1),
@@ -190,16 +233,29 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
                         itemCount: _notifications.length,
                         itemBuilder: (context, index) {
                           final notification = _notifications[index];
-                          final isRead = notification.isRead;
+                          final isUnread = notification.status == 'unread';
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
+                              border: isUnread
+                                  ? Border.all(
+                                      color: const Color(0xFFFF6B35)
+                                          .withValues(alpha: 0.3),
+                                      width: 2,
+                                    )
+                                  : Border.all(
+                                      color: Colors.grey.withValues(alpha: 0.2),
+                                      width: 1,
+                                    ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.grey.withOpacity(0.1),
+                                  color: isUnread
+                                      ? const Color(0xFFFF6B35)
+                                          .withValues(alpha: 0.1)
+                                      : Colors.grey.withValues(alpha: 0.1),
                                   spreadRadius: 1,
                                   blurRadius: 3,
                                   offset: const Offset(0, 1),
@@ -212,71 +268,99 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: isRead
-                                      ? Colors.grey[300]
-                                      : const Color(0xFFFF6B35),
+                                  color: isUnread
+                                      ? const Color(0xFFFF6B35)
+                                      : Colors.grey[300],
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Center(
-                                  child: Text(
-                                    notification.notificationIcon,
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      color: isRead
-                                          ? Colors.grey[600]
-                                          : Colors.white,
-                                    ),
-                                    textAlign: TextAlign.center,
+                                  child: Icon(
+                                    NotificationIcons.getIconFromName(
+                                        notification.icon),
+                                    color: isUnread
+                                        ? Colors.white
+                                        : Colors.grey[600],
+                                    size: 20,
                                   ),
                                 ),
                               ),
                               title: Text(
                                 notification.title,
                                 style: TextStyle(
-                                  fontWeight: isRead
-                                      ? FontWeight.normal
-                                      : FontWeight.bold,
-                                  color:
-                                      isRead ? Colors.grey[600] : Colors.black,
+                                  fontWeight: isUnread
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isUnread
+                                      ? Colors.black
+                                      : Colors.grey[600],
                                 ),
                               ),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const SizedBox(height: 4),
-                                  Text(
-                                    notification.message,
-                                    style: TextStyle(
-                                      color: isRead
-                                          ? Colors.grey[500]
-                                          : Colors.grey[700],
+                                  if (notification.description != null)
+                                    Text(
+                                      notification.description!,
+                                      style: TextStyle(
+                                        color: isUnread
+                                            ? Colors.grey[700]
+                                            : Colors.grey[500],
+                                      ),
                                     ),
-                                  ),
                                   const SizedBox(height: 8),
-                                  Text(
-                                    notification.age,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[500],
-                                    ),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.access_time,
+                                        size: 12,
+                                        color: Colors.grey[500],
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _formatTimestamp(notification.date),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[500],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _getDirectionColor(
+                                              notification.direction),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          notification.direction,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
-                              trailing: !isRead
-                                  ? IconButton(
-                                      onPressed: () =>
-                                          _markAsRead(notification.id),
-                                      icon: const Icon(
-                                        Icons.check_circle_outline,
+                              trailing: isUnread
+                                  ? Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
                                         color: Color(0xFFFF6B35),
+                                        shape: BoxShape.circle,
                                       ),
                                     )
                                   : null,
-                              onTap: () {
-                                if (!isRead) {
-                                  _markAsRead(notification.id);
-                                }
-                              },
+                              onTap: () =>
+                                  _showNotificationAction(notification),
                             ),
                           );
                         },
@@ -287,26 +371,20 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
     );
   }
 
-  IconData _getNotificationIcon(String? type) {
-    switch (type) {
-      case 'message':
-        return Icons.message;
-      case 'key_exchange':
-        return Icons.key;
-      case 'online_status':
-        return Icons.person;
-      case 'error':
-        return Icons.error;
+  Color _getDirectionColor(String direction) {
+    switch (direction) {
+      case 'incoming':
+        return Colors.blue;
+      case 'outgoing':
+        return Colors.green;
       default:
-        return Icons.info;
+        return Colors.grey;
     }
   }
 
-  String _formatTimestamp(DateTime? timestamp) {
-    if (timestamp == null) return '';
-
+  String _formatTimestamp(DateTime date) {
     final now = DateTime.now();
-    final difference = now.difference(timestamp);
+    final difference = now.difference(date);
 
     if (difference.inMinutes < 1) {
       return 'Just now';

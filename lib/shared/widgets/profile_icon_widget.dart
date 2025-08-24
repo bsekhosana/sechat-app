@@ -324,12 +324,12 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                 // Content - Scrollable
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.only(top: 0, left: 24, right: 24),
                     child: Column(
                       children: [
                         // Menu options container
                         Container(
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.grey[50],
                             borderRadius: BorderRadius.circular(16),
@@ -347,8 +347,8 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                               const SizedBox(height: 16),
                               _buildMenuButton(
                                 icon: Icons.account_circle_outlined,
-                                title: 'Delete Account',
-                                subtitle: 'Permanently delete your account',
+                                title: 'Delete Session',
+                                subtitle: 'Permanently delete your session',
                                 onTap: () => _showDeleteAccountConfirmation(),
                                 isDestructive: true,
                               ),
@@ -474,11 +474,11 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
         title: const Text(
-          'Delete Account',
+          'Delete Session',
           style: TextStyle(color: Colors.black),
         ),
         content: const Text(
-          'Are you sure you want to permanently delete your account? This action cannot be reversed and all your data will be lost.',
+          'Are you sure you want to permanently delete your session? This action cannot be reversed and all your data will be lost.',
           style: TextStyle(color: Colors.grey),
         ),
         actions: [
@@ -492,7 +492,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
               _deleteAccount();
             },
             child: const Text(
-              'Delete Account',
+              'Delete Session',
               style: TextStyle(color: Colors.red),
             ),
           ),

@@ -12,7 +12,7 @@ import 'key_exchange_service.dart';
 import 'indicator_service.dart';
 import 'encryption_service.dart';
 import 'se_socket_service.dart';
-import '../../features/notifications/services/notification_manager_service.dart';
+
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'global_user_service.dart';
@@ -816,9 +816,9 @@ class SeSessionService {
 
       // 9. Clear all notifications
       try {
-        final notificationManager = NotificationManagerService();
-        await notificationManager.clearAllNotifications();
-        print('🗑️ SeSessionService: ✅ All notifications cleared');
+        // NotificationManagerService removed, using new local notification system
+        // Notifications cleared by new local notification system
+        print('🗑️ SeSessionService: ✅ Notifications handled by new system');
       } catch (e) {
         print(
             '🗑️ SeSessionService: ⚠️ Warning - notification cleanup failed: $e');
