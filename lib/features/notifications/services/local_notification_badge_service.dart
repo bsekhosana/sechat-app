@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'local_notification_database_service.dart';
 import '../../../core/services/indicator_service.dart';
+import '../../../main.dart'; // Import to access global navigator key
 
 /// Service for managing local notification badge counts
 class LocalNotificationBadgeService {
@@ -37,9 +40,8 @@ class LocalNotificationBadgeService {
       // Perform initial cleanup
       await _performCleanup();
 
-      // Force reset the indicator service count first to clear any old values
-      final indicatorService = IndicatorService();
-      indicatorService.updateCountsWithContext(unreadNotifications: 0);
+      // Note: Local notification items don't affect app badge counter
+      // App badge is managed separately by push notifications
 
       // Only update badge count if there are actual notifications
       final unreadCount = await getUnreadCount();
@@ -84,6 +86,9 @@ class LocalNotificationBadgeService {
       );
 
       print(
+          '📱 LocalNotificationBadgeService: 🔧 Notification tap handler registered: _onNotificationTapped');
+
+      print(
           '📱 LocalNotificationBadgeService: ✅ Local notifications initialized');
     } catch (e) {
       print(
@@ -95,8 +100,107 @@ class LocalNotificationBadgeService {
   void _onNotificationTapped(NotificationResponse response) {
     print(
         '📱 LocalNotificationBadgeService: 🔔 Notification tapped: ${response.payload}');
-    // Handle navigation based on notification type
-    // This will be implemented based on your navigation needs
+
+    // Handle deep linking based on notification type
+    try {
+      if (response.payload != null) {
+        final payload = response.payload!;
+        print('📱 LocalNotificationBadgeService: 🔍 Parsing payload: $payload');
+
+        // Try to parse as JSON first
+        try {
+          final Map<String, dynamic> payloadMap = jsonDecode(payload);
+          print(
+              '📱 LocalNotificationBadgeService: 🔍 Parsed payload as JSON: $payloadMap');
+
+          if (payloadMap['type'] == 'new_message') {
+            final conversationId = payloadMap['conversationId'] as String?;
+            if (conversationId != null && conversationId.isNotEmpty) {
+              print(
+                  '📱 LocalNotificationBadgeService: 🔍 Found conversation ID: $conversationId');
+              _navigateToChatScreen(conversationId);
+            } else {
+              print(
+                  '📱 LocalNotificationBadgeService: ⚠️ No conversation ID found in payload');
+            }
+          } else if (payloadMap['type'] == 'ker_received') {
+            print(
+                '📱 LocalNotificationBadgeService: 🔍 Navigating to key exchange screen');
+            _navigateToKeyExchangeScreen();
+          }
+        } catch (jsonError) {
+          print(
+              '📱 LocalNotificationBadgeService: 🔍 Payload is not JSON, trying string parsing: $jsonError');
+
+          // Fallback to string parsing for backward compatibility
+          if (payload.contains('type=new_message')) {
+            final conversationId = _extractConversationIdFromPayload(payload);
+            if (conversationId != null) {
+              _navigateToChatScreen(conversationId);
+            }
+          } else if (payload.contains('type=ker_received')) {
+            _navigateToKeyExchangeScreen();
+          }
+        }
+      }
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Error handling notification tap: $e');
+    }
+  }
+
+  /// Extract conversation ID from notification payload
+  String? _extractConversationIdFromPayload(String payload) {
+    try {
+      // Parse payload to extract conversationId
+      if (payload.contains('conversationId=')) {
+        final startIndex =
+            payload.indexOf('conversationId=') + 'conversationId='.length;
+        final endIndex = payload.indexOf(',', startIndex);
+        if (endIndex == -1) {
+          return payload.substring(startIndex);
+        }
+        return payload.substring(startIndex, endIndex);
+      }
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Error extracting conversation ID: $e');
+    }
+    return null;
+  }
+
+  /// Navigate to chat screen with conversation ID
+  void _navigateToChatScreen(String conversationId) {
+    try {
+      // Use the global navigator key from main.dart
+      if (navigatorKey.currentContext != null) {
+        // Navigate to chat screen with conversation ID
+        Navigator.of(navigatorKey.currentContext!).pushNamed(
+          '/chat',
+          arguments: {'conversationId': conversationId},
+        );
+        print(
+            '📱 LocalNotificationBadgeService: ✅ Navigated to chat screen: $conversationId');
+      }
+    } catch (e) {
+      print('📱 LocalNotificationBadgeService: ❌ Error navigating to chat: $e');
+    }
+  }
+
+  /// Navigate to key exchange screen
+  void _navigateToKeyExchangeScreen() {
+    try {
+      // Use the global navigator key from main.dart
+      if (navigatorKey.currentContext != null) {
+        // Navigate to key exchange screen
+        Navigator.of(navigatorKey.currentContext!).pushNamed('/key-exchange');
+        print(
+            '📱 LocalNotificationBadgeService: ✅ Navigated to key exchange screen');
+      }
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ✅ Navigated to key exchange screen');
+    }
   }
 
   /// Get current unread count
@@ -118,11 +222,8 @@ class LocalNotificationBadgeService {
     try {
       final unreadCount = await getUnreadCount();
 
-      // Update the IndicatorService with the new count
-      final indicatorService = IndicatorService();
-      indicatorService.updateCountsWithContext(
-        unreadNotifications: unreadCount,
-      );
+      // Note: Local notification items don't affect app badge counter
+      // App badge is managed separately by push notifications
 
       print(
           '📱 LocalNotificationBadgeService: ✅ Badge count updated: $unreadCount');
@@ -186,9 +287,8 @@ class LocalNotificationBadgeService {
     try {
       await _databaseService.clearAllNotifications();
 
-      // Force badge count to zero
-      final indicatorService = IndicatorService();
-      indicatorService.updateCountsWithContext(unreadNotifications: 0);
+      // Note: Local notification items don't affect app badge counter
+      // App badge is managed separately by push notifications
 
       print(
           '📱 LocalNotificationBadgeService: ✅ All notifications cleared and badge reset to 0');
@@ -208,9 +308,8 @@ class LocalNotificationBadgeService {
       if (unreadCount > 0) {
         await updateBadgeCount();
       } else {
-        // Ensure badge is cleared if no notifications remain
-        final indicatorService = IndicatorService();
-        indicatorService.updateCountsWithContext(unreadNotifications: 0);
+        // Note: Local notification items don't affect app badge counter
+        // App badge is managed separately by push notifications
       }
 
       print(
@@ -289,12 +388,16 @@ class LocalNotificationBadgeService {
       );
 
       // Show the notification
+      final notificationPayload = payload != null ? jsonEncode(payload) : null;
+      print(
+          '📱 LocalNotificationBadgeService: 🔧 Creating notification with payload: $notificationPayload');
+
       await _localNotifications.show(
         DateTime.now().millisecondsSinceEpoch.remainder(100000),
         title,
         body,
         notificationDetails,
-        payload: payload?.toString(),
+        payload: notificationPayload,
       );
 
       print(
@@ -302,6 +405,50 @@ class LocalNotificationBadgeService {
     } catch (e) {
       print(
           '📱 LocalNotificationBadgeService: ❌ Failed to show KER notification: $e');
+    }
+  }
+
+  /// Reset app icon badge count to 0
+  Future<void> resetBadgeCount() async {
+    try {
+      // Reset badge count on iOS
+      final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: false,
+        presentBadge: true,
+        presentSound: false,
+        badgeNumber: 0, // Set badge to 0
+      );
+
+      // Show a silent notification to update the badge
+      await _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        '', // Empty title
+        '', // Empty body
+        NotificationDetails(iOS: iosDetails),
+        payload: 'badge_reset',
+      );
+
+      // Note: Local notification items don't affect app badge counter
+      // App badge is managed separately by push notifications
+
+      print('📱 LocalNotificationBadgeService: ✅ Badge count reset to 0');
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Failed to reset badge count: $e');
+    }
+  }
+
+  /// Clear all notifications from device notification tray
+  Future<void> clearAllDeviceNotifications() async {
+    try {
+      // Cancel all pending notifications
+      await _localNotifications.cancelAll();
+
+      print(
+          '📱 LocalNotificationBadgeService: ✅ All device notifications cleared from tray');
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Failed to clear device notifications: $e');
     }
   }
 

@@ -6,7 +6,6 @@ import '../models/message.dart';
 import '../providers/chat_list_provider.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/contact_service.dart';
-import '../../../../shared/models/contact.dart';
 
 /// Widget for displaying a single chat conversation item in the list
 class ChatListItem extends StatelessWidget {
@@ -30,11 +29,24 @@ class ChatListItem extends StatelessWidget {
     return Consumer2<ChatListProvider, ContactService>(
       builder: (context, provider, contactService, child) {
         final currentUserId = _getCurrentUserId();
-        final displayName = conversation.getDisplayName(currentUserId);
+        String displayName = conversation.getDisplayName(currentUserId);
+
+        // Check if display name is a session ID and pull from contacts if needed
+        if (displayName.startsWith('session_')) {
+          final otherParticipantId =
+              conversation.getOtherParticipantId(currentUserId);
+          if (otherParticipantId != null) {
+            final contact = contactService.getContact(otherParticipantId);
+            if (contact != null &&
+                contact.displayName != null &&
+                contact.displayName!.isNotEmpty) {
+              displayName = contact.displayName!;
+            }
+          }
+        }
+
         final isTyping = conversation.isTyping;
         final hasUnread = conversation.hasUnreadMessages;
-        final isMuted = conversation.isMuted;
-        final isPinned = conversation.isPinned;
 
         // Get real-time presence information from ContactService
         final otherParticipantId =
@@ -151,14 +163,6 @@ class ChatListItem extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              // Conversation ID (shortened)
-                              Text(
-                                'ID: ${conversation.id.substring(0, 24)}...',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey[500],
-                                ),
-                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -188,7 +192,9 @@ class ChatListItem extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    conversation.lastMessagePreview!,
+                                    conversation.lastMessagePreview!.length > 30
+                                        ? '${conversation.lastMessagePreview!.substring(0, 30)}...'
+                                        : conversation.lastMessagePreview!,
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey[600],
@@ -197,6 +203,7 @@ class ChatListItem extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
+                                const SizedBox(width: 8),
                                 // Show message status for outgoing messages
                                 if (conversation.lastMessageId != null)
                                   _buildMessageStatus(
@@ -238,10 +245,20 @@ class ChatListItem extends StatelessWidget {
                         ],
                       ),
                     ),
-                    // Right side: unread badge and time
+                    // Right side: conversation ID, unread badge and time
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
+                        // Conversation ID (top right)
+                        Text(
+                          'ID: ${conversation.id.substring(0, 20)}...',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Colors.grey[400],
+                          ),
+                          textAlign: TextAlign.end,
+                        ),
+                        const SizedBox(height: 4),
                         // Unread badge
                         if (hasUnread)
                           Container(

@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
-import 'package:provider/provider.dart';
-import '../../core/services/se_session_service.dart';
+import 'dart:async';
 import '../../core/services/se_socket_service.dart';
-import '../../features/chat/services/message_storage_service.dart';
 import '../../core/services/app_state_service.dart';
-
-import '../../core/services/ui_service.dart';
+import '../../features/notifications/services/local_notification_badge_service.dart';
 import '../../realtime/realtime_service_manager.dart';
+import 'package:flutter/services.dart';
 
 class AppLifecycleHandler extends StatefulWidget {
   final Widget child;
@@ -23,10 +21,19 @@ class AppLifecycleHandler extends StatefulWidget {
 
 class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     with WidgetsBindingObserver {
+  DateTime? _lastBadgeReset;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Set up iOS-specific lifecycle event listeners
+    _setupIOSLifecycleHandling();
+
+    // Listen to app focus changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupAppFocusListener();
+    });
   }
 
   @override
@@ -36,15 +43,23 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
   }
 
   @override
+  Widget build(BuildContext context) {
+    return widget.child;
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+
+    print('🔌 AppLifecycleHandler: 🔄 Lifecycle state changed to: $state');
 
     // Track lifecycle state globally
     AppStateService().updateLifecycleState(state);
 
     switch (state) {
       case AppLifecycleState.resumed:
-        print('🔌 AppLifecycleHandler: App resumed - foreground active');
+        print(
+            '🔌 AppLifecycleHandler: 🚀 App resumed - foreground active - calling _handleAppResumed()');
         _handleAppResumed();
         break;
 
@@ -73,7 +88,8 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
   }
 
   void _handleAppResumed() async {
-    print('🔄 AppLifecycleHandler: App resumed, refreshing services...');
+    print(
+        '🔄 AppLifecycleHandler: 🚀 _handleAppResumed() method called - starting badge reset and notification clearing...');
 
     // Reset socket service if it was destroyed
     try {
@@ -107,6 +123,21 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
     // Refresh other services as needed
     // ... existing refresh logic ...
+
+    // Reset app icon badge count to 0 and clear device notification tray
+    try {
+      // Reset badge count to 0
+      await LocalNotificationBadgeService().resetBadgeCount();
+      print('🔌 AppLifecycleHandler: ✅ App icon badge count reset to 0');
+
+      // Clear all notifications from device notification tray
+      await LocalNotificationBadgeService().clearAllDeviceNotifications();
+      print(
+          '🔌 AppLifecycleHandler: ✅ All device notifications cleared from tray');
+    } catch (e) {
+      print(
+          '🔌 AppLifecycleHandler: ⚠️ Could not reset badge/clear notifications: $e');
+    }
 
     // Check notification permissions on resume (silent, no UI feedback)
     try {
@@ -190,6 +221,91 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     }
   }
 
+  /// Set up iOS-specific lifecycle event handling
+  void _setupIOSLifecycleHandling() {
+    // Listen to iOS lifecycle events
+    SystemChannels.lifecycle.setMessageHandler((msg) async {
+      print('🔌 AppLifecycleHandler: 📱 iOS Lifecycle event: $msg');
+
+      switch (msg) {
+        case 'AppLifecycleState.resumed':
+        case 'AppLifecycleState.inactive':
+        case 'AppLifecycleState.paused':
+        case 'AppLifecycleState.detached':
+        case 'AppLifecycleState.hidden':
+          // These are handled by Flutter's lifecycle system
+          break;
+        case 'AppLifecycleState.restartInactive':
+        case 'AppLifecycleState.restartPaused':
+          // iOS-specific events that might indicate app resume
+          print(
+              '🔌 AppLifecycleHandler: 📱 iOS App resume detected, calling _handleAppResumed()');
+          _handleAppResumed();
+          break;
+        default:
+          // Handle other iOS events
+          if (msg?.contains('resume') == true ||
+              msg?.contains('active') == true) {
+            print(
+                '🔌 AppLifecycleHandler: 📱 iOS App resume detected via event: $msg');
+            _handleAppResumed();
+          }
+          break;
+      }
+
+      return null;
+    });
+
+    // Also listen to app state changes via platform channel
+    SystemChannels.platform.setMethodCallHandler((call) async {
+      if (call.method == 'SystemChrome.setSystemUIOverlayStyle') {
+        // This is often called when app becomes active
+        print(
+            '🔌 AppLifecycleHandler: 📱 iOS System UI change detected, app likely resumed');
+        _handleAppResumed();
+      }
+      return null;
+    });
+  }
+
+  /// Set up app focus listener to detect when app becomes active
+  void _setupAppFocusListener() {
+    // Listen to app focus changes
+    WidgetsBinding.instance.addObserver(this);
+
+    // Also use a timer to periodically check if app is active
+    Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        // App is active, check if we need to reset badge
+        print(
+            '🔌 AppLifecycleHandler: 📱 App is active, checking if badge reset is needed');
+        _checkAndResetBadgeIfNeeded();
+      }
+    });
+  }
+
+  /// Check if badge reset is needed and perform it
+  void _checkAndResetBadgeIfNeeded() async {
+    try {
+      // Only reset if we haven't done it recently
+      final now = DateTime.now();
+      if (_lastBadgeReset == null ||
+          now.difference(_lastBadgeReset!).inMinutes > 1) {
+        print('🔌 AppLifecycleHandler: 📱 Performing badge reset check');
+        _handleAppResumed();
+        _lastBadgeReset = now;
+      }
+    } catch (e) {
+      print('🔌 AppLifecycleHandler: ❌ Error in badge reset check: $e');
+    }
+  }
+
+  /// Public method to manually trigger badge reset (can be called from other parts of the app)
+  Future<void> manualBadgeReset() async {
+    print('🔌 AppLifecycleHandler: 📱 Manual badge reset requested');
+    _handleAppResumed();
+  }
+
   /// Send online status update via realtime presence service
   Future<void> _sendOnlineStatusUpdate(bool isOnline) async {
     try {
@@ -221,10 +337,5 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       print(
           '🔌 AppLifecycleHandler: ❌ Error sending online status updates: $e');
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
   }
 }

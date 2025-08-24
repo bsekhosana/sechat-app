@@ -296,7 +296,7 @@ Future<void> main() async {
 
 /// Show push notification for received message
 Future<void> _showMessageNotification(
-    String senderName, String messageId) async {
+    String senderName, String messageId, String conversationId) async {
   try {
     // Show notification using our new local notification system
     final localNotificationBadgeService = LocalNotificationBadgeService();
@@ -306,9 +306,10 @@ Future<void> _showMessageNotification(
       body: 'Has sent you an encrypted message',
       type: 'message_received',
       payload: {
-        'notificationType': 'encrypted_message',
+        'type': 'new_message',
         'senderName': senderName,
         'messageId': messageId,
+        'conversationId': conversationId,
         'timestamp': DateTime.now().toIso8601String(),
       },
     );
@@ -369,7 +370,8 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             '🔌 Main: ✅ Incoming message saved to database via UnifiedMessageService');
 
         // Show push notification with sender name and generic body
-        _showMessageNotification(senderName, messageId);
+        _showMessageNotification(
+            senderName, messageId, actualConversationId ?? '');
 
         // CRITICAL: Update conversation with new message and decrypt preview
         WidgetsBinding.instance.addPostFrameCallback((_) {

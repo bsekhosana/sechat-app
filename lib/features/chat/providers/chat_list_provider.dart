@@ -1389,6 +1389,28 @@ class ChatListProvider extends ChangeNotifier {
     super.dispose();
   }
 
+  /// Refresh chat list order based on latest message times
+  void refreshChatListOrder() {
+    try {
+      // Sort conversations by last message time (newest first)
+      _conversations.sort((a, b) {
+        final aTime = a.lastMessageAt ?? a.createdAt;
+        final bTime = b.lastMessageAt ?? b.createdAt;
+        return bTime.compareTo(aTime);
+      });
+
+      // Apply search filter
+      _applySearchFilter();
+
+      // Notify listeners to update UI
+      notifyListeners();
+
+      print('📱 ChatListProvider: ✅ Chat list order refreshed');
+    } catch (e) {
+      print('📱 ChatListProvider: ❌ Error refreshing chat list order: $e');
+    }
+  }
+
   /// Handle incoming message notification
   Future<void> handleIncomingMessage({
     required String senderId,
@@ -1563,7 +1585,7 @@ class ChatListProvider extends ChangeNotifier {
             '📱 ChatListProvider: ✅ Created new conversation with decrypted preview');
       }
 
-      // Sort conversations by last message time
+      // Sort conversations by last message time (newest first)
       _conversations.sort((a, b) {
         final aTime = a.lastMessageAt ?? a.createdAt;
         final bTime = b.lastMessageAt ?? b.createdAt;
@@ -1573,8 +1595,11 @@ class ChatListProvider extends ChangeNotifier {
       // Apply search filter
       _applySearchFilter();
 
-      // Notify listeners
+      // Notify listeners to update UI
       notifyListeners();
+
+      print(
+          '📱 ChatListProvider: ✅ Chat list reordered - conversation moved to top');
 
       print(
           '📱 ChatListProvider: ✅ Incoming message handled successfully with decryption');
