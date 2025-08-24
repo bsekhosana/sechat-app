@@ -428,7 +428,7 @@ class ChatListItem extends StatelessWidget {
         break;
       case MessageStatus.read:
         icon = Icons.done_all;
-        color = Colors.blue;
+        color = Colors.orange;
         break;
       case MessageStatus.queued:
         icon = Icons.schedule_send;
