@@ -171,8 +171,8 @@ class SessionChatProvider extends ChangeNotifier {
         _messages.addAll(newMessages);
 
         // Sort messages by timestamp
-        // CRITICAL: Sort messages by timestamp DESCENDING (newest first) for bottom-up display
-        _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        // CRITICAL: Sort messages by timestamp ASCENDING (oldest first) for natural chat flow
+        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
         // Update chat list with new messages
         for (final message in newMessages) {
@@ -998,8 +998,8 @@ class SessionChatProvider extends ChangeNotifier {
       // Add new messages to existing list
       _messages.addAll(newMessages);
 
-      // CRITICAL: Sort messages by timestamp DESCENDING (newest first) for bottom-up display
-      _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      // CRITICAL: Sort messages by timestamp ASCENDING (oldest first) for natural chat flow
+      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
       print(
           '📱 SessionChatProvider: Loaded ${loadedMessages.length} messages for conversation: $conversationId');

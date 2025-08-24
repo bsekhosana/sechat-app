@@ -94,6 +94,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         final chatListProvider =
             Provider.of<ChatListProvider>(context, listen: false);
         chatListProvider.markConversationAsRead(widget.conversationId);
+
+        // CRITICAL: Scroll to bottom after messages are loaded
+        // Use a delay to ensure messages are rendered first
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _scrollToBottom();
+        });
       });
     });
   }
@@ -249,6 +255,23 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   /// Build messages list content
   Widget _buildMessagesListContent(SessionChatProvider provider) {
+    // CRITICAL: Check if we need to auto-scroll for incoming messages
+    _checkAndAutoScrollForIncomingMessages(provider);
+
+    // CRITICAL: Auto-scroll to bottom when messages are first loaded
+    // This ensures the chat opens scrolled to the bottom
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (provider.messages.isNotEmpty && _scrollController.hasClients) {
+        final currentPosition = _scrollController.position.pixels;
+        // Only auto-scroll if we're not already at the bottom
+        if (currentPosition < _scrollController.position.maxScrollExtent - 10) {
+          print(
+              '📱 ChatScreen: 🔄 Auto-scrolling to bottom for initial message load');
+          _scrollToBottom();
+        }
+      }
+    });
+
     // Process messages for display (no decryption at this stage)
     for (var element in provider.messages) {
       try {
@@ -281,11 +304,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   controller: _scrollController,
                   padding:
                       const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
-                  reverse: true, // Show newest messages at the bottom
+                  reverse:
+                      false, // Show messages in normal order (oldest to newest)
                   itemCount: provider.messages.length,
                   itemBuilder: (context, index) {
+                    // Messages are now sorted ASCENDING (oldest first), so display naturally
                     final message = provider.messages[index];
-                    final isLast = index == provider.messages.length - 1;
+                    final isLast = index ==
+                        provider.messages.length -
+                            1; // Last message is at the end
 
                     return MessageBubble(
                       message: message,
@@ -353,7 +380,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       await provider.sendTextMessage(text.trim());
       print('📱 ChatScreen: ✅ provider.sendTextMessage completed successfully');
       _textController.clear();
-      _scrollToBottom();
+
+      // CRITICAL: Scroll to bottom after sending message
+      // Use a small delay to ensure the message is added to the UI
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _scrollToBottom();
+      });
     } catch (e) {
       print('📱 ChatScreen: ❌ Error in _sendTextMessage: $e');
       _showErrorSnackBar('Failed to send message: $e');
@@ -365,14 +397,60 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     provider.updateTypingIndicator(isTyping);
   }
 
+  /// CRITICAL: Check if we need to auto-scroll for incoming messages
+  void _checkAndAutoScrollForIncomingMessages(SessionChatProvider provider) {
+    // Only auto-scroll if we have messages and the user is near the bottom
+    if (provider.messages.isNotEmpty && _scrollController.hasClients) {
+      final currentPosition = _scrollController.position.pixels;
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final isNearBottom =
+          (maxScroll - currentPosition) < 150; // Within 150px of bottom
+
+      // If user is near bottom, auto-scroll for incoming messages
+      if (isNearBottom) {
+        // Check if the latest message is from another user (incoming)
+        final latestMessage =
+            provider.messages.last; // Last because sorted ASCENDING
+        final currentUserId = _getCurrentUserId();
+
+        if (latestMessage.senderId != currentUserId) {
+          // This is an incoming message, auto-scroll to bottom
+          print(
+              '📱 ChatScreen: 🔄 Auto-scrolling for incoming message from ${latestMessage.senderId}');
+          Future.delayed(const Duration(milliseconds: 100), () {
+            _scrollToBottom();
+          });
+        }
+      }
+    }
+  }
+
   /// Scroll to bottom of messages
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentPosition = _scrollController.position.pixels;
+      print(
+          '📱 ChatScreen: 🔄 Scrolling to bottom: current=$currentPosition, max=$maxScroll');
+
+      // Only scroll if we're not already at the bottom
+      if (currentPosition < maxScroll - 10) {
+        _scrollController
+            .animateTo(
+          maxScroll,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        )
+            .then((_) {
+          print('📱 ChatScreen: ✅ Scrolled to bottom successfully');
+        }).catchError((e) {
+          print('📱 ChatScreen: ❌ Error scrolling to bottom: $e');
+        });
+      } else {
+        print('📱 ChatScreen: ℹ️ Already at bottom, no need to scroll');
+      }
+    } else {
+      print('📱 ChatScreen: ⚠️ ScrollController has no clients yet');
     }
   }
 
