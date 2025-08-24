@@ -1105,22 +1105,31 @@ class SessionChatProvider extends ChangeNotifier {
           }
         }
 
-        // CRITICAL: Send delivery receipts for messages that haven't been marked as delivered yet
-        // This ensures the sender gets real-time updates when recipient opens the chat
+        // CRITICAL: Send delivery receipts ONLY for messages from ONLINE recipients
+        // This prevents false "delivered" status for offline users
         final socketService = SeSocketService.instance;
         for (final message in _messages) {
           if (message.recipientId ==
                   currentUserId && // Only messages sent TO me
               message.status != MessageStatus.delivered &&
               message.status != MessageStatus.read) {
-            // Send delivery receipt to update sender's UI in real-time
-            await socketService.sendDeliveryReceipt(
-              recipientId: message.senderId,
-              messageId: message.id,
-            );
+            // Check if the sender is actually online before sending delivery receipt
+            final senderId = message.senderId;
+            final isSenderOnline = await _checkIfUserIsOnline(senderId);
 
-            print(
-                '📬 SessionChatProvider: ✅ Delivery receipt sent for message: ${message.id}');
+            if (isSenderOnline) {
+              // Only send delivery receipt if sender is online and can receive it
+              await socketService.sendDeliveryReceipt(
+                recipientId: message.senderId,
+                messageId: message.id,
+              );
+
+              print(
+                  '📬 SessionChatProvider: ✅ Delivery receipt sent for message: ${message.id} (sender online)');
+            } else {
+              print(
+                  '📬 SessionChatProvider: ⚠️ Skipping delivery receipt for message: ${message.id} (sender offline: $senderId)');
+            }
           }
         }
 
@@ -1183,6 +1192,58 @@ class SessionChatProvider extends ChangeNotifier {
       print('📱 SessionChatProvider: Typing indicator sent: $isTyping');
     } catch (e) {
       print('📱 SessionChatProvider: ❌ Error updating typing indicator: $e');
+    }
+  }
+
+  /// Check if a user is currently online
+  /// For now, we'll be conservative and assume offline to prevent false delivery receipts
+  Future<bool> _checkIfUserIsOnline(String userId) async {
+    try {
+      // CRITICAL: For now, assume all users are offline to prevent false delivery receipts
+      // This ensures messages don't get marked as "delivered" when recipients are offline
+      // TODO: Implement proper presence checking when presence service is available
+
+      print(
+          '📱 SessionChatProvider: 🔍 User $userId online status: assumed offline (conservative approach)');
+      return false; // Assume offline for now
+    } catch (e) {
+      print(
+          '📱 SessionChatProvider: ❌ Error checking online status for user $userId: $e');
+      return false; // Assume offline on error
+    }
+  }
+
+  /// Validate message status update to prevent false delivery status
+  /// This ensures messages are only marked as "delivered" when appropriate
+  bool _validateMessageStatusUpdate(String messageId, MessageStatus newStatus) {
+    try {
+      // Find the message
+      final message = _messages.firstWhere((msg) => msg.id == messageId);
+
+      // CRITICAL: Prevent false "delivered" status for offline recipients
+      if (newStatus == MessageStatus.delivered) {
+        // Check if the recipient (current user) is actually online
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null && message.recipientId == currentUserId) {
+          // This is a message sent TO us, we can mark it as delivered
+          print(
+              '📱 SessionChatProvider: ✅ Valid delivery status update for message: $messageId');
+          return true;
+        } else {
+          // This is a message sent BY us, we should NOT mark it as delivered
+          // unless we receive a proper receipt from the recipient
+          print(
+              '📱 SessionChatProvider: ⚠️ Invalid delivery status update for message: $messageId (sent by us)');
+          return false;
+        }
+      }
+
+      // Other status updates are valid
+      return true;
+    } catch (e) {
+      print(
+          '📱 SessionChatProvider: ❌ Error validating message status update: $e');
+      return false;
     }
   }
 

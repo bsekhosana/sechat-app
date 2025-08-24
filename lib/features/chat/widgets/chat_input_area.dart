@@ -118,6 +118,8 @@ class _ChatInputAreaState extends State<ChatInputArea> {
         ),
       ),
       child: TextField(
+        // text input color grey
+        style: TextStyle(color: Colors.grey[800]),
         controller: _textController,
         focusNode: _focusNode,
         maxLines: null,
