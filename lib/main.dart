@@ -980,8 +980,9 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           senderId: fromUserId,
         );
 
-        chatListProvider.processMessageStatusUpdate(statusUpdate);
-        print('✅ Main: Message delivery status processed successfully');
+        // Use enhanced method with context for better conversation lookup
+        chatListProvider.processMessageStatusUpdateWithContext(statusUpdate);
+        print('✅ Main: Message delivery status processed successfully with enhanced context');
       } catch (e) {
         print('❌ Main: Failed to process message delivery status: $e');
       }
@@ -1007,8 +1008,9 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           senderId: fromUserId,
         );
 
-        chatListProvider.processMessageStatusUpdate(statusUpdate);
-        print('👁️ Main: Message read status processed successfully');
+        // Use enhanced method with context for better conversation lookup
+        chatListProvider.processMessageStatusUpdateWithContext(statusUpdate);
+        print('👁️ Main: Message read status processed successfully with enhanced context');
       } catch (e) {
         print('❌ Main: Failed to process message read status: $e');
       }

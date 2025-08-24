@@ -1105,6 +1105,25 @@ class SessionChatProvider extends ChangeNotifier {
           }
         }
 
+        // CRITICAL: Send delivery receipts for messages that haven't been marked as delivered yet
+        // This ensures the sender gets real-time updates when recipient opens the chat
+        final socketService = SeSocketService.instance;
+        for (final message in _messages) {
+          if (message.recipientId ==
+                  currentUserId && // Only messages sent TO me
+              message.status != MessageStatus.delivered &&
+              message.status != MessageStatus.read) {
+            // Send delivery receipt to update sender's UI in real-time
+            await socketService.sendDeliveryReceipt(
+              recipientId: message.senderId,
+              messageId: message.id,
+            );
+
+            print(
+                '📬 SessionChatProvider: ✅ Delivery receipt sent for message: ${message.id}');
+          }
+        }
+
         // Also mark messages currently in memory as read
         for (final message in _messages) {
           if (message.senderId != _currentRecipientId &&

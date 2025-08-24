@@ -691,15 +691,18 @@ class SeSocketService {
     });
 
     _socket!.on('message:delivered', (data) async {
-      print('✅ SeSocketService: Message delivered');
+      print('✅ SeSocketService: Message delivered to device');
 
-      // Create notification for message delivered (only if not silent)
+      // This event means message reached recipient's device, but NOT necessarily viewed
+      // We should NOT update status to "delivered" yet - wait for receipt:delivered
+
+      // Create notification for message delivered to device (only if not silent)
       final bool silent = data['silent'] ?? false;
       if (!silent) {
         await _createSocketEventNotification(
           eventType: 'message:delivered',
-          title: 'Message Delivered',
-          body: 'Message has been delivered',
+          title: 'Message Delivered to Device',
+          body: 'Message has been delivered to recipient\'s device',
           senderId: data['fromUserId']?.toString(),
           messageId: data['messageId']?.toString(),
           metadata: data,
@@ -707,13 +710,10 @@ class SeSocketService {
         );
       }
 
-      if (onDelivered != null) {
-        onDelivered!(
-          data['messageId'] ?? '',
-          data['fromUserId'] ?? '',
-          data['toUserId'] ?? '',
-        );
-      }
+      // CRITICAL: Don't call onDelivered here - wait for receipt:delivered
+      // This prevents premature "delivered" status updates
+      print(
+          'ℹ️ SeSocketService: Message delivered to device, waiting for receipt:delivered');
     });
 
     _socket!.on('message:read', (data) async {
@@ -837,6 +837,106 @@ class SeSocketService {
           eventType: 'message:status_update',
           title: 'Message Status Update',
           body: 'Message status: $status',
+          senderId: fromUserId,
+          messageId: messageId,
+          conversationId: conversationId,
+          metadata: data,
+          silent: silent,
+        );
+      }
+    });
+
+    // CRITICAL: Handle receipt:delivered events from server
+    _socket!.on('receipt:delivered', (data) async {
+      final String messageId = data['messageId'];
+      final String fromUserId = data['fromUserId'];
+      final String toUserId = data['toUserId'];
+      final String? conversationId = data['conversationId'];
+      final bool silent = data['silent'] ?? true; // Usually silent
+
+      print(
+          '📬 SeSocketService: Receipt delivered: $messageId from $fromUserId to $toUserId (silent: $silent)');
+      print(
+          '📬 SeSocketService: ✅ Recipient has actually processed/viewed the message');
+
+      // Update local message status to 'delivered'
+      _updateMessageStatus(messageId, 'delivered', toUserId,
+          conversationId: conversationId);
+
+      // Call the external callback for delivery confirmation
+      if (onMessageStatusUpdateExternal != null) {
+        onMessageStatusUpdateExternal!(
+          fromUserId,
+          messageId,
+          'delivered',
+          conversationId,
+          toUserId,
+        );
+      }
+
+      // CRITICAL: Also call the onDelivered callback for UI updates
+      if (onDelivered != null) {
+        onDelivered!(messageId, fromUserId, toUserId);
+      }
+
+      // Notify listeners about delivery status change
+      _notifyMessageStatusChange(messageId, 'delivered', toUserId);
+
+      // Create notification for delivery confirmation (only if not silent)
+      // if (!silent) {
+      //   await _createSocketEventNotification(
+      //     eventType: 'receipt:delivered',
+      //     title: 'Message Delivered',
+      //     body: 'Message has been delivered to recipient',
+      //     senderId: fromUserId,
+      //     messageId: messageId,
+      //     conversationId: conversationId,
+      //     metadata: data,
+      //     silent: silent,
+      //   );
+      // }
+    });
+
+    // CRITICAL: Handle receipt:read events from server
+    _socket!.on('receipt:read', (data) async {
+      final String messageId = data['messageId'];
+      final String fromUserId = data['fromUserId'];
+      final String toUserId = data['toUserId'];
+      final String? conversationId = data['conversationId'];
+      final bool silent = data['silent'] ?? true; // Usually silent
+
+      print(
+          '👁️ SeSocketService: Receipt read: $messageId from $fromUserId to $toUserId (silent: $silent)');
+
+      // Update local message status to 'read'
+      _updateMessageStatus(messageId, 'read', toUserId,
+          conversationId: conversationId);
+
+      // Call the external callback for read confirmation
+      if (onMessageStatusUpdateExternal != null) {
+        onMessageStatusUpdateExternal!(
+          fromUserId,
+          messageId,
+          'read',
+          conversationId,
+          toUserId,
+        );
+      }
+
+      // CRITICAL: Also call the onRead callback for UI updates
+      if (onRead != null) {
+        onRead!(messageId, fromUserId, toUserId);
+      }
+
+      // Notify listeners about read status change
+      _notifyMessageStatusChange(messageId, 'read', toUserId);
+
+      // Create notification for read confirmation (only if not silent)
+      if (!silent) {
+        await _createSocketEventNotification(
+          eventType: 'receipt:read',
+          title: 'Message Read',
+          body: 'Message has been read by recipient',
           senderId: fromUserId,
           messageId: messageId,
           conversationId: conversationId,
@@ -1840,6 +1940,28 @@ class SeSocketService {
           '🔌 SeSocketService: Message status update sent: $messageId -> $status');
     } catch (e) {
       print('🔌 SeSocketService: ❌ Error sending message status update: $e');
+    }
+  }
+
+  // CRITICAL: Send receipt:delivered when recipient opens chat
+  Future<void> sendDeliveryReceipt({
+    required String recipientId,
+    required String messageId,
+  }) async {
+    if (!isConnected || _sessionId == null) return;
+    try {
+      _socket!.emit('receipt:delivered', {
+        'messageId': messageId,
+        'fromUserId': _sessionId, // We are the recipient
+        'toUserId': recipientId, // Original sender
+        'conversationId': _sessionId,
+        'timestamp': DateTime.now().toIso8601String(),
+        'silent': true, // Usually silent to avoid spam
+      });
+      print(
+          '📬 SeSocketService: Delivery receipt sent: $messageId -> $recipientId');
+    } catch (e) {
+      print('🔌 SeSocketService: ❌ Error sending delivery receipt: $e');
     }
   }
 

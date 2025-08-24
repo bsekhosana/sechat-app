@@ -110,11 +110,6 @@ class _NotificationActionScreenState extends State<NotificationActionScreen>
               ),
             ),
           ),
-
-          // Action buttons
-          _buildActionButtons(),
-
-          const SizedBox(height: 24),
         ],
       ),
     );

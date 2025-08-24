@@ -362,7 +362,7 @@ class ChatListItem extends StatelessWidget {
               if (message.senderId == currentUserId) {
                 return Container(
                   margin: const EdgeInsets.only(left: 4),
-                  child: _buildStatusIcon(message.status ?? MessageStatus.sent),
+                  child: _buildStatusIcon(message.status),
                 );
               }
             }

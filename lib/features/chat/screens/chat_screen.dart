@@ -397,21 +397,36 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       try {
         final chatListProvider =
             Provider.of<ChatListProvider>(context, listen: false);
-        final messageId =
-            'msg_${DateTime.now().millisecondsSinceEpoch}_${_getCurrentUserId()}';
 
-        // Update chat list with new message
-        chatListProvider.handleNewMessageArrival(
-          messageId: messageId,
-          senderId: _getCurrentUserId(),
-          content: text.trim(),
-          conversationId: provider.conversationId ?? widget.conversationId,
-          timestamp: DateTime.now(),
-          messageType: MessageType.text,
-        );
+        // Find the message that was just sent to get its actual status
+        Message? sentMessage;
+        try {
+          sentMessage = provider.messages.lastWhere(
+            (msg) =>
+                msg.content['text'] == text.trim() &&
+                msg.senderId == _getCurrentUserId(),
+          );
+        } catch (e) {
+          sentMessage = null;
+        }
 
-        print(
-            '📱 ChatScreen: ✅ Chat list updated with sent message: $messageId');
+        if (sentMessage != null) {
+          // Update chat list with new message and its actual status
+          chatListProvider.handleNewMessageArrival(
+            messageId: sentMessage.id,
+            senderId: _getCurrentUserId(),
+            content: text.trim(),
+            conversationId: provider.conversationId ?? widget.conversationId,
+            timestamp: DateTime.now(),
+            messageType: MessageType.text,
+          );
+
+          print(
+              '📱 ChatScreen: ✅ Chat list updated with sent message: ${sentMessage.id} (status: ${sentMessage.status})');
+        } else {
+          print(
+              '📱 ChatScreen: ⚠️ Could not find sent message for chat list update');
+        }
       } catch (e) {
         print('📱 ChatScreen: ⚠️ Could not update chat list: $e');
       }
