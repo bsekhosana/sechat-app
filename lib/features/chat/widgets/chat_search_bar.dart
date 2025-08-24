@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 class ChatSearchBar extends StatefulWidget {
   final Function(String) onSearchChanged;
   final VoidCallback onSearchCleared;
+  final VoidCallback? onFocusLost;
   final String? hintText;
   final String? initialValue;
 
@@ -11,6 +12,7 @@ class ChatSearchBar extends StatefulWidget {
     super.key,
     required this.onSearchChanged,
     required this.onSearchCleared,
+    this.onFocusLost,
     this.hintText,
     this.initialValue,
   });
@@ -40,9 +42,15 @@ class _ChatSearchBarState extends State<ChatSearchBar> {
   }
 
   void _onFocusChanged() {
+    final hadFocus = _hasFocus;
     setState(() {
       _hasFocus = _focusNode.hasFocus;
     });
+
+    // Call onFocusLost callback when focus is lost
+    if (hadFocus && !_hasFocus && widget.onFocusLost != null) {
+      widget.onFocusLost!();
+    }
   }
 
   void _onSearchChanged(String value) {

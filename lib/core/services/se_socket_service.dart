@@ -1878,46 +1878,6 @@ class SeSocketService {
     }
   }
 
-  // Methods for queue management (used by queue_statistics_screen)
-  Map<String, dynamic> getQueueStatistics() {
-    // Return basic queue statistics
-    return {
-      'totalQueued': 0,
-      'pendingDelivery': 0,
-      'failedDeliveries': 0,
-      'lastUpdate': DateTime.now().toIso8601String(),
-      'status': 'active',
-    };
-  }
-
-  Future<Map<String, dynamic>> checkQueueStatus() async {
-    // Check queue status from server
-    if (!isConnected || _sessionId == null) {
-      return {
-        'status': 'disconnected',
-        'message': 'Socket not connected',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    }
-
-    try {
-      // Request queue status from server
-      _socket!.emit('request_queued_events', {'sessionId': _sessionId});
-
-      return {
-        'status': 'connected',
-        'message': 'Queue status requested',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    } catch (e) {
-      return {
-        'status': 'error',
-        'message': 'Error checking queue status: $e',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    }
-  }
-
   // Method for cleanup (used by realtime_service_manager)
   void dispose() {
     print('🔌 SeSocketService: 🧹 Disposing socket service...');

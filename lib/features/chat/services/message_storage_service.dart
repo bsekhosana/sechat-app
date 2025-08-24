@@ -333,6 +333,25 @@ class MessageStorageService {
     }
   }
 
+  /// Get total message count
+  Future<int> getTotalMessageCount() async {
+    if (_database == null) {
+      throw Exception('Database not initialized');
+    }
+
+    try {
+      final result =
+          await _database!.rawQuery('SELECT COUNT(*) as count FROM messages');
+      final count = result.first['count'] as int? ?? 0;
+      print('💾 MessageStorageService: ✅ Total message count: $count');
+      return count;
+    } catch (e) {
+      print(
+          '💾 MessageStorageService: ❌ Failed to get total message count: $e');
+      rethrow;
+    }
+  }
+
   /// Delete conversation
   Future<void> deleteConversation(String conversationId) async {
     if (_database == null) {

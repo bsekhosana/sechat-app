@@ -170,24 +170,147 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                             statusColor = Colors.orange;
                           }
 
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          return Column(
                             children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: statusColor,
-                                  shape: BoxShape.circle,
-                                ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: statusColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    statusText,
+                                    style: TextStyle(
+                                      color: statusColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                statusText,
-                                style: TextStyle(
-                                  color: statusColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+                              const SizedBox(height: 16),
+                              // Session Code Section
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey[300]!),
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      'Session Code',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      seSessionService.currentSessionId ??
+                                          'Unknown',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontFamily: 'monospace',
+                                        color: Colors.grey,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceEvenly,
+                                      children: [
+                                        // Share Button
+                                        Expanded(
+                                          child: GestureDetector(
+                                            onTap: () =>
+                                                _shareSessionCode(context),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 8),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFF6B35)
+                                                    .withValues(alpha: 0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.share,
+                                                    color:
+                                                        const Color(0xFFFF6B35),
+                                                    size: 16,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  const Text(
+                                                    'Share',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Color(0xFFFF6B35),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        // Copy Button
+                                        Expanded(
+                                          child: GestureDetector(
+                                            onTap: () => _copySessionCode(),
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 8),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey
+                                                    .withValues(alpha: 0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.copy,
+                                                    color: Colors.grey,
+                                                    size: 16,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  const Text(
+                                                    'Copy',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Colors.grey,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -228,14 +351,6 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                                 subtitle: 'Permanently delete your account',
                                 onTap: () => _showDeleteAccountConfirmation(),
                                 isDestructive: true,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildMenuButton(
-                                icon: Icons.app_registration,
-                                title: 'My Session Code',
-                                subtitle: 'Share your Session ID with others',
-                                onTap: () => _showSessionCode(),
-                                isDestructive: false,
                               ),
                             ],
                           ),
@@ -1058,6 +1173,32 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
         ),
       );
     }
+  }
+
+  void _copySessionCode() {
+    final sessionId = SeSessionService().currentSessionId ?? 'Unknown';
+    Clipboard.setData(ClipboardData(text: sessionId));
+
+    setState(() {
+      _showCopySuccess = true;
+    });
+
+    // Hide success message after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _showCopySuccess = false;
+        });
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Session code copied to clipboard!'),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override

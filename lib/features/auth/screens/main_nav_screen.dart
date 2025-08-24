@@ -231,6 +231,19 @@ Download now and let's chat securely!
       // K.Exchange tab
       final indicatorService = context.read<IndicatorService>();
       indicatorService.clearKeyExchangeIndicator();
+      indicatorService.setScreenContext(isOnKeyExchangeScreen: true);
+    } else if (index == 2) {
+      // Notifications tab
+      final indicatorService = context.read<IndicatorService>();
+      indicatorService.clearNotificationIndicator();
+      indicatorService.setScreenContext(isOnNotificationsScreen: true);
+    } else {
+      // Other tabs - reset screen context
+      final indicatorService = context.read<IndicatorService>();
+      indicatorService.setScreenContext(
+        isOnKeyExchangeScreen: false,
+        isOnNotificationsScreen: false,
+      );
     }
     updateCurrentScreenIndex(_selectedIndex);
   }

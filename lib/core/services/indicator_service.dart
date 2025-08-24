@@ -85,4 +85,46 @@ class IndicatorService extends ChangeNotifier {
           '🔔 IndicatorService: ✅ Counts updated - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
     }
   }
+
+  /// Prevent badge updates when on specific screens
+  bool _isOnKeyExchangeScreen = false;
+  bool _isOnNotificationsScreen = false;
+
+  void setScreenContext({
+    bool? isOnKeyExchangeScreen,
+    bool? isOnNotificationsScreen,
+  }) {
+    if (isOnKeyExchangeScreen != null) {
+      _isOnKeyExchangeScreen = isOnKeyExchangeScreen;
+    }
+    if (isOnNotificationsScreen != null) {
+      _isOnNotificationsScreen = isOnNotificationsScreen;
+    }
+  }
+
+  /// Update counts with screen context awareness
+  void updateCountsWithContext({
+    int? unreadChats,
+    int? pendingKeyExchange,
+    int? unreadNotifications,
+  }) {
+    // Don't update KER badge if on KER screen
+    if (pendingKeyExchange != null && _isOnKeyExchangeScreen) {
+      print('🔔 IndicatorService: ℹ️ Skipping KER badge update - user on KER screen');
+      return;
+    }
+
+    // Don't update notifications badge if on notifications screen
+    if (unreadNotifications != null && _isOnNotificationsScreen) {
+      print('🔔 IndicatorService: ℹ️ Skipping notifications badge update - user on notifications screen');
+      return;
+    }
+
+    // Proceed with normal update
+    updateCounts(
+      unreadChats: unreadChats,
+      pendingKeyExchange: pendingKeyExchange,
+      unreadNotifications: unreadNotifications,
+    );
+  }
 }

@@ -103,14 +103,26 @@ class _ChatListScreenState extends State<ChatListScreen>
         child: Column(
           children: [
             // Header with connection status
-            _buildHeader(),
+            GestureDetector(
+              onTap: () {
+                // Remove focus from search input when tapping on header
+                FocusScope.of(context).unfocus();
+              },
+              child: _buildHeader(),
+            ),
 
             // Search bar
             _buildSearchBar(),
 
             // Chat list
             Expanded(
-              child: _buildChatList(),
+              child: GestureDetector(
+                onTap: () {
+                  // Remove focus from search input when tapping on chat list
+                  FocusScope.of(context).unfocus();
+                },
+                child: _buildChatList(),
+              ),
             ),
           ],
         ),
@@ -173,13 +185,17 @@ class _ChatListScreenState extends State<ChatListScreen>
   /// Build the search bar
   Widget _buildSearchBar() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: ChatSearchBar(
         onSearchChanged: (query) {
           context.read<ChatListProvider>().searchConversations(query);
         },
         onSearchCleared: () {
           context.read<ChatListProvider>().clearSearch();
+        },
+        onFocusLost: () {
+          // Handle focus lost if needed
+          print('📱 ChatListScreen: 🔍 Search focus lost');
         },
       ),
     );
@@ -357,7 +373,7 @@ class _ChatListScreenState extends State<ChatListScreen>
               },
               child: ListView.builder(
                 padding: const EdgeInsets.only(
-                    bottom: 24, left: 24, right: 24, top: 24),
+                    bottom: 24, left: 24, right: 24, top: 0),
                 itemCount: provider.filteredConversations.length,
                 itemBuilder: (context, index) {
                   final conversation = provider.filteredConversations[index];
@@ -388,8 +404,8 @@ class _ChatListScreenState extends State<ChatListScreen>
       backgroundColor: const Color(0xFFFF6B35),
       foregroundColor: Colors.white,
       elevation: 4,
-      tooltip: 'Send key exchange request',
-      child: const Icon(Icons.chat_bubble_outline),
+      tooltip: 'Add new contact',
+      child: const Icon(Icons.person_add),
     );
   }
 
