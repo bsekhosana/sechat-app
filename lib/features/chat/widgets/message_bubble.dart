@@ -148,6 +148,11 @@ class MessageBubble extends StatelessWidget {
         icon = Icons.delete_outline;
         color = Colors.grey[400]!; // Grey for deleted
         break;
+      default:
+        // Fallback for unknown status
+        icon = Icons.help_outline;
+        color = Colors.grey[400]!;
+        break;
     }
 
     return Container(

@@ -21,6 +21,7 @@ import '../../key_exchange/providers/key_exchange_request_provider.dart';
 import '../../chat/providers/chat_list_provider.dart';
 
 import '../../notifications/services/local_notification_badge_service.dart';
+import '../../notifications/services/local_notification_database_service.dart';
 import 'package:sechat_app/main.dart' show updateCurrentScreenIndex;
 import 'package:sechat_app/shared/widgets/global_socket_status_banner.dart';
 
@@ -47,6 +48,21 @@ class _MainNavScreenState extends State<MainNavScreen> {
       _loadAllData();
       _checkIndicators();
       _setupNotificationProviders();
+
+      // Set initial screen context
+      _indicatorService.setScreenContext(
+        isOnKeyExchangeScreen: false,
+        isOnNotificationsScreen: false,
+      );
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Update badge counts when dependencies change (e.g., providers update)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateBadgeCountsSync();
     });
   }
 
@@ -100,87 +116,85 @@ Download now and let's chat securely!
     // Check if SeSocketService is already initialized
     if (socketService.isConnected) {
       print(
-          '🔌 MainNavScreen: ✅ SeSocketService already connected, setting up KER callback');
+          '🔌 MainNavScreen: ✅ SeSocketService already connected, setting up providers');
 
-      // Set up the callback immediately
-      socketService.setOnKeyExchangeRequestReceived(
-        (data) => keyExchangeProvider.processReceivedKeyExchangeRequest(data),
-      );
+      // The provider already handles socket connection in its initialize method
+      // Just ensure it's initialized
+      await keyExchangeProvider.initialize();
 
-      // Verify the callback is set
-      print('🔌 MainNavScreen: ✅ KER callback set up successfully');
+      // Set up badge count updates
+      _setupBadgeCountUpdates();
 
-      // Test: Verify we can emit events (this tests the socket connection)
-      try {
-        socketService.emit('test:connection',
-            {'test': true, 'timestamp': DateTime.now().toIso8601String()});
-        print('🔌 MainNavScreen: ✅ Test emit successful - socket is working');
-      } catch (e) {
-        print('🔌 MainNavScreen: ❌ Test emit failed: $e');
-      }
+      print(
+          '🔌 MainNavScreen: ✅ KeyExchangeRequestProvider connected to socket service and initialized');
     } else {
       print(
-          '🔌 MainNavScreen: 🔌 SeSocketService not connected, initializing...');
+          '🔌 MainNavScreen: ⚠️ SeSocketService not connected yet, will retry in setupBadgeCountUpdates');
 
-      // Initialize if not already connected
-      try {
-        final currentSessionId = SeSessionService().currentSessionId;
-        if (currentSessionId != null) {
-          await socketService.connect(currentSessionId);
-          print(
-              '🔌 MainNavScreen: ✅ SeSocketService connected and listening for incoming KER events');
-
-          // Set up the callback after connection
-          socketService.setOnKeyExchangeRequestReceived(
-            (data) =>
-                keyExchangeProvider.processReceivedKeyExchangeRequest(data),
-          );
-
-          // Verify the callback is set
-          print(
-              '🔌 MainNavScreen: ✅ KER callback set up successfully after connection');
-
-          // Test: Verify we can emit events (this tests the socket connection)
-          try {
-            socketService.emit('test:connection',
-                {'test': true, 'timestamp': DateTime.now().toIso8601String()});
-            print(
-                '🔌 MainNavScreen: ✅ Test emit successful after connection - socket is working');
-          } catch (e) {
-            print('🔌 MainNavScreen: ❌ Test emit failed after connection: $e');
-          }
-        } else {
-          print(
-              '🔌 MainNavScreen: ❌ No current session ID available for socket connection');
-        }
-      } catch (e) {
-        print('🔌 MainNavScreen: ❌ Failed to connect SeSocketService: $e');
-      }
+      // Set up badge count updates anyway (will retry connection)
+      _setupBadgeCountUpdates();
     }
+  }
 
-    // Set up badge count updates
-    _setupBadgeCountUpdates();
+  /// Force refresh badge counts (can be called from external sources)
+  void forceRefreshBadgeCounts() {
+    print('🔔 MainNavScreen: 🔄 Force refreshing badge counts');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateBadgeCountsSync(); // Instant update
+      _updateBadgeCounts(); // Full update
+    });
+  }
 
+  /// Refresh notification badge count immediately (for when notifications are marked as read)
+  void refreshNotificationBadgeCount() async {
     print(
-        '🔌 MainNavScreen: ✅ KeyExchangeRequestProvider connected to socket service and initialized');
+        '🔔 MainNavScreen: 🔄 Refreshing notification badge count immediately');
+    try {
+      final localNotificationBadgeService = LocalNotificationBadgeService();
+      final unreadCount = await localNotificationBadgeService.getUnreadCount();
+
+      // Update the indicator service immediately
+      _indicatorService.updateCountsWithContext(
+          unreadNotifications: unreadCount);
+
+      print(
+          '🔔 MainNavScreen: ✅ Notification badge count refreshed: $unreadCount');
+    } catch (e) {
+      print(
+          '🔔 MainNavScreen: ❌ Error refreshing notification badge count: $e');
+    }
+  }
+
+  /// Update badge counts when providers change (for real-time updates)
+  void _onProviderChanged() {
+    print('🔔 MainNavScreen: 🔄 Provider changed, updating badge counts');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateBadgeCountsSync(); // Instant update for immediate response
+    });
   }
 
   void _setupBadgeCountUpdates() {
     // Get the indicator service from provider
     final indicatorService = context.read<IndicatorService>();
 
-    // Set up periodic badge count updates
-    Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted) {
-        _updateBadgeCounts();
-      } else {
-        timer.cancel();
-      }
-    });
-
-    // Initial update
+    // Initial update - no more periodic delays
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateBadgeCounts();
+    });
+
+    // Also update immediately for instant response
+    _updateBadgeCountsSync();
+
+    // Ensure badge counts are displayed even if screen context is set
+    // This prevents the context-aware logic from hiding the initial counts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_indicatorService.pendingKeyExchangeCount > 0 ||
+          _indicatorService.unreadNotificationsCount > 0) {
+        print(
+            '🔔 MainNavScreen: 🔍 Ensuring badge counts are visible after setup');
+        // Force a refresh to ensure counts are displayed
+        _updateBadgeCountsSync();
+      }
     });
   }
 
@@ -188,18 +202,20 @@ Download now and let's chat securely!
     try {
       final indicatorService = context.read<IndicatorService>();
 
-      // Update chat count from ChatListProvider
+      // Update chat count from ChatListProvider (synchronous)
       final chatListProvider = context.read<ChatListProvider>();
       final unreadChatsCount = chatListProvider.conversations
           .where((conv) => conv.unreadCount > 0)
           .length;
 
-      // Update key exchange count from KeyExchangeRequestProvider
+      // Update key exchange count from KeyExchangeRequestProvider (synchronous)
       final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
-      final pendingKeyExchangeCount =
-          keyExchangeProvider.receivedRequests.length;
+      // Only count pending/received requests that haven't been processed yet
+      final pendingKeyExchangeCount = keyExchangeProvider.receivedRequests
+          .where((req) => req.status == 'received' || req.status == 'pending')
+          .length;
 
-      // Update notification count from LocalNotificationBadgeService
+      // Update notification count from LocalNotificationBadgeService (asynchronous but cached)
       final localNotificationBadgeService = LocalNotificationBadgeService();
       final unreadNotificationsCount =
           await localNotificationBadgeService.getUnreadCount();
@@ -207,14 +223,69 @@ Download now and let's chat securely!
       print(
           '🔔 MainNavScreen: 📱 Local notification count: $unreadNotificationsCount');
 
-      // Update indicator service
-      indicatorService.updateCounts(
+      // Additional debugging: Check if there are any notifications in the database
+      try {
+        final databaseService = LocalNotificationDatabaseService();
+        final allNotifications = await databaseService.getAllNotifications();
+        final unreadNotifications =
+            allNotifications.where((n) => n.status == 'unread').toList();
+        final readNotifications =
+            allNotifications.where((n) => n.status == 'read').toList();
+
+        print('🔔 MainNavScreen: 🔍 Database notification details:');
+        print('  - Total notifications: ${allNotifications.length}');
+        print('  - Unread notifications: ${unreadNotifications.length}');
+        print('  - Read notifications: ${readNotifications.length}');
+
+        if (unreadNotifications.isNotEmpty) {
+          print(
+              '  - Unread notification types: ${unreadNotifications.map((n) => n.type).toList()}');
+        }
+      } catch (e) {
+        print(
+            '🔔 MainNavScreen: ⚠️ Could not get detailed notification info: $e');
+      }
+
+      // Update indicator service using context-aware method
+      indicatorService.updateCountsWithContext(
         unreadChats: unreadChatsCount,
         pendingKeyExchange: pendingKeyExchangeCount,
         unreadNotifications: unreadNotificationsCount,
       );
     } catch (e) {
       print('🔔 MainNavScreen: ❌ Error updating badge counts: $e');
+    }
+  }
+
+  /// Update badge counts synchronously for instant response (chat and key exchange only)
+  void _updateBadgeCountsSync() {
+    try {
+      final indicatorService = context.read<IndicatorService>();
+
+      // Update chat count from ChatListProvider (synchronous)
+      final chatListProvider = context.read<ChatListProvider>();
+      final unreadChatsCount = chatListProvider.conversations
+          .where((conv) => conv.unreadCount > 0)
+          .length;
+
+      // Update key exchange count from KeyExchangeRequestProvider (synchronous)
+      final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
+      // Only count pending/received requests that haven't been processed yet
+      final pendingKeyExchangeCount = keyExchangeProvider.receivedRequests
+          .where((req) => req.status == 'received' || req.status == 'pending')
+          .length;
+
+      // Update indicator service using context-aware method (synchronous counts only)
+      indicatorService.updateCountsWithContext(
+        unreadChats: unreadChatsCount,
+        pendingKeyExchange: pendingKeyExchangeCount,
+        unreadNotifications: null, // Don't update notifications in sync method
+      );
+
+      print(
+          '🔔 MainNavScreen: ⚡ Sync badge update - Chats: $unreadChatsCount, KER: $pendingKeyExchangeCount');
+    } catch (e) {
+      print('🔔 MainNavScreen: ❌ Error updating sync badge counts: $e');
     }
   }
 
@@ -230,25 +301,37 @@ Download now and let's chat securely!
       _selectedIndex = index;
     });
 
-    // Clear indicators based on selected tab
+    // Set screen context based on selected tab (don't clear indicators yet)
     if (index == 1) {
-      // K.Exchange tab
-      final indicatorService = context.read<IndicatorService>();
-      indicatorService.clearKeyExchangeIndicator();
-      indicatorService.setScreenContext(isOnKeyExchangeScreen: true);
+      // K.Exchange tab - just set context, don't clear indicator
+      _indicatorService.setScreenContext(
+        isOnKeyExchangeScreen: true,
+        isOnNotificationsScreen: false,
+      );
     } else if (index == 2) {
-      // Notifications tab
-      final indicatorService = context.read<IndicatorService>();
-      indicatorService.clearNotificationIndicator();
-      indicatorService.setScreenContext(isOnNotificationsScreen: true);
+      // Notifications tab - just set context, don't clear indicator
+      _indicatorService.setScreenContext(
+        isOnKeyExchangeScreen: false,
+        isOnNotificationsScreen: true,
+      );
     } else {
       // Other tabs - reset screen context
-      final indicatorService = context.read<IndicatorService>();
-      indicatorService.setScreenContext(
+      _indicatorService.setScreenContext(
         isOnKeyExchangeScreen: false,
         isOnNotificationsScreen: false,
       );
     }
+
+    // Update badge counts immediately after navigation to ensure they're displayed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Always update badge counts when navigating to show current values
+      _updateBadgeCountsSync(); // Instant update for chat and KER
+      _updateBadgeCounts(); // Full update including notifications
+
+      // Force display current badge counts to ensure they're visible
+      _indicatorService.forceDisplayCurrentCounts();
+    });
+
     updateCurrentScreenIndex(_selectedIndex);
   }
 

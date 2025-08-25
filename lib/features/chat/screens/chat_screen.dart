@@ -74,6 +74,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _slideController.forward();
   }
 
+  /// 🆕 IMPROVED: Setup scroll listener for lazy loading messages
+  void _setupScrollListener() {
+    _scrollController.addListener(() {
+      // Load more messages when user scrolls to the top
+      if (_scrollController.position.pixels <=
+          _scrollController.position.minScrollExtent + 100) {
+        final chatProvider = context.read<SessionChatProvider>();
+        if (chatProvider.hasMoreMessages) {
+          print(
+              '📱 ChatScreen: 🔄 User scrolled to top, loading more messages');
+          chatProvider.loadMoreMessages();
+        }
+      }
+    });
+  }
+
   void _initializeChat() {
     // Initialize the chat provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -87,6 +103,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         recipientName: widget.recipientName,
       )
           .then((_) {
+        // CRITICAL: Mark that user has entered the chat screen
+        chatProvider.markUserEnteredChatScreen();
+
         // Mark conversation as read when screen is opened
         chatProvider.markAsRead();
 
@@ -109,9 +128,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    // Unregister from ChatListProvider for real-time updates
+    // CRITICAL: Mark that user has left the chat screen
     try {
       final chatProvider = context.read<SessionChatProvider>();
+      chatProvider.markUserLeftChatScreen();
+
+      // Unregister from ChatListProvider for real-time updates
       final chatListProvider = context.read<ChatListProvider>();
       chatProvider.unregisterFromChatListProvider(chatListProvider);
     } catch (e) {
@@ -163,7 +185,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       builder: (context, provider, child) {
         return ChatHeader(
           recipientName: provider.currentRecipientName ?? widget.recipientName,
-          isOnline: widget.isOnline || provider.isRecipientOnline,
+          // 🆕 FIXED: Only use provider's online status, ignore static widget.isOnline
+          isOnline: provider.isRecipientOnline,
           lastSeen: provider.recipientLastSeen,
           onBackPressed: () => Navigator.pop(context),
           onMorePressed: () => _showChatOptions(provider),
@@ -270,34 +293,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     // CRITICAL: Check if we need to auto-scroll for incoming messages
     _checkAndAutoScrollForIncomingMessages(provider);
 
-    // CRITICAL: Auto-scroll to bottom when messages are first loaded
-    // This ensures the chat opens scrolled to the bottom
+    // 🆕 IMPROVED: WhatsApp style - latest messages are already visible at bottom
+    // No auto-scrolling needed for initial loadR
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (provider.messages.isNotEmpty && _scrollController.hasClients) {
-        final currentPosition = _scrollController.position.pixels;
-        // Only auto-scroll if we're not already at the bottom
-        if (currentPosition < _scrollController.position.maxScrollExtent - 10) {
-          print(
-              '📱 ChatScreen: 🔄 Auto-scrolling to bottom for initial message load');
-          _scrollToBottom();
-        }
+        print(
+            '📱 ChatScreen: ℹ️ Initial load complete - latest messages visible at bottom (WhatsApp style)');
       }
     });
-
-    // Process messages for display (no decryption at this stage)
-    for (var element in provider.messages) {
-      try {
-        print('🟢 ChatScreen: 🔍 Message: ${element.id}');
-        print(
-            '🟢 ChatScreen: 🔍 Content keys: ${element.content.keys.toList()}');
-        print('🟢 ChatScreen: 🔍 Is encrypted: ${element.isEncrypted}');
-        print('🟢 ChatScreen: 🔍 Timestamp: ${element.timestamp}');
-        print('🟢 ChatScreen: 🔍 Sender: ${element.senderId}');
-        print('🟢 ChatScreen: 🔍 Conversation: ${element.conversationId}');
-      } catch (e) {
-        print('🟢 ChatScreen: ❌ Error processing message ${element.id}: $e');
-      }
-    }
 
     // print('🟢 ChatScreen: 🔍 Messages: ${provider.messages}');
     return FadeTransition(
@@ -318,11 +321,35 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
                   reverse:
                       false, // Show messages in normal order (oldest to newest)
-                  itemCount: provider.messages.length,
+                  itemCount: provider.messages.length +
+                      (provider.hasMoreMessages ? 1 : 0),
                   itemBuilder: (context, index) {
+                    // Show loading indicator at the top when loading more messages
+                    if (index == 0 && provider.hasMoreMessages) {
+                      return Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Theme.of(context).primaryColor,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    // Adjust index for messages (skip loading indicator)
+                    final messageIndex =
+                        provider.hasMoreMessages ? index - 1 : index;
+                    if (messageIndex < 0 ||
+                        messageIndex >= provider.messages.length) {
+                      return const SizedBox.shrink();
+                    }
+
                     // Messages are now sorted ASCENDING (oldest first), so display naturally
-                    final message = provider.messages[index];
-                    final isLast = index ==
+                    final message = provider.messages[messageIndex];
+                    final isLast = messageIndex ==
                         provider.messages.length -
                             1; // Last message is at the end
 

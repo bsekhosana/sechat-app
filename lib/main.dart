@@ -530,8 +530,21 @@ void _setupSocketCallbacks(SeSocketService socketService) {
               listen: false);
 
           print('🔌 Main: ✅ ContactService obtained successfully');
-          final lastSeenDateTime =
-              lastSeen != null ? DateTime.parse(lastSeen) : DateTime.now();
+          // 🆕 FIXED: Use existing lastSeen from ContactService when server doesn't provide one
+          DateTime lastSeenDateTime;
+          if (lastSeen != null) {
+            lastSeenDateTime = DateTime.parse(lastSeen);
+          } else {
+            // Try to get existing lastSeen from ContactService to preserve offline time
+            try {
+              final existingContact = contactService.getContact(senderId);
+              lastSeenDateTime = existingContact?.lastSeen ??
+                  DateTime.now().subtract(Duration(hours: 1));
+            } catch (e) {
+              // Fallback to 1 hour ago if we can't get existing contact
+              lastSeenDateTime = DateTime.now().subtract(Duration(hours: 1));
+            }
+          }
 
           print('🔌 Main: 🔍 Calling contactService.updateContactPresence...');
           contactService.updateContactPresence(
@@ -598,6 +611,14 @@ void _setupSocketCallbacks(SeSocketService socketService) {
     print(
         '🔌 Main: Message status update from socket: $messageId -> $status (conversationId: $conversationId, recipientId: $recipientId)');
 
+    // 🆕 FIXED: Only process certain status updates, ignore delivered/read from message:status_update
+    // These should only come through receipt:delivered and receipt:read events
+    if (status.toLowerCase() == 'delivered' || status.toLowerCase() == 'read') {
+      print(
+          '🔌 Main: ⚠️ Ignoring delivered/read status from message:status_update - waiting for proper receipt events');
+      return; // Don't process delivered/read status from message:status_update
+    }
+
     // Update message status in ChatListProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
@@ -605,10 +626,26 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             navigatorKey.currentContext!,
             listen: false);
 
+        // Parse the status string to enum
+        msg_status.MessageDeliveryStatus parsedStatus;
+        switch (status.toLowerCase()) {
+          case 'sent':
+            parsedStatus = msg_status.MessageDeliveryStatus.sent;
+            break;
+          case 'queued':
+            parsedStatus = msg_status
+                .MessageDeliveryStatus.sent; // Keep as sent until delivered
+            break;
+          default:
+            parsedStatus = msg_status.MessageDeliveryStatus.sent;
+            print('🔌 Main: ⚠️ Unknown status: $status, defaulting to sent');
+            break;
+        }
+
         // Create a MessageStatusUpdate with enhanced data for better conversation lookup
         final statusUpdate = MessageStatusUpdate(
           messageId: messageId,
-          status: _parseMessageStatus(status),
+          status: parsedStatus,
           timestamp: DateTime.now(),
           senderId: senderId,
         );
@@ -617,7 +654,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         chatListProvider.processMessageStatusUpdateWithContext(statusUpdate,
             conversationId: conversationId, recipientId: recipientId);
         print(
-            '🔌 Main: ✅ Message status updated in ChatListProvider with enhanced lookup data');
+            '🔌 Main: ✅ Message status updated in ChatListProvider with enhanced lookup data: $status');
       } catch (e) {
         print('🔌 Main: ❌ Failed to process message status update: $e');
       }
@@ -638,19 +675,20 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         // Check if user is currently on K.Exchange screen (index 1)
         final isOnKeyExchangeScreen = _currentScreenIndex == 1;
 
-        if (!isOnKeyExchangeScreen) {
-          // Only update badge if user is not on K.Exchange screen
-          final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
-              navigatorKey.currentContext!,
-              listen: false);
+        // Always update badge count using context-aware method
+        // The indicator service will handle screen context internally
+        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
 
-          final pendingCount = keyExchangeProvider.receivedRequests.length;
-          indicatorService.updateCounts(pendingKeyExchange: pendingCount);
-          print('🔌 Main: ✅ Badge count updated for new key exchange request');
-        } else {
-          print(
-              '🔌 Main: ℹ️ User is on K.Exchange screen, skipping badge update');
-        }
+        // Only count pending/received requests that haven't been processed yet
+        final pendingCount = keyExchangeProvider.receivedRequests
+            .where((req) => req.status == 'received' || req.status == 'pending')
+            .length;
+        indicatorService.updateCountsWithContext(
+            pendingKeyExchange: pendingCount);
+        print(
+            '🔌 Main: ✅ Badge count updated for new key exchange request using context-aware method');
       } catch (e) {
         print('🔌 Main: ❌ Failed to update badge count: $e');
       }
@@ -670,19 +708,20 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         // Check if user is currently on K.Exchange screen (index 1)
         final isOnKeyExchangeScreen = _currentScreenIndex == 1;
 
-        if (!isOnKeyExchangeScreen) {
-          // Only update badge if user is not on K.Exchange screen
-          final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
-              navigatorKey.currentContext!,
-              listen: false);
+        // Always update badge count using context-aware method
+        // The indicator service will handle screen context internally
+        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
 
-          final pendingCount = keyExchangeProvider.receivedRequests.length;
-          indicatorService.updateCounts(pendingKeyExchange: pendingCount);
-          print('🔌 Main: ✅ Badge count updated after key exchange accepted');
-        } else {
-          print(
-              '🔌 Main: ℹ️ User is on K.Exchange screen, skipping badge update');
-        }
+        // Only count pending/received requests that haven't been processed yet
+        final pendingCount = keyExchangeProvider.receivedRequests
+            .where((req) => req.status == 'received' || req.status == 'pending')
+            .length;
+        indicatorService.updateCountsWithContext(
+            pendingKeyExchange: pendingCount);
+        print(
+            '🔌 Main: ✅ Badge count updated after key exchange accepted using context-aware method');
       } catch (e) {
         print('🔌 Main: ❌ Failed to update badge count after acceptance: $e');
       }
@@ -702,19 +741,20 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         // Check if user is currently on K.Exchange screen (index 1)
         final isOnKeyExchangeScreen = _currentScreenIndex == 1;
 
-        if (!isOnKeyExchangeScreen) {
-          // Only update badge if user is not on K.Exchange screen
-          final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
-              navigatorKey.currentContext!,
-              listen: false);
+        // Always update badge count using context-aware method
+        // The indicator service will handle screen context internally
+        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
 
-          final pendingCount = keyExchangeProvider.receivedRequests.length;
-          indicatorService.updateCounts(pendingKeyExchange: pendingCount);
-          print('🔌 Main: ✅ Badge count updated after key exchange declined');
-        } else {
-          print(
-              '🔌 Main: ℹ️ User is on K.Exchange screen, skipping badge update');
-        }
+        // Only count pending/received requests that haven't been processed yet
+        final pendingCount = keyExchangeProvider.receivedRequests
+            .where((req) => req.status == 'received' || req.status == 'pending')
+            .length;
+        indicatorService.updateCountsWithContext(
+            pendingKeyExchange: pendingCount);
+        print(
+            '🔌 Main: ✅ Badge count updated after key exchange declined using context-aware method');
       } catch (e) {
         print('🔌 Main: ❌ Failed to update badge count after decline: $e');
       }
@@ -920,9 +960,20 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             navigatorKey.currentContext!,
             listen: false);
 
-        // Decrease pending key exchange count
-        indicatorService.updateCounts(pendingKeyExchange: -1);
-        print('🔌 Main: ✅ Badge count updated after key exchange revoked');
+        // Recalculate the actual pending count after revocation
+        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Only count pending/received requests that haven't been processed yet
+        final pendingCount = keyExchangeProvider.receivedRequests
+            .where((req) => req.status == 'received' || req.status == 'pending')
+            .length;
+
+        indicatorService.updateCountsWithContext(
+            pendingKeyExchange: pendingCount);
+        print(
+            '🔌 Main: ✅ Badge count updated after key exchange revoked using context-aware method');
       } catch (e) {
         print('🔌 Main: ❌ Failed to update badge count after revoke: $e');
       }
@@ -1019,6 +1070,33 @@ void _setupSocketCallbacks(SeSocketService socketService) {
     });
   });
 
+  // 🆕 ADD THIS: Handle queued message events
+  socketService.setOnMessageQueued((messageId, toUserId, fromUserId) {
+    print('📬 Main: Message queued: $messageId from $fromUserId to $toUserId');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Create a MessageStatusUpdate for queued status
+        final statusUpdate = MessageStatusUpdate(
+          messageId: messageId,
+          status: msg_status
+              .MessageDeliveryStatus.sent, // Keep as sent until delivered
+          timestamp: DateTime.now(),
+          senderId: fromUserId,
+        );
+
+        chatListProvider.processMessageStatusUpdateWithContext(statusUpdate);
+        print('📬 Main: ✅ Queued message status processed successfully');
+      } catch (e) {
+        print('📬 Main: ❌ Failed to process queued message status: $e');
+      }
+    });
+  });
+
   // Handle key exchange revocation events
   socketService.setOnKeyExchangeRevoked((data) {
     print('🔑 Main: Key exchange revoked: $data');
@@ -1034,10 +1112,15 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             navigatorKey.currentContext!,
             listen: false);
 
-        // Update counts based on current state
-        final pendingCount = keyExchangeProvider.receivedRequests.length;
-        indicatorService.updateCounts(pendingKeyExchange: pendingCount);
-        print('🔑 Main: ✅ Badge count updated after key exchange revoked');
+        // Update counts using context-aware method
+        // Only count pending/received requests that haven't been processed yet
+        final pendingCount = keyExchangeProvider.receivedRequests
+            .where((req) => req.status == 'received' || req.status == 'pending')
+            .length;
+        indicatorService.updateCountsWithContext(
+            pendingKeyExchange: pendingCount);
+        print(
+            '🔑 Main: ✅ Badge count updated after key exchange revoked using context-aware method');
       } catch (e) {
         print('🔑 Main: ❌ Failed to update badge count after revocation: $e');
       }

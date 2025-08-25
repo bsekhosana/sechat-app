@@ -45,6 +45,19 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
         _notifications = notifications;
         _isLoading = false;
       });
+
+      // Refresh the badge count to ensure it reflects the current state
+      // This is important if notifications were marked as read elsewhere
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          final indicatorService = context.read<IndicatorService>();
+          // Force a refresh of the badge counts to show current state
+          indicatorService.forceDisplayCurrentCounts();
+        } catch (e) {
+          print(
+              '❌ SocketNotificationsScreen: Failed to refresh badge count after loading: $e');
+        }
+      });
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -114,6 +127,19 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
                 _notifications[index].copyWith(status: 'read');
           }
         });
+
+        // Force refresh the notification badge count in the main navigation
+        // This ensures the badge count updates immediately
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            final indicatorService = context.read<IndicatorService>();
+            // Force a refresh of the badge counts
+            indicatorService.forceDisplayCurrentCounts();
+          } catch (e) {
+            print(
+                '❌ SocketNotificationsScreen: Failed to refresh badge count: $e');
+          }
+        });
       } catch (e) {
         print(
             '❌ SocketNotificationsScreen: Failed to mark notification as read: $e');
@@ -128,6 +154,17 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
         onNotificationRead: () {
           // Refresh the list after marking as read
           _loadNotifications();
+
+          // Also refresh the badge count immediately
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            try {
+              final indicatorService = context.read<IndicatorService>();
+              indicatorService.forceDisplayCurrentCounts();
+            } catch (e) {
+              print(
+                  '❌ SocketNotificationsScreen: Failed to refresh badge count after action: $e');
+            }
+          });
         },
       ),
     );

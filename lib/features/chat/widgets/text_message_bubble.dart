@@ -77,14 +77,6 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
           'Message content unavailable';
     }
 
-    // Debug logging to see what content we're receiving
-    print('🔍 TextMessageBubble: Message ID: ${widget.message.id}');
-    print(
-        '🔍 TextMessageBubble: Content keys: ${widget.message.content.keys.toList()}');
-    print('🔍 TextMessageBubble: Is encrypted: ${widget.message.isEncrypted}');
-    print('🔍 TextMessageBubble: Display text: $displayText');
-    print('🔍 TextMessageBubble: Is decrypting: $_isDecrypting');
-
     return GestureDetector(
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,
@@ -235,45 +227,20 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
           // CRITICAL: Use the correct decryption strategy based on message direction
           String? decryptedText;
 
-          print(
-              '🔐 TextMessageBubble: 🔍 Message metadata: ${widget.message.metadata}');
-          print(
-              '🔐 TextMessageBubble: 🔍 isFromCurrentUser: ${widget.message.metadata?['isFromCurrentUser']}');
-          print(
-              '🔐 TextMessageBubble: 🔍 messageDirection: ${widget.message.metadata?['messageDirection']}');
-
           if (widget.message.metadata?['isFromCurrentUser'] == true) {
-            // Sender's own message - use original text directly (no decryption needed)
-            print(
-                '🔐 TextMessageBubble: ✅ Using original text for sender\'s message');
             decryptedText = encryptedText; // This is already the original text
           } else {
             // Incoming message - check if it needs decryption
-            print(
-                '🔐 TextMessageBubble: 🔍 Checking incoming message encryption status...');
-            print(
-                '🔐 TextMessageBubble: 🔍 Content keys: ${widget.message.content.keys.toList()}');
-            print(
-                '🔐 TextMessageBubble: 🔍 isIncomingEncrypted value: ${widget.message.content['isIncomingEncrypted']}');
-            print(
-                '🔐 TextMessageBubble: 🔍 isIncomingEncrypted type: ${widget.message.content['isIncomingEncrypted'].runtimeType}');
 
             if (widget.message.content.containsKey('isIncomingEncrypted') &&
                 (widget.message.content['isIncomingEncrypted'] == true ||
                     widget.message.content['isIncomingEncrypted'] == 'true')) {
-              // This is an incoming encrypted message that needs decryption
-              print(
-                  '🔐 TextMessageBubble: 🔓 Decrypting incoming encrypted message');
               decryptedText = await _decryptMessageContent(encryptedText);
             } else {
               // This is a regular message (no decryption needed)
-              print(
-                  '🔐 TextMessageBubble: ✅ Using plain text for incoming message');
 
               // Additional check: if the text looks like encrypted data, try to decrypt it anyway
               if (encryptedText.length > 100 && encryptedText.contains('eyJ')) {
-                print(
-                    '🔐 TextMessageBubble: 🔍 Text looks like encrypted data, attempting decryption...');
                 decryptedText = await _decryptMessageContent(encryptedText);
               } else {
                 decryptedText = encryptedText;
@@ -283,14 +250,8 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
 
           // Additional safety: if decryption fails, try to show a more helpful message
           if (decryptedText == null) {
-            print(
-                '🔐 TextMessageBubble: ⚠️ Decryption failed, checking for fallback content');
-
             // For incoming messages, we might have the encrypted text but can't decrypt
             if (widget.message.metadata?['isFromCurrentUser'] == false) {
-              print(
-                  '🔐 TextMessageBubble: ℹ️ Incoming message decryption failed - may need key exchange');
-
               // Try to show the encrypted text as a fallback (for debugging)
               if (widget.message.content.containsKey('text')) {
                 final encryptedText = widget.message.content['text'] as String?;
@@ -329,27 +290,15 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
   /// Decrypt message content using EncryptionService
   Future<String?> _decryptMessageContent(String encryptedText) async {
     try {
-      print('🔐 TextMessageBubble: 🔓 Decrypting message content...');
-      print(
-          '🔐 TextMessageBubble: 🔍 Message direction: ${widget.message.metadata?['messageDirection']}');
-      print(
-          '🔐 TextMessageBubble: 🔍 Is from current user: ${widget.message.metadata?['isFromCurrentUser']}');
-
       // Use EncryptionService to decrypt the message
       final decryptedData =
           await EncryptionService.decryptAesCbcPkcs7(encryptedText);
 
       if (decryptedData != null && decryptedData.containsKey('text')) {
         final decryptedText = decryptedData['text'] as String;
-        print('🔐 TextMessageBubble: ✅ Message decrypted successfully');
 
         // Check if the decrypted text is still encrypted (double encryption scenario)
         if (decryptedText.length > 100 && decryptedText.contains('eyJ')) {
-          print(
-              '🔐 TextMessageBubble: 🔍 Detected double encryption, decrypting inner layer...');
-          print(
-              '🔐 TextMessageBubble: 🔍 First layer decrypted text preview: ${decryptedText.substring(0, decryptedText.length > 100 ? 100 : decryptedText.length)}...');
-
           try {
             // Decrypt the inner encrypted content
             final innerDecryptedData =
@@ -358,17 +307,12 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
             if (innerDecryptedData != null &&
                 innerDecryptedData.containsKey('text')) {
               final finalDecryptedText = innerDecryptedData['text'] as String;
-              print(
-                  '🔐 TextMessageBubble: ✅ Inner layer decrypted successfully');
-              print(
-                  '🔐 TextMessageBubble: 🔍 Final decrypted text: $finalDecryptedText');
+
               return finalDecryptedText;
             } else {
-              print('🔐 TextMessageBubble: ⚠️ Inner layer decryption failed');
               return decryptedText; // Return the first layer decrypted text as fallback
             }
           } catch (e) {
-            print('🔐 TextMessageBubble: ❌ Inner layer decryption error: $e');
             return decryptedText; // Return the first layer decrypted text as fallback
           }
         } else {
@@ -376,8 +320,6 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
           return decryptedText;
         }
       } else {
-        print(
-            '🔐 TextMessageBubble: ⚠️ Failed to decrypt message or invalid format');
         return null;
       }
     } catch (e) {
@@ -399,9 +341,6 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
 
   /// Retry decryption when it fails
   Future<void> _retryDecryption() async {
-    print(
-        '🔐 TextMessageBubble: 🔄 Retrying decryption for message: ${widget.message.id}');
-
     // Reset error state
     _hasDecryptionError = false;
     _decryptedText = null;

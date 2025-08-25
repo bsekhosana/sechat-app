@@ -53,6 +53,29 @@ class ChatListProvider extends ChangeNotifier {
         '📱 ChatListProvider: ${provider != null ? '✅ Set' : '❌ Cleared'} active SessionChatProvider');
   }
 
+  /// Get real-time online status for a specific recipient
+  bool getRecipientOnlineStatus(String recipientId) {
+    // Check if this recipient is the current active chat recipient
+    if (_activeSessionChatProvider != null &&
+        _activeSessionChatProvider!.currentRecipientId == recipientId) {
+      // Use the real-time status from SessionChatProvider
+      return _activeSessionChatProvider!.isRecipientOnline;
+    }
+
+    // Fallback to conversation data if no active chat
+    try {
+      final conversation = _conversations.firstWhere(
+        (conv) =>
+            conv.participant1Id == recipientId ||
+            conv.participant2Id == recipientId,
+      );
+      return conversation.isOnline ?? false;
+    } catch (e) {
+      // No conversation found, default to offline
+      return false;
+    }
+  }
+
   /// Process message status update from external source
   void processMessageStatusUpdate(MessageStatusUpdate update) {
     _updateMessageStatus(update);
@@ -64,6 +87,15 @@ class ChatListProvider extends ChangeNotifier {
     String? conversationId,
     String? recipientId,
   }) async {
+    // 🆕 FIXED: Filter out delivered/read status updates at ChatListProvider level
+    // These should only come through the dedicated onDelivered/onRead callbacks
+    if (update.status == msg_status.MessageDeliveryStatus.delivered ||
+        update.status == msg_status.MessageDeliveryStatus.read) {
+      print(
+          '📱 ChatListProvider: ⚠️ Ignoring delivered/read status update - should come through dedicated callbacks: ${update.messageId} -> ${update.status}');
+      return; // Don't process delivered/read status updates here
+    }
+
     // First, update the chat list (conversation metadata)
     await _updateMessageStatusWithContext(update,
         conversationId: conversationId, recipientId: recipientId);
@@ -71,6 +103,8 @@ class ChatListProvider extends ChangeNotifier {
     // Then, forward the update to the active SessionChatProvider for real-time UI updates
     if (_activeSessionChatProvider != null) {
       try {
+        print(
+            '📱 ChatListProvider: 🔄 Forwarding status update to SessionChatProvider: ${update.messageId} -> ${update.status}');
         await _activeSessionChatProvider!.handleMessageStatusUpdate(update);
         print(
             '📱 ChatListProvider: ✅ Forwarded message status update to active SessionChatProvider');
@@ -81,6 +115,8 @@ class ChatListProvider extends ChangeNotifier {
     } else {
       print(
           '📱 ChatListProvider: ℹ️ No active SessionChatProvider to forward status update to');
+      print(
+          '📱 ChatListProvider: 🔍 Active provider: $_activeSessionChatProvider');
     }
   }
 

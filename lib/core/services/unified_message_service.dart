@@ -309,8 +309,8 @@ class UnifiedMessageService extends ChangeNotifier {
       final consistentConversationId =
           _generateConsistentConversationId(currentUserId, fromUserId);
 
-      // SIMPLIFIED: For incoming messages, store the encrypted body directly
-      // The recipient will decrypt it using their own key when displaying
+      // 🆕 FIXED: For incoming messages, store with 'sent' status initially
+      // Status will only be updated to 'delivered' when proper receipt:delivered event is received
       final message = msg.Message(
         id: messageId,
         conversationId:
@@ -323,9 +323,11 @@ class UnifiedMessageService extends ChangeNotifier {
           'checksum': checksum, // Keep the original checksum
           'isIncomingEncrypted': true, // Flag to indicate this needs decryption
         },
-        status: msg.MessageStatus.delivered,
+        status: msg
+            .MessageStatus.sent, // 🆕 FIXED: Start with 'sent', not 'delivered'
         timestamp: timestamp,
-        deliveredAt: DateTime.now(),
+        deliveredAt:
+            null, // 🆕 FIXED: Remove deliveredAt - will be set when receipt arrives
         metadata: {
           'isFromCurrentUser': false,
           'messageDirection': 'incoming',

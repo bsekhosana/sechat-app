@@ -60,10 +60,12 @@ class ChatListItem extends StatelessWidget {
         print(
             '🔍 ChatListItem: Contact found: ${contact != null ? '${contact!.sessionId}:${contact.isOnline}' : 'null'}');
 
-        final isOnline = contact?.isOnline ?? conversation.isOnline;
+        // 🆕 FIXED: Use real-time online status from ChatListProvider instead of static data
+        final isOnline =
+            provider.getRecipientOnlineStatus(otherParticipantId ?? '');
         final lastSeen = contact?.lastSeen ?? conversation.lastSeen;
         print(
-            '🔍 ChatListItem: Final presence: isOnline=$isOnline (contact: ${contact?.isOnline}, conversation: ${conversation.isOnline})');
+            '🔍 ChatListItem: Final presence: isOnline=$isOnline (real-time from provider, contact: ${contact?.isOnline}, conversation: ${conversation.isOnline})');
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -352,6 +354,8 @@ class ChatListItem extends StatelessWidget {
   Widget _buildMessageStatus(String messageId, String currentUserId) {
     return Consumer<ChatListProvider>(
       builder: (context, provider, child) {
+        // CRITICAL FIX: Use a more reactive approach to get the latest message
+        // This ensures the status icon updates in real-time when message status changes
         return FutureBuilder<Message?>(
           future: provider.getLatestMessage(conversation.id),
           builder: (context, snapshot) {
@@ -379,7 +383,8 @@ class ChatListItem extends StatelessWidget {
   Widget _buildTickStatus(String messageId) {
     return Consumer<ChatListProvider>(
       builder: (context, provider, child) {
-        // Get the latest message for this conversation to show status
+        // CRITICAL FIX: Use a more reactive approach that automatically refreshes
+        // when the ChatListProvider notifies listeners
         return FutureBuilder<Message?>(
           future: provider.getLatestMessage(conversation.id),
           builder: (context, snapshot) {

@@ -41,8 +41,11 @@ class IndicatorService extends ChangeNotifier {
   }
 
   void clearKeyExchangeIndicator() {
+    print(
+        '🔔 IndicatorService: 🧹 Clearing KER indicator (was: $_pendingKeyExchangeCount)');
     _pendingKeyExchangeCount = 0;
     notifyListeners();
+    print('🔔 IndicatorService: ✅ KER indicator cleared');
   }
 
   /// Clear all indicators at once (used when account is deleted)
@@ -63,18 +66,24 @@ class IndicatorService extends ChangeNotifier {
     bool hasChanges = false;
 
     if (unreadChats != null && _unreadChatsCount != unreadChats) {
+      print(
+          '🔔 IndicatorService: 🔄 Chat count changing from $_unreadChatsCount to $unreadChats');
       _unreadChatsCount = unreadChats;
       hasChanges = true;
     }
 
     if (pendingKeyExchange != null &&
         _pendingKeyExchangeCount != pendingKeyExchange) {
+      print(
+          '🔔 IndicatorService: 🔄 KER count changing from $_pendingKeyExchangeCount to $pendingKeyExchange');
       _pendingKeyExchangeCount = pendingKeyExchange;
       hasChanges = true;
     }
 
     if (unreadNotifications != null &&
         _unreadNotificationsCount != unreadNotifications) {
+      print(
+          '🔔 IndicatorService: 🔄 Notifications count changing from $_unreadNotificationsCount to $unreadNotifications');
       _unreadNotificationsCount = unreadNotifications;
       hasChanges = true;
     }
@@ -83,7 +92,17 @@ class IndicatorService extends ChangeNotifier {
       notifyListeners();
       print(
           '🔔 IndicatorService: ✅ Counts updated - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
+    } else {
+      print('🔔 IndicatorService: ℹ️ No changes detected in badge counts');
     }
+  }
+
+  /// Force display current badge counts (useful when navigating to tabs)
+  void forceDisplayCurrentCounts() {
+    print('🔔 IndicatorService: 🔄 Force displaying current badge counts');
+    print(
+        '🔔 IndicatorService: 📊 Current counts - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
+    notifyListeners();
   }
 
   /// Prevent badge updates when on specific screens
@@ -94,11 +113,27 @@ class IndicatorService extends ChangeNotifier {
     bool? isOnKeyExchangeScreen,
     bool? isOnNotificationsScreen,
   }) {
-    if (isOnKeyExchangeScreen != null) {
+    bool hasChanges = false;
+
+    if (isOnKeyExchangeScreen != null &&
+        _isOnKeyExchangeScreen != isOnKeyExchangeScreen) {
       _isOnKeyExchangeScreen = isOnKeyExchangeScreen;
+      hasChanges = true;
+      print(
+          '🔔 IndicatorService: 🔄 KER screen context changed to: $_isOnKeyExchangeScreen');
     }
-    if (isOnNotificationsScreen != null) {
+
+    if (isOnNotificationsScreen != null &&
+        _isOnNotificationsScreen != isOnNotificationsScreen) {
       _isOnNotificationsScreen = isOnNotificationsScreen;
+      hasChanges = true;
+      print(
+          '🔔 IndicatorService: 🔄 Notifications screen context changed to: $_isOnNotificationsScreen');
+    }
+
+    if (hasChanges) {
+      print(
+          '🔔 IndicatorService: ✅ Screen context updated - KER: $_isOnKeyExchangeScreen, Notifications: $_isOnNotificationsScreen');
     }
   }
 
@@ -108,19 +143,40 @@ class IndicatorService extends ChangeNotifier {
     int? pendingKeyExchange,
     int? unreadNotifications,
   }) {
-    // Don't update KER badge if on KER screen
+    print(
+        '🔔 IndicatorService: 🔍 Context check - KER Screen: $_isOnKeyExchangeScreen, Notifications Screen: $_isOnNotificationsScreen');
+
+    // For KER badge: only prevent external updates when on KER screen
+    // But allow the badge to show the current count
     if (pendingKeyExchange != null && _isOnKeyExchangeScreen) {
-      print('🔔 IndicatorService: ℹ️ Skipping KER badge update - user on KER screen');
-      return;
+      // If we're on the KER screen and the count is 0, allow the update to show the current count
+      if (_pendingKeyExchangeCount == 0 && pendingKeyExchange > 0) {
+        print(
+            '🔔 IndicatorService: ℹ️ Allowing KER badge update to show current count on KER screen: $pendingKeyExchange');
+      } else {
+        print(
+            '🔔 IndicatorService: ℹ️ Skipping KER badge update from external source - user on KER screen (current count: $_pendingKeyExchangeCount)');
+        return;
+      }
     }
 
-    // Don't update notifications badge if on notifications screen
+    // For notifications badge: only prevent external updates when on notifications screen
+    // But allow the badge to show the current count
     if (unreadNotifications != null && _isOnNotificationsScreen) {
-      print('🔔 IndicatorService: ℹ️ Skipping notifications badge update - user on notifications screen');
-      return;
+      // If we're on the notifications screen and the count is 0, allow the update to show the current count
+      if (_unreadNotificationsCount == 0 && unreadNotifications > 0) {
+        print(
+            '🔔 IndicatorService: ℹ️ Allowing notifications badge update to show current count on notifications screen: $unreadNotifications');
+      } else {
+        print(
+            '🔔 IndicatorService: ℹ️ Skipping notifications badge update from external source - user on notifications screen (current count: $_unreadNotificationsCount)');
+        return;
+      }
     }
 
     // Proceed with normal update
+    print(
+        '🔔 IndicatorService: ✅ Proceeding with badge update - KER: $pendingKeyExchange, Notifications: $unreadNotifications');
     updateCounts(
       unreadChats: unreadChats,
       pendingKeyExchange: pendingKeyExchange,

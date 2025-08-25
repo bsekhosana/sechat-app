@@ -221,6 +221,8 @@ class SeSocketService {
       String body)? onMessageReceived;
   Function(String messageId, String fromUserId, String toUserId)? onDelivered;
   Function(String messageId, String fromUserId, String toUserId)? onRead;
+  // 🆕 ADD THIS: Callback for queued message status
+  Function(String messageId, String toUserId, String fromUserId)? onQueued;
   Function(String sessionId, bool isOnline, String timestamp)? onPresence;
   Function(String fromUserId, String conversationId, bool isTyping)? onTyping;
   Function(Map<String, dynamic> data)? onKeyExchangeRequest;
@@ -690,57 +692,11 @@ class SeSocketService {
       }
     });
 
-    _socket!.on('message:delivered', (data) async {
-      print('✅ SeSocketService: Message delivered to device');
+    // 🚫 REMOVED: Legacy message:delivered handler - now handled by message:status_update
+    // This prevents premature status updates when recipient is offline
 
-      // This event means message reached recipient's device, but NOT necessarily viewed
-      // We should NOT update status to "delivered" yet - wait for receipt:delivered
-
-      // Create notification for message delivered to device (only if not silent)
-      final bool silent = data['silent'] ?? false;
-      if (!silent) {
-        await _createSocketEventNotification(
-          eventType: 'message:delivered',
-          title: 'Message Delivered to Device',
-          body: 'Message has been delivered to recipient\'s device',
-          senderId: data['fromUserId']?.toString(),
-          messageId: data['messageId']?.toString(),
-          metadata: data,
-          silent: silent,
-        );
-      }
-
-      // CRITICAL: Don't call onDelivered here - wait for receipt:delivered
-      // This prevents premature "delivered" status updates
-      print(
-          'ℹ️ SeSocketService: Message delivered to device, waiting for receipt:delivered');
-    });
-
-    _socket!.on('message:read', (data) async {
-      print('👁️ SeSocketService: Message read');
-
-      // Create notification for message read (only if not silent)
-      final bool silent = data['silent'] ?? false;
-      if (!silent) {
-        await _createSocketEventNotification(
-          eventType: 'message:read',
-          title: 'Message Read',
-          body: 'Message has been read',
-          senderId: data['fromUserId']?.toString(),
-          messageId: data['messageId']?.toString(),
-          metadata: data,
-          silent: silent,
-        );
-      }
-
-      if (onRead != null) {
-        onRead!(
-          data['messageId'] ?? '',
-          data['fromUserId'] ?? '',
-          data['toUserId'] ?? '',
-        );
-      }
-    });
+    // 🚫 REMOVED: Legacy message:read handler - now handled by message:status_update
+    // This prevents premature status updates when recipient is offline
 
     // Presence events - CONSOLIDATED FLOW
     _socket!.on('presence:update', (data) async {
@@ -801,83 +757,42 @@ class SeSocketService {
       }
     });
 
-    // Enhanced message status updates (silent)
-    _socket!.on('message:status_update', (data) async {
-      final String messageId = data['messageId'];
-      final String status = data['status'];
-      final String recipientId = data['recipientId'];
-      final String? conversationId = data['conversationId'];
-      final String? fromUserId = data['fromUserId'];
-      final bool silent = data['silent'] ?? false;
-
-      print(
-          '📊 SeSocketService: Message status update: $messageId -> $status (silent: $silent, conversationId: $conversationId, recipientId: $recipientId)');
-
-      // Update local message status with enhanced data
-      _updateMessageStatus(messageId, status, recipientId,
-          conversationId: conversationId);
-
-      // Call the external callback with enhanced data
-      if (onMessageStatusUpdateExternal != null) {
-        onMessageStatusUpdateExternal!(
-          fromUserId ?? _sessionId ?? '',
-          messageId,
-          status,
-          conversationId,
-          recipientId,
-        );
-      }
-
-      // Notify listeners about status change (silent)
-      if (silent) {
-        _notifyMessageStatusChange(messageId, status, recipientId);
-      } else {
-        // Create notification for non-silent message status updates
-        await _createSocketEventNotification(
-          eventType: 'message:status_update',
-          title: 'Message Status Update',
-          body: 'Message status: $status',
-          senderId: fromUserId,
-          messageId: messageId,
-          conversationId: conversationId,
-          metadata: data,
-          silent: silent,
-        );
-      }
-    });
+    // 🚫 REMOVED: Duplicate message:status_update handler - now consolidated into single handler
 
     // CRITICAL: Handle receipt:delivered events from server
     _socket!.on('receipt:delivered', (data) async {
       final String messageId = data['messageId'];
       final String fromUserId = data['fromUserId'];
       final String toUserId = data['toUserId'];
-      final String? conversationId = data['conversationId'];
+      String? conversationId = data['conversationId'];
       final bool silent = data['silent'] ?? true; // Usually silent
 
-      print(
-          '📬 SeSocketService: Receipt delivered: $messageId from $fromUserId to $toUserId (silent: $silent)');
+      // Receipt delivered event received
       print(
           '📬 SeSocketService: ✅ Recipient has actually processed/viewed the message');
+
+      // CRITICAL: Generate conversation ID if missing (server doesn't always send it)
+      if (conversationId == null || conversationId.isEmpty) {
+        conversationId =
+            _generateConsistentConversationId(fromUserId, toUserId);
+        print(
+            '📬 SeSocketService: 🔧 Generated conversation ID: $conversationId');
+      }
 
       // Update local message status to 'delivered'
       _updateMessageStatus(messageId, 'delivered', toUserId,
           conversationId: conversationId);
 
-      // Call the external callback for delivery confirmation
-      if (onMessageStatusUpdateExternal != null) {
-        onMessageStatusUpdateExternal!(
-          fromUserId,
-          messageId,
-          'delivered',
-          conversationId,
-          toUserId,
-        );
-      }
+      // 🆕 FIXED: Don't call onMessageStatusUpdateExternal for delivered status
+      // This status should only be processed through the dedicated onDelivered callback
+      // to ensure proper receipt-based status updates
 
       // CRITICAL: Also call the onDelivered callback for UI updates
       if (onDelivered != null) {
         onDelivered!(messageId, fromUserId, toUserId);
       }
+
+      // 🚫 REMOVED: Duplicate onMessageStatusUpdateExternal call - already called above
 
       // Notify listeners about delivery status change
       _notifyMessageStatusChange(messageId, 'delivered', toUserId);
@@ -902,31 +817,33 @@ class SeSocketService {
       final String messageId = data['messageId'];
       final String fromUserId = data['fromUserId'];
       final String toUserId = data['toUserId'];
-      final String? conversationId = data['conversationId'];
+      String? conversationId = data['conversationId'];
       final bool silent = data['silent'] ?? true; // Usually silent
 
-      print(
-          '👁️ SeSocketService: Receipt read: $messageId from $fromUserId to $toUserId (silent: $silent)');
+      // Receipt read event received
+
+      // CRITICAL: Generate conversation ID if missing (server doesn't always send it)
+      if (conversationId == null || conversationId.isEmpty) {
+        conversationId =
+            _generateConsistentConversationId(fromUserId, toUserId);
+        print(
+            '📬 SeSocketService: 🔧 Generated conversation ID: $conversationId');
+      }
 
       // Update local message status to 'read'
       _updateMessageStatus(messageId, 'read', toUserId,
           conversationId: conversationId);
 
-      // Call the external callback for read confirmation
-      if (onMessageStatusUpdateExternal != null) {
-        onMessageStatusUpdateExternal!(
-          fromUserId,
-          messageId,
-          'read',
-          conversationId,
-          toUserId,
-        );
-      }
+      // 🆕 FIXED: Don't call onMessageStatusUpdateExternal for read status
+      // This status should only be processed through the dedicated onRead callback
+      // to ensure proper receipt-based status updates
 
       // CRITICAL: Also call the onRead callback for UI updates
       if (onRead != null) {
         onRead!(messageId, fromUserId, toUserId);
       }
+
+      // 🚫 REMOVED: Duplicate onMessageStatusUpdateExternal call - already called above
 
       // Notify listeners about read status change
       _notifyMessageStatusChange(messageId, 'read', toUserId);
@@ -942,6 +859,90 @@ class SeSocketService {
           conversationId: conversationId,
           metadata: data,
           silent: silent,
+        );
+      }
+    });
+
+    // 🆕 FIXED: Handle message:status_update events from server
+    _socket!.on('message:status_update', (data) async {
+      final String messageId = data['messageId'];
+      final String status = data['status'];
+      final String? fromUserId = data['fromUserId'];
+      final String? toUserId = data['toUserId'];
+      final String? conversationId = data['conversationId'];
+      final String? recipientId = data['recipientId'];
+      final bool silent = data['silent'] ?? false;
+      final bool wasQueued = data['wasQueued'] ?? false;
+
+      print(
+          '📊 SeSocketService: [STATUS] Message status update: $messageId -> $status (silent: $silent, queued: $wasQueued)');
+
+      // 🆕 FIXED: Filter out delivered/read status updates from message:status_update
+      // These should only come through receipt:delivered and receipt:read events
+      if (status.toLowerCase() == 'delivered' ||
+          status.toLowerCase() == 'read') {
+        print(
+            '📊 SeSocketService: ⚠️ Ignoring delivered/read status from message:status_update - waiting for proper receipt events');
+        return; // Don't process delivered/read status from message:status_update
+      }
+
+      // Determine the effective conversation ID
+      String? effectiveConversationId = conversationId;
+      if (effectiveConversationId == null || effectiveConversationId.isEmpty) {
+        if (fromUserId != null && toUserId != null) {
+          effectiveConversationId =
+              _generateConsistentConversationId(fromUserId, toUserId);
+        } else if (recipientId != null && _sessionId != null) {
+          effectiveConversationId =
+              _generateConsistentConversationId(_sessionId!, recipientId);
+        }
+      }
+
+      // Call external callbacks for UI updates
+      if (onMessageStatusUpdateExternal != null) {
+        onMessageStatusUpdateExternal!(
+            fromUserId ?? recipientId ?? '',
+            messageId,
+            status,
+            effectiveConversationId,
+            toUserId ?? recipientId ?? '');
+      }
+
+      // Handle specific status updates (only sent/queued now)
+      if (status == 'queued' && onQueued != null) {
+        onQueued!(messageId, toUserId ?? '', fromUserId ?? '');
+      }
+
+      // Update local message status if we have the message
+      if (effectiveConversationId != null) {
+        _updateMessageStatus(messageId, status, toUserId ?? recipientId ?? '',
+            conversationId: effectiveConversationId);
+      }
+    });
+
+    // 🆕 ADD THIS: Handle message:queued events from server
+    _socket!.on('message:queued', (data) async {
+      final String messageId = data['messageId'];
+      final String toUserId = data['toUserId'];
+      final String? fromUserId = data['fromUserId'];
+      final String? conversationId = data['conversationId'];
+      final String? reason = data['reason'];
+
+      print('📬 SeSocketService: Message queued: $messageId (reason: $reason)');
+
+      // Call the queued callback if available
+      if (onQueued != null) {
+        onQueued!(messageId, toUserId, fromUserId ?? '');
+      }
+
+      // Call the main status update callback for queued messages
+      if (onMessageStatusUpdateExternal != null) {
+        onMessageStatusUpdateExternal!(
+          fromUserId ?? '',
+          messageId,
+          'queued',
+          conversationId,
+          toUserId,
         );
       }
     });
@@ -1652,18 +1653,10 @@ class SeSocketService {
       Function(String senderId, String messageId, String status,
               String? conversationId, String? recipientId)?
           callback) {
-    // Set the external callback for enhanced message status updates
+    // 🆕 FIXED: Only set the external callback for message status updates
+    // DO NOT override the dedicated onDelivered and onRead callbacks
+    // This prevents duplicate processing and ensures proper receipt flow
     onMessageStatusUpdateExternal = callback;
-
-    // Also map to the existing callbacks for backward compatibility
-    if (callback != null) {
-      onDelivered = (messageId, fromUserId, toUserId) {
-        callback(fromUserId, messageId, 'delivered', toUserId, toUserId);
-      };
-      onRead = (messageId, fromUserId, toUserId) {
-        callback(fromUserId, messageId, 'read', toUserId, toUserId);
-      };
-    }
   }
 
   void setOnKeyExchangeRequestReceived(
@@ -1727,6 +1720,12 @@ class SeSocketService {
     if (callback != null) {
       onRead = callback;
     }
+  }
+
+  // 🆕 ADD THIS: Setter for queued message callback
+  void setOnMessageQueued(
+      Function(String messageId, String toUserId, String fromUserId) callback) {
+    onQueued = callback;
   }
 
   void setOnKeyExchangeRevoked(Function(Map<String, dynamic> data)? callback) {
@@ -1925,19 +1924,24 @@ class SeSocketService {
     required String recipientId,
     required String messageId,
     String? status,
+    String? conversationId, // Add optional conversation ID parameter
   }) async {
     if (!isConnected || _sessionId == null) return;
     try {
+      // Use provided conversation ID or generate consistent one
+      final effectiveConversationId = conversationId ??
+          _generateConsistentConversationId(_sessionId!, recipientId);
+
       _socket!.emit('message:status_update', {
         'recipientId': recipientId,
         'messageId': messageId,
         'status': status ?? 'sent',
         'conversationId':
-            _sessionId, // Server expects sender's sessionId as conversationId
+            effectiveConversationId, // ✅ Use proper conversation ID
         'timestamp': DateTime.now().toIso8601String(),
       });
       print(
-          '🔌 SeSocketService: Message status update sent: $messageId -> $status');
+          '🔌 SeSocketService: Message status update sent: $messageId -> $status (conversationId: $effectiveConversationId)');
     } catch (e) {
       print('🔌 SeSocketService: ❌ Error sending message status update: $e');
     }
@@ -1947,19 +1951,25 @@ class SeSocketService {
   Future<void> sendDeliveryReceipt({
     required String recipientId,
     required String messageId,
+    String? conversationId, // Add optional conversation ID parameter
   }) async {
     if (!isConnected || _sessionId == null) return;
     try {
+      // Use provided conversation ID or generate consistent one
+      final effectiveConversationId = conversationId ??
+          _generateConsistentConversationId(_sessionId!, recipientId);
+
       _socket!.emit('receipt:delivered', {
         'messageId': messageId,
         'fromUserId': _sessionId, // We are the recipient
         'toUserId': recipientId, // Original sender
-        'conversationId': _sessionId,
+        'conversationId':
+            effectiveConversationId, // ✅ Use proper conversation ID
         'timestamp': DateTime.now().toIso8601String(),
         'silent': true, // Usually silent to avoid spam
       });
       print(
-          '📬 SeSocketService: Delivery receipt sent: $messageId -> $recipientId');
+          '📬 SeSocketService: Delivery receipt sent: $messageId -> $recipientId (conversationId: $effectiveConversationId)');
     } catch (e) {
       print('🔌 SeSocketService: ❌ Error sending delivery receipt: $e');
     }

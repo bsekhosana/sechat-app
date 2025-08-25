@@ -35,6 +35,20 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
   @override
   void dispose() {
     _tabController.dispose();
+
+    // Reset screen context when leaving the key exchange screen
+    // This allows badge updates to resume when the user is not on this screen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final indicatorService = IndicatorService();
+        indicatorService.setScreenContext(isOnKeyExchangeScreen: false);
+        print(
+            '🔑 KeyExchangeScreen: ✅ Screen context reset - badge updates will resume');
+      } catch (e) {
+        print('🔑 KeyExchangeScreen: ❌ Error resetting screen context: $e');
+      }
+    });
+
     super.dispose();
   }
 

@@ -42,6 +42,15 @@ class SessionChatProvider extends ChangeNotifier {
   DateTime? _recipientLastSeen;
   bool _isRecipientOnline = false;
 
+  // Track if user is currently on chat screen
+  bool _isUserOnChatScreen = false;
+
+  // 🆕 IMPROVED: Pagination state for lazy loading messages
+  bool _hasMoreMessages = false;
+  bool get hasMoreMessages => _hasMoreMessages;
+  int _currentMessageOffset = 0;
+  int get currentMessageOffset => _currentMessageOffset;
+
   // No need for stream subscription - using ChangeNotifier pattern
 
   List<Chat> get chats => _chats;
@@ -63,17 +72,36 @@ class SessionChatProvider extends ChangeNotifier {
 
   /// Get the current conversation ID
   String? get currentConversationId {
-    // Conversation ID is simply the recipient's session ID
-    return _currentRecipientId;
+    // Use the stored conversation ID or generate one if needed
+    if (_currentConversationId == null && _currentRecipientId != null) {
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId != null) {
+        _currentConversationId = _generateConsistentConversationId(
+            currentUserId, _currentRecipientId!);
+        print(
+            '📱 SessionChatProvider: 🔧 Generated conversation ID: $_currentConversationId');
+      }
+    }
+    return _currentConversationId;
+  }
+
+  /// Generate consistent conversation ID
+  String _generateConsistentConversationId(String user1Id, String user2Id) {
+    // Sort IDs to ensure consistency between both users
+    final sortedIds = [user1Id, user2Id]..sort();
+    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
   }
 
   /// Ensure conversation ID is set
   void _ensureConversationId() {
     if (_currentConversationId == null && _currentRecipientId != null) {
-      // Set conversation ID to recipient ID for simplicity
-      _currentConversationId = _currentRecipientId;
-      print(
-          '📱 SessionChatProvider: ✅ Set conversation ID to recipient ID: $_currentConversationId');
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId != null) {
+        _currentConversationId = _generateConsistentConversationId(
+            currentUserId, _currentRecipientId!);
+        print(
+            '📱 SessionChatProvider: ✅ Set conversation ID: $_currentConversationId');
+      }
     }
   }
 
@@ -374,8 +402,9 @@ class SessionChatProvider extends ChangeNotifier {
         final user = _chatUsers[senderId]!;
         _chatUsers[senderId] = user.copyWith(
           isOnline: isOnline,
-          lastSeen:
-              lastSeen != null ? DateTime.parse(lastSeen) : DateTime.now(),
+          lastSeen: lastSeen != null
+              ? DateTime.parse(lastSeen)
+              : user.lastSeen, // Keep existing lastSeen if no new one provided
         );
 
         // Update chat
@@ -386,7 +415,9 @@ class SessionChatProvider extends ChangeNotifier {
             otherUser: {
               ...?chat.otherUser,
               'is_online': isOnline,
-              'last_seen': lastSeen ?? DateTime.now().toIso8601String(),
+              'last_seen': lastSeen ??
+                  (chat.otherUser?['last_seen'] ??
+                      DateTime.now().toIso8601String()),
             },
           );
         }
@@ -394,8 +425,9 @@ class SessionChatProvider extends ChangeNotifier {
         // If this is the current recipient, update the recipient online state
         if (_currentRecipientId == senderId) {
           _isRecipientOnline = isOnline;
-          _recipientLastSeen =
-              lastSeen != null ? DateTime.parse(lastSeen) : DateTime.now();
+          _recipientLastSeen = lastSeen != null
+              ? DateTime.parse(lastSeen)
+              : _recipientLastSeen; // Keep existing lastSeen if no new one provided
           print(
               '📱 SessionChatProvider: ✅ Updated current recipient online state: $isOnline');
         }
@@ -751,15 +783,53 @@ class SessionChatProvider extends ChangeNotifier {
     final isOwnMessage =
         currentUserId != null && message.senderId == currentUserId;
 
-    if (_currentConversationId == chatId || isOwnMessage) {
-      _messages.add(message);
-      // CRITICAL: Sort messages by timestamp DESCENDING (newest first) for bottom-up display
-      _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      print(
-          '📱 SessionChatProvider: ✅ Message added to messages list: ${message.id}');
+    // CRITICAL: Use consistent conversation ID for message matching
+    final effectiveChatId = _currentConversationId ?? chatId;
 
-      // CRITICAL: Trigger auto-scroll to bottom for new messages
-      _triggerAutoScrollToBottom();
+    if (effectiveChatId == chatId || isOwnMessage) {
+      // 🆕 IMPROVED: Add message without triggering full reload
+      _messages.add(message);
+
+      // 🆕 IMPROVED: Sort messages by timestamp ASCENDING (oldest first)
+      // This ensures latest messages appear at the bottom (WhatsApp style)
+      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      print(
+          '📱 SessionChatProvider: ✅ Message added to messages list: ${message.id} (conversationId: $effectiveChatId)');
+
+      // 🆕 IMPROVED: Only trigger auto-scroll for new messages, not during initial load
+      if (_messages.length > 10) {
+        // Only auto-scroll if we have more than the initial 10 messages
+        _triggerAutoScrollToBottom();
+      }
+
+      // 🆕 FIXED: For incoming messages (not sent by us), handle bidirectional status updates
+      if (!isOwnMessage) {
+        // CASE 1: Send delivery receipt immediately when we receive their message
+        // BUT ONLY if the recipient is actually online
+        if (_isRecipientOnline) {
+          sendDeliveryReceiptToSender(message.id, message.senderId);
+          print(
+              '📬 SessionChatProvider: ✅ Auto-sent delivery receipt for incoming message: ${message.id} (recipient online)');
+        } else {
+          print(
+              '📬 SessionChatProvider: ⚠️ Not auto-sending delivery receipt - recipient is offline: $_currentRecipientId');
+        }
+
+        // CASE 2: If user is already on chat screen, also send read receipt immediately
+        // BUT ONLY if the recipient is actually online
+        if (_isUserOnChatScreen && _isRecipientOnline) {
+          print(
+              '👁️ SessionChatProvider: 🔄 User is already on chat screen, auto-sending read receipt for message: ${message.id} (recipient online)');
+          sendReadReceiptToSender(message.id, message.senderId);
+        } else if (_isUserOnChatScreen && !_isRecipientOnline) {
+          print(
+              '👁️ SessionChatProvider: ⚠️ User on chat screen but recipient offline, read receipt will be sent when recipient comes online');
+        } else {
+          print(
+              '👁️ SessionChatProvider: ℹ️ User not on chat screen, read receipt will be sent when they open chat');
+        }
+      }
     } else {
       print(
           '📱 SessionChatProvider: ℹ️ Message not added to messages list - not current conversation and not own message');
@@ -781,7 +851,7 @@ class SessionChatProvider extends ChangeNotifier {
       print('📱 SessionChatProvider: ℹ️ Chat not found for message: $chatId');
     }
 
-    // Notify listeners to update UI
+    // 🆕 IMPROVED: Notify listeners to update UI without full reload
     notifyListeners();
   }
 
@@ -830,7 +900,8 @@ class SessionChatProvider extends ChangeNotifier {
             username: 'Anonymous User',
             profilePicture: null,
             isOnline: false,
-            lastSeen: DateTime.now(),
+            lastSeen: DateTime.now().subtract(
+                Duration(hours: 1)), // Default to 1 hour ago for offline users
             alreadyInvited: true,
             invitationStatus: 'accepted',
           );
@@ -909,13 +980,21 @@ class SessionChatProvider extends ChangeNotifier {
         );
       }
 
-      // Send read status update back to the sender via socket
-      final socketService = SeSocketService.instance;
-      await socketService.sendMessageStatusUpdate(
-        recipientId: senderId,
-        messageId: messageId,
-        status: 'read',
-      );
+      // 🆕 FIXED: Send read status update back to the sender via socket
+      // BUT ONLY if the recipient is actually online
+      if (_isRecipientOnline) {
+        final socketService = SeSocketService.instance;
+        await socketService.sendMessageStatusUpdate(
+          recipientId: senderId,
+          messageId: messageId,
+          status: 'read',
+        );
+        print(
+            '📱 SessionChatProvider: ✅ Read status update sent to sender: $messageId (recipient online)');
+      } else {
+        print(
+            '📱 SessionChatProvider: ⚠️ Not sending read status update - recipient is offline: $_currentRecipientId');
+      }
 
       print(
           '📱 SessionChatProvider: ✅ Message marked as read and status sent: $messageId');
@@ -940,13 +1019,25 @@ class SessionChatProvider extends ChangeNotifier {
       _isLoading = true;
       _error = null;
 
-      // Set the conversation ID and recipient info
-      _currentConversationId = conversationId;
-
-      // SIMPLIFIED: Just use the recipientId parameter directly - no parsing needed!
+      // Set the recipient info first
       _currentRecipientId = recipientId;
-
       _currentRecipientName = recipientName;
+
+      // CRITICAL: Generate consistent conversation ID that both users will share
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId != null) {
+        _currentConversationId =
+            _generateConsistentConversationId(currentUserId, recipientId);
+        print(
+            '📱 SessionChatProvider: 🔧 Generated consistent conversation ID: $_currentConversationId');
+        print('📱 SessionChatProvider: 🔍 From widget: $conversationId');
+        print('📱 SessionChatProvider: 🔍 Generated: $_currentConversationId');
+      } else {
+        // Fallback to widget conversation ID if no current user
+        _currentConversationId = conversationId;
+        print(
+            '📱 SessionChatProvider: ⚠️ Using widget conversation ID as fallback: $_currentConversationId');
+      }
 
       // Ensure conversation ID is always set and consistent
       _ensureConversationId();
@@ -997,13 +1088,16 @@ class SessionChatProvider extends ChangeNotifier {
       print(
           '📱 SessionChatProvider: 🔄 Loading messages for conversation: $conversationId');
 
-      // Load messages from MessageStorageService
+      // 🆕 IMPROVED: Load only last 10 messages initially for better UX
+      // WhatsApp style: load latest messages and show them at the bottom
       final messageStorageService = MessageStorageService.instance;
+
+      // Get the most recent messages (newest first from DB, then we'll reverse for display)
       final loadedMessages =
-          await messageStorageService.getMessages(conversationId, limit: 100);
+          await messageStorageService.getMessages(conversationId, limit: 10);
 
       print(
-          '📱 SessionChatProvider: 🔄 Loaded ${loadedMessages.length} messages from database');
+          '📱 SessionChatProvider: 🔄 Loaded ${loadedMessages.length} messages from database (initial load)');
 
       // Debug: Log the content of loaded messages
       for (final message in loadedMessages) {
@@ -1028,13 +1122,21 @@ class SessionChatProvider extends ChangeNotifier {
       // Add new messages to existing list
       _messages.addAll(newMessages);
 
-      // CRITICAL: Sort messages by timestamp ASCENDING (oldest first) for natural chat flow
+      // 🆕 IMPROVED: Sort messages by timestamp ASCENDING (oldest first)
+      // This ensures latest messages appear at the bottom (WhatsApp style)
+      // Since DB returns newest first, we need to reverse to get oldest first for display
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      // 🆕 IMPROVED: Set pagination state
+      _hasMoreMessages = loadedMessages.length >= 10;
+      _currentMessageOffset = loadedMessages.length;
 
       print(
           '📱 SessionChatProvider: Loaded ${loadedMessages.length} messages for conversation: $conversationId');
       print(
           '📱 SessionChatProvider: Total messages in memory: ${_messages.length}');
+      print(
+          '📱 SessionChatProvider: Has more messages: $_hasMoreMessages, Offset: $_currentMessageOffset');
     } catch (e) {
       print('📱 SessionChatProvider: ❌ Error loading messages: $e');
       // Don't clear existing messages on error
@@ -1045,6 +1147,59 @@ class SessionChatProvider extends ChangeNotifier {
   Future<void> manualRefreshMessages() async {
     print('📱 SessionChatProvider: 🔄 Manual refresh triggered');
     await _refreshMessagesFromDatabase();
+  }
+
+  /// 🆕 IMPROVED: Load more messages when scrolling up (lazy loading)
+  Future<void> loadMoreMessages() async {
+    if (!_hasMoreMessages || _isLoading) {
+      print(
+          '📱 SessionChatProvider: ℹ️ No more messages to load or already loading');
+      return;
+    }
+
+    try {
+      print(
+          '📱 SessionChatProvider: 🔄 Loading more messages (offset: $_currentMessageOffset)');
+
+      final messageStorageService = MessageStorageService.instance;
+      final moreMessages = await messageStorageService.getMessages(
+        _currentConversationId!,
+        limit: 20, // Load 20 more messages
+        offset: _currentMessageOffset,
+      );
+
+      if (moreMessages.isNotEmpty) {
+        // Merge with existing messages to avoid duplicates
+        final existingMessageIds = _messages.map((m) => m.id).toSet();
+        final newMessages = moreMessages
+            .where((m) => !existingMessageIds.contains(m.id))
+            .toList();
+
+        // Add new messages to the beginning (older messages)
+        _messages.insertAll(0, newMessages);
+
+        // 🆕 IMPROVED: Sort messages by timestamp ASCENDING (oldest first)
+        // This maintains the WhatsApp style with latest messages at bottom
+        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+        // Update pagination state
+        _currentMessageOffset += moreMessages.length;
+        _hasMoreMessages = moreMessages.length >= 20;
+
+        print(
+            '📱 SessionChatProvider: ✅ Loaded ${newMessages.length} more messages');
+        print(
+            '📱 SessionChatProvider: Total messages: ${_messages.length}, Offset: $_currentMessageOffset, Has more: $_hasMoreMessages');
+
+        // Notify listeners to update UI
+        notifyListeners();
+      } else {
+        _hasMoreMessages = false;
+        print('📱 SessionChatProvider: ℹ️ No more messages available');
+      }
+    } catch (e) {
+      print('📱 SessionChatProvider: ❌ Error loading more messages: $e');
+    }
   }
 
   /// Load recipient user data
@@ -1058,13 +1213,15 @@ class SessionChatProvider extends ChangeNotifier {
       } else {
         // Create default user data
         _isRecipientOnline = false;
-        _recipientLastSeen = DateTime.now();
+        _recipientLastSeen = DateTime.now().subtract(
+            Duration(hours: 1)); // Default to 1 hour ago for offline users
       }
 
-      // Try to get the latest status from ChatListProvider if available
+      // 🆕 FIXED: Try to get the latest status from ChatListProvider if available
       try {
         // Note: We'll rely on the main.dart callback to update recipient status
         // when the ChatListProvider receives online status updates
+        // The status will be updated via updateRecipientStatus() when presence updates arrive
         print(
             '📱 SessionChatProvider: ℹ️ Recipient status will be updated via socket callbacks');
       } catch (e) {
@@ -1080,9 +1237,15 @@ class SessionChatProvider extends ChangeNotifier {
   /// Mark conversation as read
   Future<void> markAsRead() async {
     try {
+      print(
+          '👁️ SessionChatProvider: 🔄 markAsRead() called for recipient: $_currentRecipientId');
+      print(
+          '👁️ SessionChatProvider: 🔍 Current conversation ID: $_currentConversationId');
+      print(
+          '👁️ SessionChatProvider: 🔍 Messages in memory: ${_messages.length}');
+
       if (_currentRecipientId != null) {
-        print(
-            '📱 SessionChatProvider: 🔄 Marking all unread messages as read...');
+        // Marking messages as read
 
         // Efficiently mark all unread messages sent TO me in the conversation as read
         final messageStorageService = MessageStorageService.instance;
@@ -1105,46 +1268,62 @@ class SessionChatProvider extends ChangeNotifier {
           }
         }
 
-        // CRITICAL: Send delivery receipts ONLY for messages from ONLINE recipients
-        // This prevents false "delivered" status for offline users
-        final socketService = SeSocketService.instance;
-        for (final message in _messages) {
-          if (message.recipientId ==
-                  currentUserId && // Only messages sent TO me
-              message.status != MessageStatus.delivered &&
-              message.status != MessageStatus.read) {
-            // Check if the sender is actually online before sending delivery receipt
-            final senderId = message.senderId;
-            final isSenderOnline = await _checkIfUserIsOnline(senderId);
-
-            if (isSenderOnline) {
-              // Only send delivery receipt if sender is online and can receive it
-              await socketService.sendDeliveryReceipt(
-                recipientId: message.senderId,
-                messageId: message.id,
-              );
-
-              print(
-                  '📬 SessionChatProvider: ✅ Delivery receipt sent for message: ${message.id} (sender online)');
-            } else {
-              print(
-                  '📬 SessionChatProvider: ⚠️ Skipping delivery receipt for message: ${message.id} (sender offline: $senderId)');
+        // 🆕 FIXED: Send delivery receipts for messages sent BY others (bidirectional status updates)
+        // This ensures the sender gets "delivered" status when we view their message
+        // BUT ONLY if the recipient is actually online
+        if (_isRecipientOnline) {
+          for (final message in _messages) {
+            if (message.senderId != currentUserId && // Messages sent BY others
+                message.recipientId == currentUserId && // Messages sent TO me
+                message.status != MessageStatus.delivered &&
+                message.status != MessageStatus.read) {
+              // Send delivery receipt to the sender (bidirectional status update)
+              await sendDeliveryReceiptToSender(message.id, message.senderId);
             }
           }
+        } else {
+          print(
+              '👁️ SessionChatProvider: ⚠️ Not sending delivery receipts - recipient is offline: $_currentRecipientId');
         }
 
-        // Also mark messages currently in memory as read
-        for (final message in _messages) {
-          if (message.senderId != _currentRecipientId &&
-              message.status != MessageStatus.read) {
-            await markMessageAsRead(message.id, message.senderId);
+        // 🆕 FIXED: Send read receipts for messages sent BY others (bidirectional status updates)
+        // This ensures the sender gets "read" status when we read their message
+        // BUT ONLY if the recipient is actually online
+        if (_isRecipientOnline) {
+          for (final message in _messages) {
+            if (message.senderId != currentUserId && // Messages sent BY others
+                message.recipientId == currentUserId && // Messages sent TO me
+                message.status != MessageStatus.read) {
+              // Send read receipt for any unread message
+              // Send read receipt to the sender (bidirectional status update)
+              sendReadReceiptToSender(message.id, message.senderId);
+              print(
+                  '👁️ SessionChatProvider: 🔄 Sending read receipt for message: ${message.id} (status: ${message.status})');
+            }
           }
+        } else {
+          print(
+              '👁️ SessionChatProvider: ⚠️ Not sending read receipts - recipient is offline: $_currentRecipientId');
+        }
+
+        // 🆕 FIXED: Also mark messages currently in memory as read
+        // BUT ONLY if the recipient is actually online
+        if (_isRecipientOnline) {
+          for (final message in _messages) {
+            if (message.senderId != _currentRecipientId &&
+                message.status != MessageStatus.read) {
+              await markMessageAsRead(message.id, message.senderId);
+            }
+          }
+        } else {
+          print(
+              '👁️ SessionChatProvider: ⚠️ Not marking messages as read in memory - recipient is offline: $_currentRecipientId');
         }
 
         // Update unread count
         _unreadCounts[_currentConversationId ?? ''] = 0;
 
-        print('📱 SessionChatProvider: ✅ All unread messages marked as read');
+        // All messages marked as read
         notifyListeners();
       }
     } catch (e) {
@@ -1162,6 +1341,24 @@ class SessionChatProvider extends ChangeNotifier {
       }
     } catch (e) {
       print('📱 SessionChatProvider: ❌ Error refreshing messages: $e');
+    }
+  }
+
+  /// Update recipient presence status (called from socket events)
+  void updateRecipientPresence(bool isOnline, DateTime? lastSeen) {
+    try {
+      if (_currentRecipientId != null) {
+        _isRecipientOnline = isOnline;
+        _recipientLastSeen = lastSeen;
+
+        print(
+            '📱 SessionChatProvider: ✅ Recipient presence updated: online=$isOnline, lastSeen=$lastSeen');
+
+        // Notify listeners to update UI
+        notifyListeners();
+      }
+    } catch (e) {
+      print('📱 SessionChatProvider: ❌ Error updating recipient presence: $e');
     }
   }
 
@@ -1196,16 +1393,49 @@ class SessionChatProvider extends ChangeNotifier {
   }
 
   /// Check if a user is currently online
-  /// For now, we'll be conservative and assume offline to prevent false delivery receipts
+  /// Check if a user is online using proper presence checking
   Future<bool> _checkIfUserIsOnline(String userId) async {
     try {
-      // CRITICAL: For now, assume all users are offline to prevent false delivery receipts
-      // This ensures messages don't get marked as "delivered" when recipients are offline
-      // TODO: Implement proper presence checking when presence service is available
+      // CRITICAL: Implement proper presence checking using available services
+      // This ensures messages are only marked as "delivered" when recipients are actually online
 
+      // Method 1: Check if this is the current recipient and we have their status
+      if (userId == _currentRecipientId) {
+        if (_isRecipientOnline) {
+          print(
+              '📱 SessionChatProvider: ✅ Current recipient $userId is online');
+          return true;
+        }
+        if (_recipientLastSeen != null) {
+          final timeSinceLastSeen =
+              DateTime.now().difference(_recipientLastSeen!);
+          // Consider user online if last seen within last 5 minutes
+          if (timeSinceLastSeen.inMinutes < 5) {
+            print(
+                '📱 SessionChatProvider: ✅ Current recipient $userId recently active (lastSeen: $_recipientLastSeen)');
+            return true;
+          }
+        }
+      }
+
+      // Method 3: Check socket service for active connections
+      try {
+        final socketService = SeSocketService.instance;
+        // If we have an active socket connection, assume the user might be online
+        // This is a fallback method
+        if (socketService.isConnected) {
+          print(
+              '📱 SessionChatProvider: ℹ️ User $userId status unknown, socket connected (assuming online)');
+          return true;
+        }
+      } catch (e) {
+        print('📱 SessionChatProvider: ⚠️ Socket service check failed: $e');
+      }
+
+      // Default: Assume offline if no presence information available
       print(
-          '📱 SessionChatProvider: 🔍 User $userId online status: assumed offline (conservative approach)');
-      return false; // Assume offline for now
+          '📱 SessionChatProvider: ℹ️ User $userId assumed offline (no presence data)');
+      return false;
     } catch (e) {
       print(
           '📱 SessionChatProvider: ❌ Error checking online status for user $userId: $e');
@@ -1215,35 +1445,143 @@ class SessionChatProvider extends ChangeNotifier {
 
   /// Validate message status update to prevent false delivery status
   /// This ensures messages are only marked as "delivered" when appropriate
+  /// AND prevents status downgrades (e.g., delivered -> sent)
   bool _validateMessageStatusUpdate(String messageId, MessageStatus newStatus) {
     try {
       // Find the message
       final message = _messages.firstWhere((msg) => msg.id == messageId);
+      final currentUserId = SeSessionService().currentSessionId;
+      final currentStatus = message.status ?? MessageStatus.sent;
 
-      // CRITICAL: Prevent false "delivered" status for offline recipients
-      if (newStatus == MessageStatus.delivered) {
-        // Check if the recipient (current user) is actually online
-        final currentUserId = SeSessionService().currentSessionId;
-        if (currentUserId != null && message.recipientId == currentUserId) {
-          // This is a message sent TO us, we can mark it as delivered
-          print(
-              '📱 SessionChatProvider: ✅ Valid delivery status update for message: $messageId');
-          return true;
-        } else {
-          // This is a message sent BY us, we should NOT mark it as delivered
-          // unless we receive a proper receipt from the recipient
-          print(
-              '📱 SessionChatProvider: ⚠️ Invalid delivery status update for message: $messageId (sent by us)');
-          return false;
-        }
+      // CRITICAL: Prevent status downgrades - status can only progress forward
+      if (!_isStatusProgressionValid(currentStatus, newStatus)) {
+        print(
+            '📱 SessionChatProvider: ❌ Status downgrade blocked: $currentStatus -> $newStatus for message: $messageId');
+        return false;
       }
 
-      // Other status updates are valid
+      // CRITICAL: For messages sent BY us, status updates MUST come from socket events
+      if (currentUserId != null && message.senderId == currentUserId) {
+        // This is a message sent BY us - status can ONLY be updated by socket events
+        // Local status changes are NOT allowed for sent messages
+        if (newStatus == MessageStatus.delivered) {
+          // Only allow "delivered" status when we receive a proper receipt from recipient
+          print(
+              '📱 SessionChatProvider: ✅ Valid delivery status update for message: $messageId (sent by us, from socket)');
+          return true;
+        } else if (newStatus == MessageStatus.read) {
+          // Only allow "read" status when we receive a proper read receipt from recipient
+          print(
+              '📱 SessionChatProvider: ✅ Valid read status update for message: $messageId (sent by us, from socket)');
+          return true;
+        } else if (newStatus == MessageStatus.sent) {
+          // Allow "sent" status from server acknowledgment
+          print(
+              '📱 SessionChatProvider: ✅ Valid sent status update for message: $messageId (sent by us, from server)');
+          return true;
+        } else {
+          // Block any other status updates for messages sent by us
+          print(
+              '📱 SessionChatProvider: ❌ Invalid status update for message: $messageId (sent by us, status: $newStatus)');
+          return false;
+        }
+      } else if (currentUserId != null &&
+          message.recipientId == currentUserId) {
+        // This is a message sent TO us - we can update status locally
+        print(
+            '📱 SessionChatProvider: ✅ Valid status update for message: $messageId (sent to us)');
+        return true;
+      }
+
+      // Default: allow status updates for unknown message ownership
       return true;
     } catch (e) {
       print(
           '📱 SessionChatProvider: ❌ Error validating message status update: $e');
       return false;
+    }
+  }
+
+  /// Check if status progression is valid (prevents downgrades)
+  bool _isStatusProgressionValid(
+      MessageStatus currentStatus, MessageStatus newStatus) {
+    // Define valid status progression order
+    final statusOrder = [
+      MessageStatus.pending,
+      MessageStatus.sending,
+      MessageStatus.sent,
+      MessageStatus.delivered,
+      MessageStatus.read,
+    ];
+
+    final currentIndex = statusOrder.indexOf(currentStatus);
+    final newIndex = statusOrder.indexOf(newStatus);
+
+    // If current status not found, allow update
+    if (currentIndex == -1) return true;
+
+    // If new status not found, allow update (for unknown statuses)
+    if (newIndex == -1) return true;
+
+    // Only allow progression forward or same status
+    return newIndex >= currentIndex;
+  }
+
+  /// Send delivery receipt to message sender (bidirectional status update)
+  /// This ensures the sender gets "delivered" status when we view their message
+  Future<void> sendDeliveryReceiptToSender(
+      String messageId, String senderId) async {
+    try {
+      // 🆕 ADD THIS: Check if recipient is actually online before sending delivery receipt
+      if (!_isRecipientOnline) {
+        print(
+            '📬 SessionChatProvider: ⚠️ Not sending delivery receipt - recipient is offline: $_currentRecipientId');
+        return; // Don't send delivery receipt if recipient is offline
+      }
+
+      final socketService = SeSocketService.instance;
+
+      // Send delivery receipt to the sender with proper conversation ID
+      await socketService.sendDeliveryReceipt(
+        recipientId: senderId,
+        messageId: messageId,
+        conversationId:
+            _currentConversationId, // ✅ Pass the actual conversation ID
+      );
+
+      print(
+          '📬 SessionChatProvider: ✅ Delivery receipt sent to sender: $senderId for message: $messageId (conversationId: $_currentConversationId)');
+    } catch (e) {
+      print(
+          '📬 SessionChatProvider: ❌ Failed to send delivery receipt to sender: $e');
+    }
+  }
+
+  /// Send read receipt to message sender (bidirectional status update)
+  /// This ensures the sender gets "read" status when we read their message
+  Future<void> sendReadReceiptToSender(
+      String messageId, String senderId) async {
+    try {
+      print(
+          '👁️ SessionChatProvider: 🔄 Attempting to send read receipt for message: $messageId to sender: $senderId');
+
+      // 🆕 ADD THIS: Check if recipient is actually online before sending read receipt
+      if (!_isRecipientOnline) {
+        print(
+            '👁️ SessionChatProvider: ⚠️ Not sending read receipt - recipient is offline: $_currentRecipientId');
+        return; // Don't send read receipt if recipient is offline
+      }
+
+      final socketService = SeSocketService.instance;
+
+      // Send read receipt to the sender
+      socketService.sendReadReceipt(senderId, messageId);
+
+      print(
+          '👁️ SessionChatProvider: ✅ Read receipt sent to sender: $senderId for message: $messageId');
+    } catch (e) {
+      print(
+          '👁️ SessionChatProvider: ❌ Failed to send read receipt to sender: $e');
     }
   }
 
@@ -1530,6 +1868,41 @@ class SessionChatProvider extends ChangeNotifier {
         }
       });
 
+      // 🆕 FIXED: Set up message received callback for incoming messages
+      _socketService.setOnMessageReceived(
+          (senderId, senderName, message, conversationId, messageId) {
+        print(
+            '📱 SessionChatProvider: 📨 Message received: $messageId from $senderId');
+
+        // This ensures incoming messages trigger delivery receipts
+        // The main message handling is done in main.dart, but we need this callback
+        // to ensure the SessionChatProvider is aware of new messages
+        if (_currentRecipientId == senderId ||
+            (_currentConversationId != null &&
+                _currentConversationId!.contains(senderId))) {
+          print(
+              '📱 SessionChatProvider: ✅ Message is for current conversation, triggering delivery receipt');
+
+          // 🆕 FIXED: Only send delivery receipt if recipient is actually online
+          if (_isRecipientOnline) {
+            // Send delivery receipt for incoming message
+            _sendDeliveryReceiptForIncomingMessage(messageId, senderId);
+          } else {
+            print(
+                '📱 SessionChatProvider: ⚠️ Not sending delivery receipt - recipient is offline: $_currentRecipientId');
+          }
+        }
+      });
+
+      // Set up presence update callback
+      _socketService.setOnOnlineStatusUpdate((userId, isOnline, lastSeen) {
+        if (userId == _currentRecipientId) {
+          final lastSeenDateTime =
+              lastSeen != null ? DateTime.parse(lastSeen) : null;
+          updateRecipientPresence(isOnline, lastSeenDateTime);
+        }
+      });
+
       print('📱 SessionChatProvider: ✅ Socket callbacks set up successfully');
     } catch (e) {
       print('📱 SessionChatProvider: ❌ Failed to set up socket callbacks: $e');
@@ -1547,6 +1920,20 @@ class SessionChatProvider extends ChangeNotifier {
     } catch (e) {
       print(
           '📱 SessionChatProvider: ❌ Failed to update message status in database: $e');
+    }
+  }
+
+  /// Send delivery receipt for incoming message
+  Future<void> _sendDeliveryReceiptForIncomingMessage(
+      String messageId, String senderId) async {
+    try {
+      if (_currentConversationId != null) {
+        await sendDeliveryReceiptToSender(messageId, senderId);
+        print(
+            '📱 SessionChatProvider: ✅ Delivery receipt sent for incoming message: $messageId');
+      }
+    } catch (e) {
+      print('📱 SessionChatProvider: ❌ Failed to send delivery receipt: $e');
     }
   }
 
@@ -1637,38 +2024,88 @@ class SessionChatProvider extends ChangeNotifier {
   /// Get current conversation ID for external use
   String? get conversationId => _currentConversationId;
 
+  /// Check if user is currently on the chat screen
+  bool get isUserOnChatScreen => _isUserOnChatScreen;
+
+  /// Mark that user has entered the chat screen
+  void markUserEnteredChatScreen() {
+    _isUserOnChatScreen = true;
+    print(
+        '📱 SessionChatProvider: ✅ User entered chat screen for conversation: $_currentConversationId');
+  }
+
+  /// Mark that user has left the chat screen
+  void markUserLeftChatScreen() {
+    _isUserOnChatScreen = false;
+    print(
+        '📱 SessionChatProvider: ❌ User left chat screen for conversation: $_currentConversationId');
+  }
+
   /// Handle real-time message status updates (called from ChatListProvider)
   Future<void> handleMessageStatusUpdate(MessageStatusUpdate update) async {
     try {
-      // Since MessageStatusUpdate doesn't have conversationId, we'll process all updates
-      // and let the message lookup filter by conversation
       print(
-          '📱 SessionChatProvider: 🔄 Processing message status update: ${update.messageId} -> ${update.status}');
+          '📱 SessionChatProvider: 🔄 Processing status update: ${update.messageId} -> ${update.status}');
+      print(
+          '📱 SessionChatProvider: 🔍 Current messages in memory: ${_messages.length}');
+      print(
+          '📱 SessionChatProvider: 🔍 Looking for message: ${update.messageId}');
+
+      // Process message status update
 
       // Find the message in memory and update its status
       final messageIndex =
           _messages.indexWhere((msg) => msg.id == update.messageId);
+
       if (messageIndex != -1) {
+        print(
+            '📱 SessionChatProvider: ✅ Message found at index: $messageIndex');
+        print(
+            '📱 SessionChatProvider: 🔍 Current status: ${_messages[messageIndex].status}');
+
+        // CRITICAL: Validate the status update before applying it
+        final newStatus = _convertDeliveryStatusToMessageStatus(update.status);
+        print(
+            '📱 SessionChatProvider: 🔍 Converting status: ${update.status} -> $newStatus');
+
+        if (!_validateMessageStatusUpdate(update.messageId, newStatus)) {
+          print(
+              '📱 SessionChatProvider: ⚠️ Status update validation failed for message: ${update.messageId} -> ${update.status}');
+          return;
+        }
+
         // Update the message status in memory
+        final oldStatus = _messages[messageIndex].status;
         _messages[messageIndex] = _messages[messageIndex].copyWith(
-          status: _convertDeliveryStatusToMessageStatus(update.status),
+          status: newStatus,
         );
+        print(
+            '📱 SessionChatProvider: ✅ Message status updated in memory: $oldStatus -> $newStatus');
+        print(
+            '📱 SessionChatProvider: 🔍 Message status after update: ${_messages[messageIndex].status}');
 
         // Update the message status in the database
         final messageStorageService = MessageStorageService.instance;
         await messageStorageService.updateMessageStatus(
           update.messageId,
-          _convertDeliveryStatusToMessageStatus(update.status),
+          newStatus,
         );
-
         print(
-            '📱 SessionChatProvider: ✅ Message status updated in memory and database: ${update.messageId} -> ${update.status}');
+            '📱 SessionChatProvider: ✅ Message status updated in database: $newStatus');
+
+        // Status updated successfully
 
         // Notify listeners to update the UI immediately
+        print(
+            '📱 SessionChatProvider: 🔔 Calling notifyListeners() to update UI');
         notifyListeners();
+        print(
+            '📱 SessionChatProvider: ✅ notifyListeners() called successfully');
       } else {
         print(
             '📱 SessionChatProvider: ⚠️ Message not found in memory: ${update.messageId}');
+        print(
+            '📱 SessionChatProvider: 🔍 Available message IDs: ${_messages.map((m) => m.id).toList()}');
       }
     } catch (e) {
       print(
@@ -1692,6 +2129,10 @@ class SessionChatProvider extends ChangeNotifier {
         return MessageStatus.failed;
       case msg_status.MessageDeliveryStatus.retrying:
         return MessageStatus.sending;
+      default:
+        print(
+            '📱 SessionChatProvider: ⚠️ Unknown delivery status: $deliveryStatus, defaulting to sent');
+        return MessageStatus.sent;
     }
   }
 }

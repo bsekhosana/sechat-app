@@ -222,8 +222,10 @@ class LocalNotificationBadgeService {
     try {
       final unreadCount = await getUnreadCount();
 
-      // Note: Local notification items don't affect app badge counter
-      // App badge is managed separately by push notifications
+      // Update the indicator service with the new count
+      final indicatorService = IndicatorService();
+      indicatorService.updateCountsWithContext(
+          unreadNotifications: unreadCount);
 
       print(
           '📱 LocalNotificationBadgeService: ✅ Badge count updated: $unreadCount');
@@ -287,8 +289,9 @@ class LocalNotificationBadgeService {
     try {
       await _databaseService.clearAllNotifications();
 
-      // Note: Local notification items don't affect app badge counter
-      // App badge is managed separately by push notifications
+      // Update the indicator service to reflect that all notifications are cleared
+      final indicatorService = IndicatorService();
+      indicatorService.updateCountsWithContext(unreadNotifications: 0);
 
       print(
           '📱 LocalNotificationBadgeService: ✅ All notifications cleared and badge reset to 0');
@@ -303,14 +306,13 @@ class LocalNotificationBadgeService {
     try {
       await _databaseService.clearOldNotifications(30);
 
-      // Only update badge count if there are notifications after cleanup
+      // Get the current unread count after cleanup
       final unreadCount = await getUnreadCount();
-      if (unreadCount > 0) {
-        await updateBadgeCount();
-      } else {
-        // Note: Local notification items don't affect app badge counter
-        // App badge is managed separately by push notifications
-      }
+
+      // Update the indicator service with the new count
+      final indicatorService = IndicatorService();
+      indicatorService.updateCountsWithContext(
+          unreadNotifications: unreadCount);
 
       print(
           '📱 LocalNotificationBadgeService: ✅ Cleanup completed (unread count: $unreadCount)');
