@@ -93,7 +93,7 @@ class SessionChatProvider extends ChangeNotifier {
       if (currentUserId != null) {
         _currentConversationId = _generateConsistentConversationId(
             currentUserId, _currentRecipientId!);
-      print(
+        print(
             '📱 SessionChatProvider: ✅ Set conversation ID: $_currentConversationId');
       }
     }
@@ -1182,11 +1182,11 @@ class SessionChatProvider extends ChangeNotifier {
 
         // Also mark messages currently in memory as read (for immediate UI update)
         if (currentUserId != null) {
-        for (final message in _messages) {
+          for (final message in _messages) {
             if (message.recipientId ==
                     currentUserId && // Only messages sent TO me
                 message.status != MessageStatus.read) {
-            await markMessageAsRead(message.id, message.senderId);
+              await markMessageAsRead(message.id, message.senderId);
             }
           }
         }
