@@ -620,8 +620,8 @@ class SeSocketService {
               encryptedData: encryptedData,
               conversationId: conversationId,
             );
-            print(
-                '🔑 SeSocketService: ✅ Fallback processing completed successfully');
+          print(
+              '🔑 SeSocketService: ✅ Fallback processing completed successfully');
           } else {
             print(
                 '🔑 SeSocketService: ❌ Invalid user data exchange data: senderId=$senderId, encryptedData=${encryptedData != null}');
@@ -902,8 +902,8 @@ class SeSocketService {
       if (onMessageStatusUpdateExternal != null) {
         onMessageStatusUpdateExternal!(
             fromUserId ?? recipientId ?? '',
-            messageId,
-            status,
+          messageId,
+          status,
             effectiveConversationId,
             toUserId ?? recipientId ?? '');
       }
@@ -971,8 +971,8 @@ class SeSocketService {
             '⌨️ SeSocketService: ✅ We should show typing indicator (session match)');
 
         // Update local typing status using the direct recipientId from server
-        _updateTypingStatus(
-            fromUserId, recipientId, isTyping, delivered, autoStopped);
+      _updateTypingStatus(
+          fromUserId, recipientId, isTyping, delivered, autoStopped);
 
         // Notify typing status change for UI updates
         _notifyTypingStatusChange(
@@ -1032,16 +1032,16 @@ class SeSocketService {
         print(
             '⌨️ SeSocketService: ✅ We should show typing indicator (session match)');
 
-        if (onTyping != null) {
-          onTyping!(
-            data['fromUserId'] ?? '',
-            data['conversationId'] ?? '',
-            data['isTyping'] ?? false,
-          );
-          print('⌨️ SeSocketService: ✅ Typing callback executed');
-        } else {
-          print(
-              '⌨️ SeSocketService: ❌ onTyping callback is NULL - typing indicator not processed!');
+      if (onTyping != null) {
+        onTyping!(
+          data['fromUserId'] ?? '',
+          data['conversationId'] ?? '',
+          data['isTyping'] ?? false,
+        );
+        print('⌨️ SeSocketService: ✅ Typing callback executed');
+      } else {
+        print(
+            '⌨️ SeSocketService: ❌ onTyping callback is NULL - typing indicator not processed!');
         }
       } else {
         print(
@@ -1063,13 +1063,13 @@ class SeSocketService {
           print(
               '⌨️ SeSocketService: ✅ We should show typing indicator (session match)');
 
-          // Call the internal handler to update SessionChatProvider
+        // Call the internal handler to update SessionChatProvider
           // Use the direct recipientId from server for better accuracy
           final recipientId = data['recipientId'] ?? '';
-          _notifyTypingStatusChange(
+        _notifyTypingStatusChange(
               fromUserId, recipientId, isTyping, true, false);
-          print(
-              '⌨️ SeSocketService: ✅ Internal typing status change handler called');
+        print(
+            '⌨️ SeSocketService: ✅ Internal typing status change handler called');
         } else {
           print(
               '⌨️ SeSocketService: ℹ️ Not showing typing indicator - session mismatch: current=$currentSessionId, shouldShow=$showIndicatorOnSessionId');
@@ -1490,12 +1490,12 @@ class SeSocketService {
     }
 
     try {
-      _socket!.emit('user_data_exchange:send', {
-        'recipientId': recipientId,
-        'senderId': _sessionId,
-        'encryptedData': encryptedData,
-        'conversationId': conversationId ?? ''
-      });
+    _socket!.emit('user_data_exchange:send', {
+      'recipientId': recipientId,
+      'senderId': _sessionId,
+      'encryptedData': encryptedData,
+      'conversationId': conversationId ?? ''
+    });
       print('🔑 SeSocketService: ✅ User data exchange event sent successfully');
     } catch (e) {
       print(
@@ -2499,11 +2499,11 @@ class SeSocketService {
 
           if (shouldUpdate) {
             // ✅ Update the typing indicator on the RECIPIENT's side
-            sessionChatProvider.updateRecipientTypingState(isTyping);
-            print(
+          sessionChatProvider.updateRecipientTypingState(isTyping);
+          print(
                 '⌨️ SeSocketService: ✅ Typing status updated for current conversation: $fromUserId -> $isTyping');
-          } else {
-            print(
+        } else {
+          print(
                 '⌨️ SeSocketService: ℹ️ Typing indicator from different conversation: $fromUserId -> $recipientId (current: $currentRecipientId)');
           }
         } else {

@@ -37,6 +37,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
 
+  bool isInitialCall = true;
+
   @override
   void initState() {
     super.initState();
@@ -72,22 +74,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     _fadeController.forward();
     _slideController.forward();
-  }
-
-  /// 🆕 IMPROVED: Setup scroll listener for lazy loading messages
-  void _setupScrollListener() {
-    _scrollController.addListener(() {
-      // Load more messages when user scrolls to the top
-      if (_scrollController.position.pixels <=
-          _scrollController.position.minScrollExtent + 100) {
-        final chatProvider = context.read<SessionChatProvider>();
-        if (chatProvider.hasMoreMessages) {
-          print(
-              '📱 ChatScreen: 🔄 User scrolled to top, loading more messages');
-          chatProvider.loadMoreMessages();
-        }
-      }
-    });
   }
 
   void _initializeChat() {
@@ -293,12 +279,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     // CRITICAL: Check if we need to auto-scroll for incoming messages
     _checkAndAutoScrollForIncomingMessages(provider);
 
-    // 🆕 IMPROVED: WhatsApp style - latest messages are already visible at bottom
-    // No auto-scrolling needed for initial loadR
+    // CRITICAL: Auto-scroll to bottom when messages are first loaded
+    // This ensures the chat opens scrolled to the bottom
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (provider.messages.isNotEmpty && _scrollController.hasClients) {
-        print(
-            '📱 ChatScreen: ℹ️ Initial load complete - latest messages visible at bottom (WhatsApp style)');
+        final currentPosition = _scrollController.position.pixels;
+        // Only auto-scroll if we're not already at the bottom
+        if (currentPosition < _scrollController.position.maxScrollExtent - 10) {
+          print(
+              '📱 ChatScreen: 🔄 Auto-scrolling to bottom for initial message load');
+          _scrollToBottom();
+        }
       }
     });
 
@@ -321,35 +312,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
                   reverse:
                       false, // Show messages in normal order (oldest to newest)
-                  itemCount: provider.messages.length +
-                      (provider.hasMoreMessages ? 1 : 0),
+                  itemCount: provider.messages.length,
                   itemBuilder: (context, index) {
-                    // Show loading indicator at the top when loading more messages
-                    if (index == 0 && provider.hasMoreMessages) {
-                      return Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Theme.of(context).primaryColor,
-                            ),
-                          ),
-                        ),
-                      );
-                    }
-
-                    // Adjust index for messages (skip loading indicator)
-                    final messageIndex =
-                        provider.hasMoreMessages ? index - 1 : index;
-                    if (messageIndex < 0 ||
-                        messageIndex >= provider.messages.length) {
-                      return const SizedBox.shrink();
-                    }
-
                     // Messages are now sorted ASCENDING (oldest first), so display naturally
-                    final message = provider.messages[messageIndex];
-                    final isLast = messageIndex ==
+                    final message = provider.messages[index];
+                    final isLast = index ==
                         provider.messages.length -
                             1; // Last message is at the end
 
@@ -494,9 +461,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           // This is an incoming message, auto-scroll to bottom
           print(
               '📱 ChatScreen: 🔄 Auto-scrolling for incoming message from ${latestMessage.senderId}');
-          Future.delayed(const Duration(milliseconds: 100), () {
+          if (isInitialCall) {
             _scrollToBottom();
-          });
+          } else {
+            Future.delayed(const Duration(milliseconds: 100), () {
+              _scrollToBottom();
+            });
+          }
         }
       }
     }
@@ -512,17 +483,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       // Only scroll if we're not already at the bottom
       if (currentPosition < maxScroll - 10) {
-        _scrollController
-            .animateTo(
-          maxScroll,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        )
-            .then((_) {
-          print('📱 ChatScreen: ✅ Scrolled to bottom successfully');
-        }).catchError((e) {
-          print('📱 ChatScreen: ❌ Error scrolling to bottom: $e');
-        });
+        if (isInitialCall) {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          isInitialCall = false;
+        } else {
+          _scrollController
+              .animateTo(
+            maxScroll,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          )
+              .then((_) {
+            print('📱 ChatScreen: ✅ Scrolled to bottom successfully');
+          }).catchError((e) {
+            print('📱 ChatScreen: ❌ Error scrolling to bottom: $e');
+          });
+        }
       } else {
         print('📱 ChatScreen: ℹ️ Already at bottom, no need to scroll');
       }
@@ -830,24 +806,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Options
-            _buildMessageOption(
-              icon: Icons.reply,
-              title: 'Reply',
-              onTap: () {
-                Navigator.pop(context);
-                _handleReplyMessage(message);
-              },
-            ),
-            _buildMessageOption(
-              icon: Icons.forward,
-              title: 'Forward',
-              onTap: () {
-                Navigator.pop(context);
-                _handleForwardMessage(message);
-              },
-            ),
             _buildMessageOption(
               icon: Icons.copy,
               title: 'Copy',
@@ -856,15 +814,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 _handleCopyMessage(message);
               },
             ),
-            if (message.isFromCurrentUser(_getCurrentUserId()))
-              _buildMessageOption(
-                icon: Icons.delete_outline,
-                title: 'Delete',
-                onTap: () {
-                  Navigator.pop(context);
-                  _showDeleteMessageConfirmation(message, provider);
-                },
-              ),
           ],
         ),
       ),

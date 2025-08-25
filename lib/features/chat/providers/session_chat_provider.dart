@@ -45,12 +45,6 @@ class SessionChatProvider extends ChangeNotifier {
   // Track if user is currently on chat screen
   bool _isUserOnChatScreen = false;
 
-  // 🆕 IMPROVED: Pagination state for lazy loading messages
-  bool _hasMoreMessages = false;
-  bool get hasMoreMessages => _hasMoreMessages;
-  int _currentMessageOffset = 0;
-  int get currentMessageOffset => _currentMessageOffset;
-
   // No need for stream subscription - using ChangeNotifier pattern
 
   List<Chat> get chats => _chats;
@@ -99,7 +93,7 @@ class SessionChatProvider extends ChangeNotifier {
       if (currentUserId != null) {
         _currentConversationId = _generateConsistentConversationId(
             currentUserId, _currentRecipientId!);
-        print(
+      print(
             '📱 SessionChatProvider: ✅ Set conversation ID: $_currentConversationId');
       }
     }
@@ -787,21 +781,14 @@ class SessionChatProvider extends ChangeNotifier {
     final effectiveChatId = _currentConversationId ?? chatId;
 
     if (effectiveChatId == chatId || isOwnMessage) {
-      // 🆕 IMPROVED: Add message without triggering full reload
       _messages.add(message);
-
-      // 🆕 IMPROVED: Sort messages by timestamp ASCENDING (oldest first)
-      // This ensures latest messages appear at the bottom (WhatsApp style)
-      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
+      // CRITICAL: Sort messages by timestamp DESCENDING (newest first) for bottom-up display
+      _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       print(
           '📱 SessionChatProvider: ✅ Message added to messages list: ${message.id} (conversationId: $effectiveChatId)');
 
-      // 🆕 IMPROVED: Only trigger auto-scroll for new messages, not during initial load
-      if (_messages.length > 10) {
-        // Only auto-scroll if we have more than the initial 10 messages
-        _triggerAutoScrollToBottom();
-      }
+      // CRITICAL: Trigger auto-scroll to bottom for new messages
+      _triggerAutoScrollToBottom();
 
       // 🆕 FIXED: For incoming messages (not sent by us), handle bidirectional status updates
       if (!isOwnMessage) {
@@ -851,7 +838,7 @@ class SessionChatProvider extends ChangeNotifier {
       print('📱 SessionChatProvider: ℹ️ Chat not found for message: $chatId');
     }
 
-    // 🆕 IMPROVED: Notify listeners to update UI without full reload
+    // Notify listeners to update UI
     notifyListeners();
   }
 
@@ -1088,16 +1075,13 @@ class SessionChatProvider extends ChangeNotifier {
       print(
           '📱 SessionChatProvider: 🔄 Loading messages for conversation: $conversationId');
 
-      // 🆕 IMPROVED: Load only last 10 messages initially for better UX
-      // WhatsApp style: load latest messages and show them at the bottom
+      // Load messages from MessageStorageService
       final messageStorageService = MessageStorageService.instance;
-
-      // Get the most recent messages (newest first from DB, then we'll reverse for display)
       final loadedMessages =
-          await messageStorageService.getMessages(conversationId, limit: 10);
+          await messageStorageService.getMessages(conversationId, limit: 100);
 
       print(
-          '📱 SessionChatProvider: 🔄 Loaded ${loadedMessages.length} messages from database (initial load)');
+          '📱 SessionChatProvider: 🔄 Loaded ${loadedMessages.length} messages from database');
 
       // Debug: Log the content of loaded messages
       for (final message in loadedMessages) {
@@ -1122,21 +1106,13 @@ class SessionChatProvider extends ChangeNotifier {
       // Add new messages to existing list
       _messages.addAll(newMessages);
 
-      // 🆕 IMPROVED: Sort messages by timestamp ASCENDING (oldest first)
-      // This ensures latest messages appear at the bottom (WhatsApp style)
-      // Since DB returns newest first, we need to reverse to get oldest first for display
+      // CRITICAL: Sort messages by timestamp ASCENDING (oldest first) for natural chat flow
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-      // 🆕 IMPROVED: Set pagination state
-      _hasMoreMessages = loadedMessages.length >= 10;
-      _currentMessageOffset = loadedMessages.length;
 
       print(
           '📱 SessionChatProvider: Loaded ${loadedMessages.length} messages for conversation: $conversationId');
       print(
           '📱 SessionChatProvider: Total messages in memory: ${_messages.length}');
-      print(
-          '📱 SessionChatProvider: Has more messages: $_hasMoreMessages, Offset: $_currentMessageOffset');
     } catch (e) {
       print('📱 SessionChatProvider: ❌ Error loading messages: $e');
       // Don't clear existing messages on error
@@ -1147,59 +1123,6 @@ class SessionChatProvider extends ChangeNotifier {
   Future<void> manualRefreshMessages() async {
     print('📱 SessionChatProvider: 🔄 Manual refresh triggered');
     await _refreshMessagesFromDatabase();
-  }
-
-  /// 🆕 IMPROVED: Load more messages when scrolling up (lazy loading)
-  Future<void> loadMoreMessages() async {
-    if (!_hasMoreMessages || _isLoading) {
-      print(
-          '📱 SessionChatProvider: ℹ️ No more messages to load or already loading');
-      return;
-    }
-
-    try {
-      print(
-          '📱 SessionChatProvider: 🔄 Loading more messages (offset: $_currentMessageOffset)');
-
-      final messageStorageService = MessageStorageService.instance;
-      final moreMessages = await messageStorageService.getMessages(
-        _currentConversationId!,
-        limit: 20, // Load 20 more messages
-        offset: _currentMessageOffset,
-      );
-
-      if (moreMessages.isNotEmpty) {
-        // Merge with existing messages to avoid duplicates
-        final existingMessageIds = _messages.map((m) => m.id).toSet();
-        final newMessages = moreMessages
-            .where((m) => !existingMessageIds.contains(m.id))
-            .toList();
-
-        // Add new messages to the beginning (older messages)
-        _messages.insertAll(0, newMessages);
-
-        // 🆕 IMPROVED: Sort messages by timestamp ASCENDING (oldest first)
-        // This maintains the WhatsApp style with latest messages at bottom
-        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-        // Update pagination state
-        _currentMessageOffset += moreMessages.length;
-        _hasMoreMessages = moreMessages.length >= 20;
-
-        print(
-            '📱 SessionChatProvider: ✅ Loaded ${newMessages.length} more messages');
-        print(
-            '📱 SessionChatProvider: Total messages: ${_messages.length}, Offset: $_currentMessageOffset, Has more: $_hasMoreMessages');
-
-        // Notify listeners to update UI
-        notifyListeners();
-      } else {
-        _hasMoreMessages = false;
-        print('📱 SessionChatProvider: ℹ️ No more messages available');
-      }
-    } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error loading more messages: $e');
-    }
   }
 
   /// Load recipient user data
@@ -1259,11 +1182,11 @@ class SessionChatProvider extends ChangeNotifier {
 
         // Also mark messages currently in memory as read (for immediate UI update)
         if (currentUserId != null) {
-          for (final message in _messages) {
+        for (final message in _messages) {
             if (message.recipientId ==
                     currentUserId && // Only messages sent TO me
                 message.status != MessageStatus.read) {
-              await markMessageAsRead(message.id, message.senderId);
+            await markMessageAsRead(message.id, message.senderId);
             }
           }
         }
