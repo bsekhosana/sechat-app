@@ -180,10 +180,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
                     children: [
                       Text(
                         isReceived
-                            ? 'From: ${request.displayName ?? '${request.fromSessionId.substring(0, 8)}...'}'
-                            : 'To: ${request.displayName ?? '${request.toSessionId.substring(0, 8)}...'}',
+                            ? 'From: ${request.displayName ?? '${request.fromSessionId}'}'
+                            : 'To: ${request.displayName ?? '${request.toSessionId}'}',
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: Colors.black,
                         ),
@@ -192,7 +192,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
                       Text(
                         request.requestPhrase,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: 12,
                           color: Colors.grey[600],
                         ),
                         maxLines: 1,
@@ -213,7 +213,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
                     request.statusDisplayText,
                     style: TextStyle(
                       color: _getStatusColor(request.status),
-                      fontSize: 10,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

@@ -1,0 +1,1051 @@
+{
+  "info": {
+    "name": "SeChat Socket Implementation Test Collection",
+    "description": "Comprehensive test collection for SeChat realtime socket implementation including RealtimeGateway, SeSocketService, and ChannelSocketService",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "socketUrl",
+      "value": "https://sechat-socket.strapblaque.com",
+      "type": "string"
+    },
+    {
+      "key": "airnotifierUrl",
+      "value": "https://push.strapblaque.com",
+      "type": "string"
+    },
+    {
+      "key": "sessionId1",
+      "value": "gc4PvCrQg53LY4Kv10TXC0IISxJsf8uZ9t9THTiw0AA",
+      "type": "string"
+    },
+    {
+      "key": "sessionId2",
+      "value": "F6gfuPIXoCZqbVPxKshGY95bMjny3B3K0HaVeVD4Joo",
+      "type": "string"
+    },
+    {
+      "key": "conversationId",
+      "value": "chat_gc4PvCrQg53LY4Kv10TXC0IISxJsf8uZ9t9THTiw0AA_F6gfuPIXoCZqbVPxKshGY95bMjny3B3K0HaVeVD4Joo",
+      "type": "string"
+    },
+    {
+      "key": "messageId",
+      "value": "msg_123456789_${timestamp}",
+      "type": "string"
+    },
+    {
+      "key": "timestamp",
+      "value": "{{$timestamp}}",
+      "type": "string"
+    },
+    {
+      "key": "socketId",
+      "value": "",
+      "type": "string",
+      "description": "Will be populated after handshake"
+    }
+  ],
+  "auth": {
+    "type": "noauth"
+  },
+  "item": [
+    {
+      "name": "1. Socket.IO Handshake & Connection Tests",
+      "item": [
+        {
+          "name": "Socket.IO Handshake (Polling)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/?EIO=4&transport=polling",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""],
+              "query": [
+                {
+                  "key": "EIO",
+                  "value": "4"
+                },
+                {
+                  "key": "transport",
+                  "value": "polling"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Socket.IO Upgrade to WebSocket",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Connection",
+                "value": "Upgrade"
+              },
+              {
+                "key": "Upgrade",
+                "value": "websocket"
+              },
+              {
+                "key": "Sec-WebSocket-Key",
+                "value": "dGhlIHNhbXBsZSBub25jZQ=="
+              },
+              {
+                "key": "Sec-WebSocket-Version",
+                "value": "13"
+              }
+            ],
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/?EIO=4&transport=websocket&sid={{socketId}}",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""],
+              "query": [
+                {
+                  "key": "EIO",
+                  "value": "4"
+                },
+                {
+                  "key": "transport",
+                  "value": "websocket"
+                },
+                {
+                  "key": "sid",
+                  "value": "{{socketId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Socket.IO Session Registration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "42[\"register_session\",{\"sessionId\":\"{{sessionId1}}\"}]"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/?EIO=4&transport=polling&sid={{socketId}}",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""],
+              "query": [
+                {
+                  "key": "EIO",
+                  "value": "4"
+                },
+                {
+                  "key": "transport",
+                  "value": "polling"
+                },
+                {
+                  "key": "sid",
+                  "value": "{{socketId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Session Management Events",
+      "item": [
+        {
+          "name": "Register Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "42[\"register_session\",{\"sessionId\":\"{{sessionId1}}\",\"timestamp\":\"{{timestamp}}\"}]"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/?EIO=4&transport=polling&sid={{socketId}}",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""],
+              "query": [
+                {
+                  "key": "EIO",
+                  "value": "4"
+                },
+                {
+                  "key": "transport",
+                  "value": "polling"
+                },
+                {
+                  "key": "sid",
+                  "value": "{{socketId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Leave Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"session:leaving\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "User Departed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"user:departed\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\",\n    \"reason\": \"app_closed\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Key Exchange Events",
+      "item": [
+        {
+          "name": "Key Exchange Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"key_exchange:request\",\n  \"data\": {\n    \"fromSessionId\": \"{{sessionId1}}\",\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"publicKey\": \"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Key Exchange Response",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"key_exchange:response\",\n  \"data\": {\n    \"fromSessionId\": \"{{sessionId2}}\",\n    \"toSessionId\": \"{{sessionId1}}\",\n    \"publicKey\": \"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...\",\n    \"accepted\": true,\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Key Exchange Accept",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"key_exchange:accept\",\n  \"data\": {\n    \"fromSessionId\": \"{{sessionId1}}\",\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Key Exchange Decline",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"key_exchange:decline\",\n  \"data\": {\n    \"fromSessionId\": \"{{sessionId2}}\",\n    \"toSessionId\": \"{{sessionId1}}\",\n    \"reason\": \"user_declined\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Key Exchange Revoke",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"key_exchange:revoke\",\n  \"data\": {\n    \"fromSessionId\": \"{{sessionId1}}\",\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"reason\": \"security_concern\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Messaging Events",
+      "item": [
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"message:send\",\n  \"data\": {\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"conversationId\": \"{{conversationId}}\",\n    \"messageId\": \"{{messageId}}\",\n    \"body\": \"eyJ0eXBlIjoibWVzc2FnZSIsImNvbnRlbnQiOiJIaSEgSG93IGFyZSB5b3U/IiwidGltZXN0YW1wIjoi{{timestamp}}\"}\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Message Received",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"message:received\",\n  \"data\": {\n    \"messageId\": \"{{messageId}}\",\n    \"conversationId\": \"{{conversationId}}\",\n    \"fromSessionId\": \"{{sessionId1}}\",\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Message Acknowledged",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"message:acked\",\n  \"data\": {\n    \"messageId\": \"{{messageId}}\",\n    \"conversationId\": \"{{conversationId}}\",\n    \"fromSessionId\": \"{{sessionId2}}\",\n    \"toSessionId\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Receipt Events",
+      "item": [
+        {
+          "name": "Receipt Delivered",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"receipt:delivered\",\n  \"data\": {\n    \"messageId\": \"{{messageId}}\",\n    \"conversationId\": \"{{conversationId}}\",\n    \"fromSessionId\": \"{{sessionId2}}\",\n    \"toSessionId\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Receipt Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"receipt:read\",\n  \"data\": {\n    \"messageId\": \"{{messageId}}\",\n    \"conversationId\": \"{{conversationId}}\",\n    \"fromSessionId\": \"{{sessionId2}}\",\n    \"toSessionId\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Typing Indicators",
+      "item": [
+        {
+          "name": "Typing Update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"typing:update\",\n  \"data\": {\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"isTyping\": true,\n    \"conversationId\": \"{{conversationId}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Typing Status Update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"typing:status_update\",\n  \"data\": {\n    \"fromSessionId\": \"{{sessionId1}}\",\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"conversationId\": \"{{conversationId}}\",\n    \"isTyping\": false,\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Presence Management",
+      "item": [
+        {
+          "name": "Presence Update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"presence:update\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"status\": \"online\",\n    \"lastSeen\": \"{{timestamp}}\",\n    \"deviceInfo\": {\n      \"platform\": \"ios\",\n      \"version\": \"1.0.0\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "8. User Management Events",
+      "item": [
+        {
+          "name": "User Blocked",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"user:blocked\",\n  \"data\": {\n    \"blockerSessionId\": \"{{sessionId1}}\",\n    \"blockedSessionId\": \"{{sessionId2}}\",\n    \"reason\": \"harassment\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "User Unblocked",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"user:unblocked\",\n  \"data\": {\n    \"unblockerSessionId\": \"{{sessionId1}}\",\n    \"unblockedSessionId\": \"{{sessionId2}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "User Deleted",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"user:deleted\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\",\n    \"reason\": \"account_deletion\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "9. Conversation Management",
+      "item": [
+        {
+          "name": "Conversation Created",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"conversation:created\",\n  \"data\": {\n    \"conversationId\": \"{{conversationId}}\",\n    \"participants\": [\"{{sessionId1}}\", \"{{sessionId2}}\"],\n    \"createdBy\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Conversation Blocked",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"conversation:blocked\",\n  \"data\": {\n    \"conversationId\": \"{{conversationId}}\",\n    \"blockedBy\": \"{{sessionId1}}\",\n    \"reason\": \"spam\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Conversation Unblocked",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"conversation:unblocked\",\n  \"data\": {\n    \"conversationId\": \"{{conversationId}}\",\n    \"unblockedBy\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "10. User Data Exchange",
+      "item": [
+        {
+          "name": "User Data Send",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"user_data_exchange:send\",\n  \"data\": {\n    \"fromSessionId\": \"{{sessionId1}}\",\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"dataType\": \"profile_update\",\n    \"encryptedData\": \"eyJ0eXBlIjoicHJvZmlsZV91cGRhdGUiLCJkYXRhIjoiSm9obiBEb2UiLCJ0aW1lc3RhbXAiOiI{{timestamp}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "User Data Received",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"user_data_exchange:data\",\n  \"data\": {\n    \"fromSessionId\": \"{{sessionId1}}\",\n    \"toSessionId\": \"{{sessionId2}}\",\n    \"dataType\": \"profile_update\",\n    \"encryptedData\": \"eyJ0eXBlIjoicHJvZmlsZV91cGRhdGUiLCJkYXRhIjoiSm9obiBEb2UiLCJ0aW1lc3RhbXAiOiI{{timestamp}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "11. Connection Management",
+      "item": [
+        {
+          "name": "Heartbeat Ping",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"heartbeat:ping\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Heartbeat Pong",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"heartbeat:pong\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"ts\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Connection Ping",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"connection:ping\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Connection Pong",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"connection:pong\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"ts\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Connection Stability Check",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"connection:stability_check\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"latency\": 45,\n    \"packetLoss\": 0.01,\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "12. System Events",
+      "item": [
+        {
+          "name": "Request Queued Events",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"request_queued_events\",\n  \"data\": {\n    \"sessionId\": \"{{sessionId1}}\",\n    \"queueLength\": 5,\n    \"timestamp\": \"{{timestamp}}\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "13. Channel-Based Socket Tests",
+      "item": [
+        {
+          "name": "Join Session Channel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"join_session\",\n  \"data\": \"{{sessionId1}}\"\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Leave Session Channel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"leave_session\",\n  \"data\": \"{{sessionId1}}\"\n}"
+            },
+            "url": {
+              "raw": "{{socketUrl}}/socket.io/",
+              "host": ["{{socketUrl}}"],
+              "path": ["socket.io", ""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "14. AirNotifier Integration Tests",
+      "item": [
+        {
+          "name": "Test AirNotifier Connection",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-An-App-Name",
+                "value": "sechat"
+              },
+              {
+                "key": "X-An-App-Key",
+                "value": "ebea679133a7adfb9c4cd1f8b6a4fdc9"
+              }
+            ],
+            "url": {
+              "raw": "{{airnotifierUrl}}/api/v2/sessions/{{sessionId1}}/tokens",
+              "host": ["{{airnotifierUrl}}"],
+              "path": ["api", "v2", "sessions", "{{sessionId1}}", "tokens"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Update dynamic variables",
+          "pm.globals.set('timestamp', new Date().toISOString());",
+          "pm.globals.set('messageId', 'msg_123456789_' + Date.now());",
+          "",
+          "// Handle Socket.IO handshake for connection tests",
+          "if (pm.request.url.path.includes('socket.io') && pm.request.url.query.has('transport')) {",
+          "    console.log('Socket.IO handshake request detected');",
+          "    ",
+          "    // If this is the initial handshake, we need to get a socket ID",
+          "    if (pm.request.url.query.has('transport') && !pm.request.url.query.has('sid')) {",
+          "        console.log('Initial handshake - will extract socket ID from response');",
+          "    }",
+          "}",
+          "",
+          "// Log request details",
+          "console.log('Request:', pm.request.method, pm.request.url);",
+          "console.log('Timestamp:', pm.globals.get('timestamp'));"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Test response status",
+          "pm.test('Status code is valid', function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202, 400, 404, 500]);",
+          "});",
+          "",
+          "// Test response time",
+          "pm.test('Response time is reasonable', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(10000);",
+          "});",
+          "",
+          "// Handle Socket.IO handshake response",
+          "if (pm.request.url.path.includes('socket.io') && pm.request.url.query.has('transport')) {",
+          "    if (pm.response.code === 200 && pm.response.text().trim()) {",
+          "        try {",
+          "            const responseText = pm.response.text();",
+          "            console.log('Socket.IO response:', responseText);",
+          "            ",
+          "            // Extract socket ID from handshake response",
+          "            if (responseText.includes('sid')) {",
+          "                const sidMatch = responseText.match(/\"sid\":\"([^\"]+)\"/);",
+          "                if (sidMatch && sidMatch[1]) {",
+          "                    const socketId = sidMatch[1];",
+          "                    pm.globals.set('socketId', socketId);",
+          "                    console.log('Extracted socket ID:', socketId);",
+          "                    ",
+          "                    pm.test('Socket ID extracted successfully', function () {",
+          "                        pm.expect(socketId).to.not.be.empty;",
+          "                    });",
+          "                }",
+          "            }",
+          "        } catch (e) {",
+          "            console.log('Error parsing Socket.IO response:', e);",
+          "        }",
+          "    }",
+          "}",
+          "",
+          "// Log response details",
+          "console.log('Response:', pm.response.code, pm.response.responseTime + 'ms');",
+          "if (pm.response.text().trim()) {",
+          "    try {",
+          "        console.log('Response body:', pm.response.json());",
+          "    } catch (e) {",
+          "        console.log('Response text:', pm.response.text());",
+          "    }",
+          "} else {",
+          "    console.log('Response: Empty body');",
+          "}"
+        ]
+      }
+    }
+  ]
+}
