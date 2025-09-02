@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import '../../../core/services/se_session_service.dart';
+import '../../../core/services/contact_service.dart';
 import '../services/message_storage_service.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/user.dart';
@@ -56,8 +57,25 @@ class SessionChatProvider extends ChangeNotifier {
   bool get isRecipientTyping => _isRecipientTyping;
   DateTime? get recipientLastSeen => _recipientLastSeen;
   bool get isRecipientOnline {
+    // 🆕 FIXED: Use ContactService as primary source of truth for presence
+    // This ensures consistent presence data across the app
+    if (_currentRecipientId != null) {
+      try {
+        final contactService = ContactService.instance;
+        final contact = contactService.getContact(_currentRecipientId!);
+        if (contact != null) {
+          print(
+              '🔍 SessionChatProvider: isRecipientOnline getter called: ${contact.isOnline} (from ContactService, recipient: $_currentRecipientId)');
+          return contact.isOnline;
+        }
+      } catch (e) {
+        print(
+            '🔍 SessionChatProvider: ⚠️ ContactService not available, using local status: $e');
+      }
+    }
+
     print(
-        '🔍 SessionChatProvider: isRecipientOnline getter called: $_isRecipientOnline (recipient: $_currentRecipientId)');
+        '🔍 SessionChatProvider: isRecipientOnline getter called: $_isRecipientOnline (local status, recipient: $_currentRecipientId)');
     return _isRecipientOnline;
   }
 
@@ -1319,14 +1337,26 @@ class SessionChatProvider extends ChangeNotifier {
   /// Check if a user is online using proper presence checking
   Future<bool> _checkIfUserIsOnline(String userId) async {
     try {
-      // CRITICAL: Implement proper presence checking using available services
-      // This ensures messages are only marked as "delivered" when recipients are actually online
+      // 🆕 FIXED: Use ContactService as primary source of truth for presence
+      // This ensures consistent presence data across the app
+      try {
+        final contactService = ContactService.instance;
+        final contact = contactService.getContact(userId);
+        if (contact != null) {
+          print(
+              '📱 SessionChatProvider: ✅ Using ContactService presence for $userId: ${contact.isOnline}');
+          return contact.isOnline;
+        }
+      } catch (e) {
+        print(
+            '📱 SessionChatProvider: ⚠️ ContactService not available, falling back: $e');
+      }
 
       // Method 1: Check if this is the current recipient and we have their status
       if (userId == _currentRecipientId) {
         if (_isRecipientOnline) {
           print(
-              '📱 SessionChatProvider: ✅ Current recipient $userId is online');
+              '📱 SessionChatProvider: ✅ Current recipient $userId is online (local status)');
           return true;
         }
         if (_recipientLastSeen != null) {
@@ -1776,18 +1806,31 @@ class SessionChatProvider extends ChangeNotifier {
             '📱 SessionChatProvider: ✅ Message acknowledged by server: $messageId');
 
         // Update message status to 'sent' when acknowledged by server
+        // BUT only if the current status is not already higher (delivered/read)
         final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
         if (messageIndex != -1) {
-          _messages[messageIndex] = _messages[messageIndex].copyWith(
-            status: MessageStatus.sent,
-          );
+          final currentMessage = _messages[messageIndex];
+          final currentStatus = currentMessage.status;
 
-          // Update message status in database
-          _updateMessageStatusInDatabase(messageId, MessageStatus.sent);
+          // Only update to 'sent' if current status is pending, sending, or failed
+          // Don't overwrite delivered or read statuses
+          if (currentStatus == MessageStatus.pending ||
+              currentStatus == MessageStatus.sending ||
+              currentStatus == MessageStatus.failed) {
+            _messages[messageIndex] = currentMessage.copyWith(
+              status: MessageStatus.sent,
+            );
 
-          print(
-              '📱 SessionChatProvider: ✅ Message status updated to sent after acknowledgment: $messageId');
-          notifyListeners(); // Update UI immediately
+            // Update message status in database
+            _updateMessageStatusInDatabase(messageId, MessageStatus.sent);
+
+            print(
+                '📱 SessionChatProvider: ✅ Message status updated to sent after acknowledgment: $messageId');
+            notifyListeners(); // Update UI immediately
+          } else {
+            print(
+                '📱 SessionChatProvider: ℹ️ Message status not updated - current status ($currentStatus) is higher than sent: $messageId');
+          }
         }
       });
 

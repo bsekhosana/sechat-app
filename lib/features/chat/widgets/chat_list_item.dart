@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/chat_conversation.dart';
 import '../models/message.dart';
 import '../providers/chat_list_provider.dart';
+import '../providers/session_chat_provider.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/contact_service.dart';
 
@@ -352,59 +353,125 @@ class ChatListItem extends StatelessWidget {
 
   /// Build message status for chat list preview
   Widget _buildMessageStatus(String messageId, String currentUserId) {
-    return Consumer<ChatListProvider>(
-      builder: (context, provider, child) {
-        // CRITICAL FIX: Use a more reactive approach to get the latest message
+    return Consumer2<ChatListProvider, SessionChatProvider>(
+      builder: (context, chatListProvider, sessionChatProvider, child) {
+        // 🆕 FIXED: Get message status from SessionChatProvider if available (real-time)
         // This ensures the status icon updates in real-time when message status changes
-        return FutureBuilder<Message?>(
-          future: provider.getLatestMessage(conversation.id),
-          builder: (context, snapshot) {
-            if (snapshot.hasData && snapshot.data != null) {
-              final message = snapshot.data!;
+        Message? latestMessage;
+        MessageStatus? messageStatus;
 
-              // Only show status for messages sent by current user
-              if (message.senderId == currentUserId) {
-                return Container(
-                  margin: const EdgeInsets.only(left: 4),
-                  child: _buildStatusIcon(message.status),
-                );
+        // First, try to get the message from SessionChatProvider (real-time status)
+        if (sessionChatProvider.currentConversationId == conversation.id) {
+          // Get the latest message from SessionChatProvider's memory
+          final messages = sessionChatProvider.messages;
+          if (messages.isNotEmpty) {
+            // Find the latest message sent by current user
+            for (int i = messages.length - 1; i >= 0; i--) {
+              if (messages[i].senderId == currentUserId) {
+                latestMessage = messages[i];
+                messageStatus = messages[i].status;
+                break;
               }
             }
+          }
+        }
 
-            // Return empty container if no message or not sent by current user
-            return const SizedBox.shrink();
-          },
-        );
+        // Fallback to database if not found in SessionChatProvider
+        if (latestMessage == null) {
+          return FutureBuilder<Message?>(
+            future: chatListProvider.getLatestMessage(conversation.id),
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data != null) {
+                final message = snapshot.data!;
+
+                // Only show status for messages sent by current user
+                if (message.senderId == currentUserId) {
+                  return Container(
+                    margin: const EdgeInsets.only(left: 4),
+                    child: _buildStatusIcon(message.status),
+                  );
+                }
+              }
+
+              // Return empty container if no message or not sent by current user
+              return const SizedBox.shrink();
+            },
+          );
+        }
+
+        // Show status from SessionChatProvider (real-time)
+        if (messageStatus != null) {
+          return Container(
+            margin: const EdgeInsets.only(left: 4),
+            child: _buildStatusIcon(messageStatus),
+          );
+        }
+
+        // Return empty container if no status found
+        return const SizedBox.shrink();
       },
     );
   }
 
   /// Build tick status indicator for message
   Widget _buildTickStatus(String messageId) {
-    return Consumer<ChatListProvider>(
-      builder: (context, provider, child) {
-        // CRITICAL FIX: Use a more reactive approach that automatically refreshes
-        // when the ChatListProvider notifies listeners
-        return FutureBuilder<Message?>(
-          future: provider.getLatestMessage(conversation.id),
-          builder: (context, snapshot) {
-            if (snapshot.hasData && snapshot.data != null) {
-              final message = snapshot.data!;
-              final currentUserId = _getCurrentUserId();
+    return Consumer2<ChatListProvider, SessionChatProvider>(
+      builder: (context, chatListProvider, sessionChatProvider, child) {
+        // 🆕 FIXED: Get message status from SessionChatProvider if available (real-time)
+        // This ensures the status icon updates in real-time when message status changes
+        Message? latestMessage;
+        MessageStatus? messageStatus;
+        final currentUserId = _getCurrentUserId();
 
-              // Show tick status for messages sent by current user
-              if (message.senderId == currentUserId) {
-                return Container(
-                  margin: const EdgeInsets.only(left: 4),
-                  child: _buildStatusIcon(message.status),
-                );
+        // First, try to get the message from SessionChatProvider (real-time status)
+        if (sessionChatProvider.currentConversationId == conversation.id) {
+          // Get the latest message from SessionChatProvider's memory
+          final messages = sessionChatProvider.messages;
+          if (messages.isNotEmpty) {
+            // Find the latest message sent by current user
+            for (int i = messages.length - 1; i >= 0; i--) {
+              if (messages[i].senderId == currentUserId) {
+                latestMessage = messages[i];
+                messageStatus = messages[i].status;
+                break;
               }
             }
+          }
+        }
 
-            // Return empty container if no message or not sent by current user
-            return const SizedBox.shrink();
-          },
-        );
+        // Fallback to database if not found in SessionChatProvider
+        if (latestMessage == null) {
+          return FutureBuilder<Message?>(
+            future: chatListProvider.getLatestMessage(conversation.id),
+            builder: (context, snapshot) {
+              if (snapshot.hasData && snapshot.data != null) {
+                final message = snapshot.data!;
+
+                // Show tick status for messages sent by current user
+                if (message.senderId == currentUserId) {
+                  return Container(
+                    margin: const EdgeInsets.only(left: 4),
+                    child: _buildStatusIcon(message.status),
+                  );
+                }
+              }
+
+              // Return empty container if no message or not sent by current user
+              return const SizedBox.shrink();
+            },
+          );
+        }
+
+        // Show status from SessionChatProvider (real-time)
+        if (messageStatus != null) {
+          return Container(
+            margin: const EdgeInsets.only(left: 4),
+            child: _buildStatusIcon(messageStatus),
+          );
+        }
+
+        // Return empty container if no status found
+        return const SizedBox.shrink();
       },
     );
   }

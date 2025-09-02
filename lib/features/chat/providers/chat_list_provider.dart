@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/se_socket_service.dart';
+import '../../../core/services/contact_service.dart';
 import '../../../core/services/encryption_service.dart';
 import '../../../realtime/realtime_service_manager.dart';
 import '../../../realtime/presence_service.dart';
@@ -55,23 +56,35 @@ class ChatListProvider extends ChangeNotifier {
 
   /// Get real-time online status for a specific recipient
   bool getRecipientOnlineStatus(String recipientId) {
-    // Check if this recipient is the current active chat recipient
-    if (_activeSessionChatProvider != null &&
-        _activeSessionChatProvider!.currentRecipientId == recipientId) {
-      // Use the real-time status from SessionChatProvider
-      return _activeSessionChatProvider!.isRecipientOnline;
+    // 🆕 FIXED: Use ContactService as primary source of truth for presence
+    // This ensures consistent presence data across the app
+    try {
+      final contactService = ContactService.instance;
+      final contact = contactService.getContact(recipientId);
+      if (contact != null) {
+        print(
+            '📱 ChatListProvider: ✅ Using ContactService presence for $recipientId: ${contact.isOnline}');
+        return contact.isOnline;
+      }
+    } catch (e) {
+      print(
+          '📱 ChatListProvider: ⚠️ ContactService not available, falling back: $e');
     }
 
-    // Fallback to conversation data if no active chat
+    // Fallback to conversation data if ContactService not available
     try {
       final conversation = _conversations.firstWhere(
         (conv) =>
             conv.participant1Id == recipientId ||
             conv.participant2Id == recipientId,
       );
+      print(
+          '📱 ChatListProvider: ✅ Using conversation presence for $recipientId: ${conversation.isOnline}');
       return conversation.isOnline ?? false;
     } catch (e) {
       // No conversation found, default to offline
+      print(
+          '📱 ChatListProvider: ⚠️ No presence data found for $recipientId, defaulting to offline');
       return false;
     }
   }

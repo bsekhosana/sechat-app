@@ -565,7 +565,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           print('🔌 Main: ✅ ContactService obtained successfully');
           // 🆕 FIXED: Use existing lastSeen from ContactService when server doesn't provide one
           DateTime lastSeenDateTime;
-          if (lastSeen != null) {
+          if (lastSeen != null && lastSeen.isNotEmpty) {
             lastSeenDateTime = DateTime.parse(lastSeen);
           } else {
             // Try to get existing lastSeen from ContactService to preserve offline time
@@ -612,13 +612,36 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           print('🔌 Main: 🔍 Sender ID: $senderId');
 
           // If the sender is the current recipient, update their online state
+          // Use more flexible matching to handle different conversation ID formats
+          bool shouldUpdatePresence = false;
+
+          print('🔌 Main: 🔍 Checking presence update for SessionChatProvider');
+          print(
+              '🔌 Main: 🔍 Current recipient ID: ${sessionChatProvider.currentRecipientId}');
+          print(
+              '🔌 Main: 🔍 Current conversation ID: ${sessionChatProvider.currentConversationId}');
+          print('🔌 Main: 🔍 Sender ID: $senderId');
+          print('🔌 Main: 🔍 Is online: $isOnline');
+          print('🔌 Main: 🔍 Last seen: $lastSeen');
+
           if (sessionChatProvider.currentRecipientId == senderId) {
+            shouldUpdatePresence = true;
+            print('🔌 Main: ✅ Direct recipient ID match for presence');
+          } else if (sessionChatProvider.currentConversationId != null &&
+              sessionChatProvider.currentConversationId!.contains(senderId)) {
+            shouldUpdatePresence = true;
+            print('🔌 Main: ✅ Conversation ID contains sender ID for presence');
+          }
+
+          if (shouldUpdatePresence) {
             print(
                 '🔌 Main: 🔄 Updating SessionChatProvider recipient status...');
             sessionChatProvider.updateRecipientStatus(
               recipientId: senderId,
               isOnline: isOnline,
-              lastSeen: lastSeen != null ? DateTime.parse(lastSeen) : null,
+              lastSeen: lastSeen != null && lastSeen.isNotEmpty
+                  ? DateTime.parse(lastSeen)
+                  : null,
             );
             print(
                 '🔌 Main: ✅ Presence update forwarded to SessionChatProvider for current recipient: $senderId');
@@ -668,6 +691,52 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             conversationId: conversationId, recipientId: toUserId);
         print(
             '✅ Main: Message delivery status processed successfully with enhanced context');
+
+        // CRITICAL: Also update SessionChatProvider for real-time UI updates
+        try {
+          final sessionChatProvider = Provider.of<SessionChatProvider>(
+              navigatorKey.currentContext!,
+              listen: false);
+
+          // Check if this message is for the current conversation
+          // Use more flexible matching to handle different conversation ID formats
+          bool shouldUpdate = false;
+
+          print(
+              '✅ Main: 🔍 Checking message status update for SessionChatProvider');
+          print(
+              '✅ Main: 🔍 Current conversation ID: ${sessionChatProvider.currentConversationId}');
+          print('✅ Main: 🔍 Message conversation ID: $conversationId');
+          print(
+              '✅ Main: 🔍 Current recipient ID: ${sessionChatProvider.currentRecipientId}');
+          print('✅ Main: 🔍 Message from user ID: $fromUserId');
+
+          if (sessionChatProvider.currentConversationId == conversationId) {
+            shouldUpdate = true;
+            print('✅ Main: ✅ Direct conversation ID match');
+          } else if (sessionChatProvider.currentRecipientId == fromUserId) {
+            shouldUpdate = true;
+            print('✅ Main: ✅ Direct recipient ID match');
+          } else if (sessionChatProvider.currentConversationId != null &&
+              sessionChatProvider.currentConversationId!.contains(fromUserId)) {
+            shouldUpdate = true;
+            print('✅ Main: ✅ Conversation ID contains sender ID');
+          }
+
+          if (shouldUpdate) {
+            print(
+                '✅ Main: 🔄 Updating SessionChatProvider for delivered message');
+            sessionChatProvider.handleMessageStatusUpdate(statusUpdate);
+            print(
+                '✅ Main: ✅ SessionChatProvider updated for delivered message');
+          } else {
+            print(
+                '✅ Main: ℹ️ Message not for current conversation - SessionChatProvider not updated');
+          }
+        } catch (e) {
+          print(
+              '✅ Main: ⚠️ Failed to update SessionChatProvider for delivery: $e');
+        }
       } catch (e) {
         print('❌ Main: Failed to process message delivery status: $e');
       }
@@ -702,6 +771,49 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             conversationId: conversationId, recipientId: toUserId);
         print(
             '✅ Main: Message read status processed successfully with enhanced context');
+
+        // CRITICAL: Also update SessionChatProvider for real-time UI updates
+        try {
+          final sessionChatProvider = Provider.of<SessionChatProvider>(
+              navigatorKey.currentContext!,
+              listen: false);
+
+          // Check if this message is for the current conversation
+          // Use more flexible matching to handle different conversation ID formats
+          bool shouldUpdate = false;
+
+          print(
+              '✅ Main: 🔍 Checking message status update for SessionChatProvider (read)');
+          print(
+              '✅ Main: 🔍 Current conversation ID: ${sessionChatProvider.currentConversationId}');
+          print('✅ Main: 🔍 Message conversation ID: $conversationId');
+          print(
+              '✅ Main: 🔍 Current recipient ID: ${sessionChatProvider.currentRecipientId}');
+          print('✅ Main: 🔍 Message from user ID: $fromUserId');
+
+          if (sessionChatProvider.currentConversationId == conversationId) {
+            shouldUpdate = true;
+            print('✅ Main: ✅ Direct conversation ID match (read)');
+          } else if (sessionChatProvider.currentRecipientId == fromUserId) {
+            shouldUpdate = true;
+            print('✅ Main: ✅ Direct recipient ID match (read)');
+          } else if (sessionChatProvider.currentConversationId != null &&
+              sessionChatProvider.currentConversationId!.contains(fromUserId)) {
+            shouldUpdate = true;
+            print('✅ Main: ✅ Conversation ID contains sender ID (read)');
+          }
+
+          if (shouldUpdate) {
+            print('✅ Main: 🔄 Updating SessionChatProvider for read message');
+            sessionChatProvider.handleMessageStatusUpdate(statusUpdate);
+            print('✅ Main: ✅ SessionChatProvider updated for read message');
+          } else {
+            print(
+                '✅ Main: ℹ️ Message not for current conversation - SessionChatProvider not updated (read)');
+          }
+        } catch (e) {
+          print('✅ Main: ⚠️ Failed to update SessionChatProvider for read: $e');
+        }
       } catch (e) {
         print('❌ Main: Failed to process message read status: $e');
       }
@@ -1191,65 +1303,6 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         print('💬 Main: ✅ Conversation created event processed successfully');
       } catch (e) {
         print('💬 Main: ❌ Failed to process conversation created event: $e');
-      }
-    });
-  });
-
-  // Handle message delivery status events
-  socketService.setOnMessageDelivered((messageId, fromUserId, toUserId) {
-    print(
-        '✅ Main: Message delivered: $messageId from $fromUserId to $toUserId');
-
-    // Update message status in ChatListProvider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        final chatListProvider = Provider.of<ChatListProvider>(
-            navigatorKey.currentContext!,
-            listen: false);
-
-        // Create a MessageStatusUpdate for delivery
-        final statusUpdate = MessageStatusUpdate(
-          messageId: messageId,
-          status: msg_status.MessageDeliveryStatus.delivered,
-          timestamp: DateTime.now(),
-          senderId: fromUserId,
-        );
-
-        // Use enhanced method with context for better conversation lookup
-        chatListProvider.processMessageStatusUpdateWithContext(statusUpdate);
-        print(
-            '✅ Main: Message delivery status processed successfully with enhanced context');
-      } catch (e) {
-        print('❌ Main: Failed to process message delivery status: $e');
-      }
-    });
-  });
-
-  // Handle message read status events
-  socketService.setOnMessageRead((messageId, fromUserId, toUserId) {
-    print('👁️ Main: Message read: $messageId from $fromUserId to $toUserId');
-
-    // Update message status in ChatListProvider
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        final chatListProvider = Provider.of<ChatListProvider>(
-            navigatorKey.currentContext!,
-            listen: false);
-
-        // Create a MessageStatusUpdate for read status
-        final statusUpdate = MessageStatusUpdate(
-          messageId: messageId,
-          status: msg_status.MessageDeliveryStatus.read,
-          timestamp: DateTime.now(),
-          senderId: fromUserId,
-        );
-
-        // Use enhanced method with context for better conversation lookup
-        chatListProvider.processMessageStatusUpdateWithContext(statusUpdate);
-        print(
-            '👁️ Main: Message read status processed successfully with enhanced context');
-      } catch (e) {
-        print('❌ Main: Failed to process message read status: $e');
       }
     });
   });
