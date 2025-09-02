@@ -366,8 +366,8 @@ class ChannelSocketService {
   }
 
   /// Handle chat events (from decrypted data)
-  void _handleChatEvent(
-      String contactSessionId, Map<String, dynamic> decryptedData) {
+  Future<void> _handleChatEvent(
+      String contactSessionId, Map<String, dynamic> decryptedData) async {
     print('🔌 ChannelSocketService: 💬 Chat event: $contactSessionId');
 
     // Forward to realtime message service
@@ -382,25 +382,26 @@ class ChannelSocketService {
           final conversationId = decryptedData['conversation_id'] ??
               'chat_${_currentSessionId}_$contactSessionId';
 
-          // Create notification if app is in background
-          if (!AppStateService().isForeground) {
-            _notificationManager.showKerNotification(
-              title:
-                  'New Message from ${decryptedData['sender_name'] ?? contactSessionId}',
-              body: content,
-              type: 'new_message',
-              payload: {
-                'type': 'new_message',
-                'senderId': contactSessionId,
-                'senderName': decryptedData['sender_name'] ?? contactSessionId,
-                'message': content,
-                'conversationId': conversationId,
-                'messageId': messageId,
-                'metadata': Map<String, dynamic>.from(decryptedData),
-                'timestamp': DateTime.now().toIso8601String(),
-              },
-            );
-          }
+          // ✅ FIXED: Always show push notification for message received events
+          // This ensures all message received events show push notifications regardless of app state
+          await _notificationManager.showKerNotification(
+            title:
+                'New Message from ${decryptedData['sender_name'] ?? contactSessionId}',
+            body: content,
+            type: 'new_message',
+            payload: {
+              'type': 'new_message',
+              'senderId': contactSessionId,
+              'senderName': decryptedData['sender_name'] ?? contactSessionId,
+              'message': content,
+              'conversationId': conversationId,
+              'messageId': messageId,
+              'metadata': Map<String, dynamic>.from(decryptedData),
+              'timestamp': DateTime.now().toIso8601String(),
+            },
+          );
+          print(
+              '🔌 ChannelSocketService: ✅ Push notification shown for message: $messageId');
         }
       }
     } catch (e) {

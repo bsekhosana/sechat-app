@@ -324,7 +324,7 @@ Future<void> _showMessageNotification(
 void _setupSocketCallbacks(SeSocketService socketService) {
   // Set up callbacks for the socket service
   socketService.setOnMessageReceived(
-      (senderId, senderName, message, conversationId, messageId) {
+      (senderId, senderName, message, conversationId, messageId) async {
     print(
         '🔌 Main: Message received callback from socket: $senderName: $message');
 
@@ -374,7 +374,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             senderName, messageId, actualConversationId ?? '');
 
         // CRITICAL: Update conversation with new message and decrypt preview
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
           try {
             final indicatorService = Provider.of<IndicatorService>(
                 navigatorKey.currentContext!,
@@ -412,6 +412,30 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             } catch (e) {
               print(
                   '🔌 Main: ⚠️ Failed to update conversation with decrypted preview: $e');
+            }
+
+            // CRITICAL: Update SessionChatProvider if the message is for the current conversation
+            try {
+              final sessionChatProvider = Provider.of<SessionChatProvider>(
+                  navigatorKey.currentContext!,
+                  listen: false);
+
+              // Check if this message is for the current conversation
+              if (sessionChatProvider.currentConversationId ==
+                      actualConversationId ||
+                  (sessionChatProvider.currentRecipientId == senderId)) {
+                print(
+                    '🔌 Main: 🔄 Updating SessionChatProvider for current conversation');
+
+                // Trigger message refresh from database
+                await sessionChatProvider.refreshMessages();
+                print('🔌 Main: ✅ SessionChatProvider messages refreshed');
+              } else {
+                print(
+                    '🔌 Main: ℹ️ Message not for current conversation - SessionChatProvider not updated');
+              }
+            } catch (e) {
+              print('🔌 Main: ⚠️ Failed to update SessionChatProvider: $e');
             }
 
             // Count unread conversations
@@ -615,6 +639,75 @@ void _setupSocketCallbacks(SeSocketService socketService) {
     });
   });
 
+  // Set up message delivery receipt callback
+  socketService.setOnMessageDelivered((messageId, fromUserId, toUserId) {
+    print(
+        '✅ Main: Message delivered: $messageId from $fromUserId to $toUserId');
+
+    // Process delivered status update
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Create a MessageStatusUpdate for delivered status
+        final statusUpdate = MessageStatusUpdate(
+          messageId: messageId,
+          status: msg_status.MessageDeliveryStatus.delivered,
+          timestamp: DateTime.now(),
+          senderId: fromUserId,
+        );
+
+        // Generate consistent conversation ID for lookup
+        final conversationId =
+            _generateConsistentConversationId(fromUserId, toUserId);
+
+        // Pass additional data for conversation lookup
+        chatListProvider.processMessageStatusUpdateWithContext(statusUpdate,
+            conversationId: conversationId, recipientId: toUserId);
+        print(
+            '✅ Main: Message delivery status processed successfully with enhanced context');
+      } catch (e) {
+        print('❌ Main: Failed to process message delivery status: $e');
+      }
+    });
+  });
+
+  // Set up message read receipt callback
+  socketService.setOnMessageRead((messageId, fromUserId, toUserId) {
+    print('✅ Main: Message read: $messageId from $fromUserId to $toUserId');
+
+    // Process read status update
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Create a MessageStatusUpdate for read status
+        final statusUpdate = MessageStatusUpdate(
+          messageId: messageId,
+          status: msg_status.MessageDeliveryStatus.read,
+          timestamp: DateTime.now(),
+          senderId: fromUserId,
+        );
+
+        // Generate consistent conversation ID for lookup
+        final conversationId =
+            _generateConsistentConversationId(fromUserId, toUserId);
+
+        // Pass additional data for conversation lookup
+        chatListProvider.processMessageStatusUpdateWithContext(statusUpdate,
+            conversationId: conversationId, recipientId: toUserId);
+        print(
+            '✅ Main: Message read status processed successfully with enhanced context');
+      } catch (e) {
+        print('❌ Main: Failed to process message read status: $e');
+      }
+    });
+  });
+
   socketService.setOnMessageStatusUpdate(
       (senderId, messageId, status, conversationId, recipientId) {
     print(
@@ -683,14 +776,14 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             listen: false);
 
         // Process the received key exchange request
-        keyExchangeProvider.processReceivedKeyExchangeRequest(data);
+        await keyExchangeProvider.processReceivedKeyExchangeRequest(data);
         print('🔌 Main: ✅ Key exchange request processed by provider');
         print(
             '🔌 Main: 📊 Provider received requests count: ${keyExchangeProvider.receivedRequests.length}');
 
-        // Force refresh the provider to ensure UI updates
-        await keyExchangeProvider.refresh();
-        print('🔌 Main: ✅ Provider refreshed after processing request');
+        // No need to refresh - processReceivedKeyExchangeRequest already handles everything
+        print(
+            '🔌 Main: ✅ No refresh needed - processReceivedKeyExchangeRequest handles everything');
 
         // Update badge counts in real-time ONLY if user is not on K.Exchange screen
         final indicatorService = Provider.of<IndicatorService>(

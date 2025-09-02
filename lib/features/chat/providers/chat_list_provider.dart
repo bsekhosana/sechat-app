@@ -971,21 +971,19 @@ class ChatListProvider extends ChangeNotifier {
       // ENHANCED LOOKUP: Use the additional context for better conversation finding
       ChatConversation? conversation;
 
-      // Method 1: Try to find by conversationId from context (sender's ID per updated API docs)
+      // Method 1: Try to find by conversationId from context (actual conversation ID)
       if (conversation == null && conversationId != null) {
         try {
-          // CRITICAL: conversationId is now the consistent conversation ID for both users
-          // We need to find the conversation where this sender is a participant
+          // CRITICAL: conversationId is the actual conversation ID (chat_session1_session2)
+          // Find conversation by its ID directly
           conversation = _conversations.firstWhere(
-            (conv) =>
-                conv.participant1Id == conversationId ||
-                conv.participant2Id == conversationId,
+            (conv) => conv.id == conversationId,
           );
           print(
-              '📱 ChatListProvider: ✅ Found conversation by context conversationId (sender): ${conversation.id}');
+              '📱 ChatListProvider: ✅ Found conversation by context conversationId: ${conversation.id}');
         } catch (e) {
           print(
-              '📱 ChatListProvider: ⚠️ No conversation found by context conversationId (sender): $conversationId');
+              '📱 ChatListProvider: ⚠️ No conversation found by context conversationId: $conversationId');
         }
       }
 

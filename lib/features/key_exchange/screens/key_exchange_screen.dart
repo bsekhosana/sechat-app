@@ -104,6 +104,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
         final receivedRequests = provider.receivedRequests;
         print(
             '🔑 KeyExchangeScreen: 🔄 Consumer rebuild - received requests count: ${receivedRequests.length}');
+        print(
+            '🔑 KeyExchangeScreen: 🔄 Received requests details: ${receivedRequests.map((req) => '${req.id}:${req.status}:${req.fromSessionId}').toList()}');
 
         if (receivedRequests.isEmpty) {
           return _buildEmptyState(

@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import '../../../core/services/se_session_service.dart';
 import '../services/message_storage_service.dart';
@@ -13,6 +12,7 @@ import '../../../core/services/unified_message_service.dart' as unified_msg;
 import '../services/message_status_tracking_service.dart';
 import '../models/message_status.dart' as msg_status;
 import 'chat_list_provider.dart';
+import '../../../core/utils/conversation_id_generator.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -81,9 +81,9 @@ class SessionChatProvider extends ChangeNotifier {
 
   /// Generate consistent conversation ID
   String _generateConsistentConversationId(String user1Id, String user2Id) {
-    // Sort IDs to ensure consistency between both users
-    final sortedIds = [user1Id, user2Id]..sort();
-    return 'chat_${sortedIds[0]}_${sortedIds[1]}';
+    // Use centralized conversation ID generator to ensure consistency
+    return ConversationIdGenerator.generateConsistentConversationId(
+        user1Id, user2Id);
   }
 
   /// Ensure conversation ID is set
@@ -1791,31 +1791,9 @@ class SessionChatProvider extends ChangeNotifier {
         }
       });
 
-      // 🆕 FIXED: Set up message received callback for incoming messages
-      _socketService.setOnMessageReceived(
-          (senderId, senderName, message, conversationId, messageId) {
-        print(
-            '📱 SessionChatProvider: 📨 Message received: $messageId from $senderId');
-
-        // This ensures incoming messages trigger delivery receipts
-        // The main message handling is done in main.dart, but we need this callback
-        // to ensure the SessionChatProvider is aware of new messages
-        if (_currentRecipientId == senderId ||
-            (_currentConversationId != null &&
-                _currentConversationId!.contains(senderId))) {
-          print(
-              '📱 SessionChatProvider: ✅ Message is for current conversation, triggering delivery receipt');
-
-          // 🆕 FIXED: Only send delivery receipt if recipient is actually online
-          if (_isRecipientOnline) {
-            // Send delivery receipt for incoming message
-            _sendDeliveryReceiptForIncomingMessage(messageId, senderId);
-          } else {
-            print(
-                '📱 SessionChatProvider: ⚠️ Not sending delivery receipt - recipient is offline: $_currentRecipientId');
-          }
-        }
-      });
+      // NOTE: Message received callback is handled by main.dart to avoid conflicts
+      // The main.dart callback will handle database storage and UI updates
+      // This provider will be updated via the message callback system
 
       // Set up presence update callback
       _socketService.setOnOnlineStatusUpdate((userId, isOnline, lastSeen) {
