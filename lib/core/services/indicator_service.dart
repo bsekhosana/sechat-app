@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:sechat_app/features/notifications/services/local_notification_badge_service.dart';
 
 class IndicatorService extends ChangeNotifier {
   static final IndicatorService _instance = IndicatorService._internal();
@@ -92,6 +93,9 @@ class IndicatorService extends ChangeNotifier {
       notifyListeners();
       print(
           '🔔 IndicatorService: ✅ Counts updated - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
+
+      // Update app badge counter
+      _updateAppBadgeCounter();
     } else {
       print('🔔 IndicatorService: ℹ️ No changes detected in badge counts');
     }
@@ -182,5 +186,22 @@ class IndicatorService extends ChangeNotifier {
       pendingKeyExchange: pendingKeyExchange,
       unreadNotifications: unreadNotifications,
     );
+  }
+
+  /// Update app badge counter based on current counts
+  /// Only update when app is in background to avoid double counting
+  Future<void> _updateAppBadgeCounter() async {
+    try {
+      // Only update app badge counter if we have unread notifications
+      // This represents notifications that came through when app was in background
+      final appBadgeCount = _unreadNotificationsCount;
+
+      final localNotificationBadgeService = LocalNotificationBadgeService();
+      await localNotificationBadgeService.setBadgeCount(appBadgeCount);
+      print(
+          '🔔 IndicatorService: ✅ App badge counter updated to: $appBadgeCount (notifications only)');
+    } catch (e) {
+      print('🔔 IndicatorService: ❌ Failed to update app badge counter: $e');
+    }
   }
 }

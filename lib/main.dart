@@ -301,7 +301,7 @@ Future<void> _showMessageNotification(
     // Show notification using our new local notification system
     final localNotificationBadgeService = LocalNotificationBadgeService();
 
-    await localNotificationBadgeService.showKerNotification(
+    await localNotificationBadgeService.showMessageNotification(
       title: senderName,
       body: 'Has sent you an encrypted message',
       type: 'message_received',
@@ -422,6 +422,15 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             // Update the indicator service
             indicatorService.updateCounts(unreadChats: unreadCount);
             print('🔌 Main: ✅ Chat badge count updated for new message');
+
+            // Show push notification for the message
+            if (actualConversationId != null) {
+              _showMessageNotification(
+                senderName,
+                messageId,
+                actualConversationId,
+              );
+            }
           } catch (e) {
             print('🔌 Main: ❌ Failed to update chat badge count: $e');
           }
@@ -735,12 +744,22 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             navigatorKey.currentContext!,
             listen: false);
 
-        final pendingCount = keyExchangeProvider2.receivedRequests
+        // For decline, we need to update the sent requests count (decline affects sent requests)
+        final pendingSentCount = keyExchangeProvider2.sentRequests
+            .where((req) => req.status == 'pending' || req.status == 'sent')
+            .length;
+
+        // Also update received requests count
+        final pendingReceivedCount = keyExchangeProvider2.receivedRequests
             .where((req) => req.status == 'received' || req.status == 'pending')
             .length;
+
+        // Update badge with the total pending count
+        final totalPendingCount = pendingSentCount + pendingReceivedCount;
         indicatorService.updateCountsWithContext(
-            pendingKeyExchange: pendingCount);
-        print('🔌 Main: ✅ Badge count updated for key exchange decline');
+            pendingKeyExchange: totalPendingCount);
+        print(
+            '🔌 Main: ✅ Badge count updated for key exchange decline (sent: $pendingSentCount, received: $pendingReceivedCount, total: $totalPendingCount)');
       } catch (e) {
         print('🔌 Main: ❌ Failed to process key exchange decline: $e');
       }
@@ -750,65 +769,45 @@ void _setupSocketCallbacks(SeSocketService socketService) {
   socketService.setOnKeyExchangeAccepted((data) {
     print('🔌 Main: Key exchange accepted from socket: $data');
 
-    // Update badge counts when key exchange is completed ONLY if user is not on K.Exchange screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Process the accepted key exchange request
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        final indicatorService = Provider.of<IndicatorService>(
-            navigatorKey.currentContext!,
-            listen: false);
-
-        // Check if user is currently on K.Exchange screen (index 1)
-        final isOnKeyExchangeScreen = _currentScreenIndex == 1;
-
-        // Always update badge count using context-aware method
-        // The indicator service will handle screen context internally
         final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
             navigatorKey.currentContext!,
             listen: false);
 
-        // Only count pending/received requests that haven't been processed yet
-        final pendingCount = keyExchangeProvider.receivedRequests
+        // Process the accepted key exchange request
+        await keyExchangeProvider.handleKeyExchangeAccepted(data);
+        print('🔌 Main: ✅ Key exchange acceptance processed by provider');
+
+        // Update badge counts
+        final indicatorService = Provider.of<IndicatorService>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Recalculate the actual pending count after acceptance
+        final keyExchangeProvider2 = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // For acceptance, we need to update the sent requests count (acceptance affects sent requests)
+        final pendingSentCount = keyExchangeProvider2.sentRequests
+            .where((req) => req.status == 'pending' || req.status == 'sent')
+            .length;
+
+        // Also update received requests count
+        final pendingReceivedCount = keyExchangeProvider2.receivedRequests
             .where((req) => req.status == 'received' || req.status == 'pending')
             .length;
+
+        // Update badge with the total pending count
+        final totalPendingCount = pendingSentCount + pendingReceivedCount;
         indicatorService.updateCountsWithContext(
-            pendingKeyExchange: pendingCount);
+            pendingKeyExchange: totalPendingCount);
         print(
             '🔌 Main: ✅ Badge count updated after key exchange accepted using context-aware method');
       } catch (e) {
-        print('🔌 Main: ❌ Failed to update badge count after acceptance: $e');
-      }
-    });
-  });
-
-  socketService.setOnKeyExchangeDeclined((data) {
-    print('🔌 Main: Key exchange declined from socket: $data');
-
-    // Update badge counts when key exchange is declined ONLY if user is not on K.Exchange screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        final indicatorService = Provider.of<IndicatorService>(
-            navigatorKey.currentContext!,
-            listen: false);
-
-        // Check if user is currently on K.Exchange screen (index 1)
-        final isOnKeyExchangeScreen = _currentScreenIndex == 1;
-
-        // Always update badge count using context-aware method
-        // The indicator service will handle screen context internally
-        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
-            navigatorKey.currentContext!,
-            listen: false);
-
-        // Only count pending/received requests that haven't been processed yet
-        final pendingCount = keyExchangeProvider.receivedRequests
-            .where((req) => req.status == 'received' || req.status == 'pending')
-            .length;
-        indicatorService.updateCountsWithContext(
-            pendingKeyExchange: pendingCount);
-        print(
-            '🔌 Main: ✅ Badge count updated after key exchange declined using context-aware method');
-      } catch (e) {
-        print('🔌 Main: ❌ Failed to update badge count after decline: $e');
+        print('🔌 Main: ❌ Failed to process key exchange acceptance: $e');
       }
     });
   });
@@ -945,6 +944,46 @@ void _setupSocketCallbacks(SeSocketService socketService) {
     try {
       KeyExchangeService.instance.setOnConversationCreated((conversation) {
         print('🔑 Main: 🚀 Conversation created, updating UI...');
+
+        // Create notification item for conversation created
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          try {
+            final notificationService = LocalNotificationItemsService();
+            await notificationService.createConversationCreatedNotification(
+              conversationId: conversation.id,
+              participantName: conversation.displayName ?? 'Unknown User',
+              participantId: conversation.participant2Id,
+            );
+            print('🔑 Main: ✅ Conversation created notification item created');
+          } catch (e) {
+            print('🔑 Main: ❌ Failed to create conversation notification: $e');
+          }
+        });
+
+        // Show push notification for conversation created
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          try {
+            final localNotificationBadgeService =
+                LocalNotificationBadgeService();
+            await localNotificationBadgeService.showKerNotification(
+              title: 'New Conversation',
+              body:
+                  'You can now chat with ${conversation.displayName ?? 'Unknown User'}',
+              type: 'conversation_created',
+              payload: {
+                'type': 'conversation_created',
+                'conversationId': conversation.id,
+                'participantName': conversation.displayName ?? 'Unknown User',
+                'participantId': conversation.participant2Id,
+                'timestamp': DateTime.now().toIso8601String(),
+              },
+            );
+            print('🔑 Main: ✅ Conversation created push notification sent');
+          } catch (e) {
+            print(
+                '🔑 Main: ❌ Failed to send conversation push notification: $e');
+          }
+        });
 
         // Update the ChatListProvider to refresh the UI
         WidgetsBinding.instance.addPostFrameCallback((_) {

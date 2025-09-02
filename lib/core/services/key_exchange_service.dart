@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:provider/provider.dart';
 import 'package:sechat_app/core/services/encryption_service.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
+import 'package:sechat_app/core/services/ui_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import 'package:sechat_app/core/services/contact_service.dart';
@@ -11,6 +13,7 @@ import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'package:sechat_app/core/services/presence_manager.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
+import 'package:sechat_app/main.dart';
 
 /// Service to handle secure key exchange between users
 class KeyExchangeService {
@@ -156,6 +159,12 @@ class KeyExchangeService {
         // Create a local record of the sent request
         await _createLocalSentRequest(
             requestId, currentUserId, recipientId, requestPhrase);
+
+        // show snackbar
+        UIService().showSnack(
+            'Key exchange request sent successfully to $recipientId',
+            isError: false,
+            duration: const Duration(seconds: 4));
 
         return true;
       } catch (e) {
@@ -464,6 +473,22 @@ class KeyExchangeService {
               '🔑 KeyExchangeService: ℹ️ No encrypted user data in accept event, using fallback');
           // Fallback to old method
           await _sendInitialUserData(senderId);
+        }
+
+        // CRITICAL: Notify KeyExchangeRequestProvider about the acceptance for UI updates
+        try {
+          // Get the provider instance from the main context (same instance the UI is listening to)
+          final provider = Provider.of<KeyExchangeRequestProvider>(
+              navigatorKey.currentContext!,
+              listen: false);
+          print(
+              '🔑 KeyExchangeService: 🔍 Got provider instance from context: ${provider.hashCode}');
+          await provider.handleKeyExchangeAccepted(response);
+          print(
+              '🔑 KeyExchangeService: ✅ Notified KeyExchangeRequestProvider about acceptance');
+        } catch (e) {
+          print(
+              '🔑 KeyExchangeService: ❌ Error notifying KeyExchangeRequestProvider: $e');
         }
       } else {
         print(
@@ -1376,6 +1401,48 @@ class KeyExchangeService {
       }
     } catch (e) {
       print('🔑 KeyExchangeService: ❌ Error handling conversation created: $e');
+      rethrow;
+    }
+  }
+
+  /// Handle key exchange accepted events (when someone accepts our request)
+  Future<void> handleKeyExchangeAccepted(Map<String, dynamic> data) async {
+    try {
+      print('🔑 KeyExchangeService: Handling key exchange accepted');
+      print('🔑 KeyExchangeService: Accept data: $data');
+
+      final senderId = data['senderId']?.toString();
+      final publicKey = data['publicKey']?.toString();
+      final requestId = data['requestId']?.toString();
+      final conversationId = data['conversationId']?.toString();
+
+      if (senderId == null || publicKey == null || requestId == null) {
+        print('🔑 KeyExchangeService: ❌ Invalid key exchange accept data');
+        return;
+      }
+
+      print('🔑 KeyExchangeService: ✅ Key exchange accepted by $senderId');
+
+      // Store the sender's public key for future encryption
+      await _storeRecipientPublicKey(senderId, publicKey);
+      print('🔑 KeyExchangeService: ✅ Stored public key for $senderId');
+
+      // Notify KeyExchangeRequestProvider about the acceptance
+      try {
+        final provider = KeyExchangeRequestProvider();
+        await provider.handleKeyExchangeAccepted(data);
+        print(
+            '🔑 KeyExchangeService: Notified KeyExchangeRequestProvider about acceptance');
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeService: ❌ Error notifying KeyExchangeRequestProvider: $e');
+      }
+
+      // Now we can send encrypted user data since we have their public key
+      await _sendInitialUserData(senderId);
+    } catch (e) {
+      print(
+          '🔑 KeyExchangeService: ❌ Error handling key exchange accepted: $e');
       rethrow;
     }
   }

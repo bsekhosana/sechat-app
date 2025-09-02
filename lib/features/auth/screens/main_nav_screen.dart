@@ -210,10 +210,14 @@ Download now and let's chat securely!
 
       // Update key exchange count from KeyExchangeRequestProvider (synchronous)
       final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
-      // Only count pending/received requests that haven't been processed yet
-      final pendingKeyExchangeCount = keyExchangeProvider.receivedRequests
+      // Count both pending/received requests AND pending/sent requests
+      final pendingReceivedCount = keyExchangeProvider.receivedRequests
           .where((req) => req.status == 'received' || req.status == 'pending')
           .length;
+      final pendingSentCount = keyExchangeProvider.sentRequests
+          .where((req) => req.status == 'pending' || req.status == 'sent')
+          .length;
+      final pendingKeyExchangeCount = pendingReceivedCount + pendingSentCount;
 
       // Update notification count from LocalNotificationBadgeService (asynchronous but cached)
       final localNotificationBadgeService = LocalNotificationBadgeService();
@@ -270,10 +274,14 @@ Download now and let's chat securely!
 
       // Update key exchange count from KeyExchangeRequestProvider (synchronous)
       final keyExchangeProvider = context.read<KeyExchangeRequestProvider>();
-      // Only count pending/received requests that haven't been processed yet
-      final pendingKeyExchangeCount = keyExchangeProvider.receivedRequests
+      // Count both pending/received requests AND pending/sent requests
+      final pendingReceivedCount = keyExchangeProvider.receivedRequests
           .where((req) => req.status == 'received' || req.status == 'pending')
           .length;
+      final pendingSentCount = keyExchangeProvider.sentRequests
+          .where((req) => req.status == 'pending' || req.status == 'sent')
+          .length;
+      final pendingKeyExchangeCount = pendingReceivedCount + pendingSentCount;
 
       // Update indicator service using context-aware method (synchronous counts only)
       indicatorService.updateCountsWithContext(

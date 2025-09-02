@@ -606,6 +606,38 @@ class SeSocketService {
       }
     });
 
+    // Key exchange accepted events (received by requester)
+    _socket!.on('key_exchange:accept', (data) async {
+      print('🔑 SeSocketService: Key exchange accepted');
+      print('🔑 SeSocketService: Accept data: $data');
+
+      // Create notification for key exchange accepted
+      await _createSocketEventNotification(
+        eventType: 'key_exchange:accept',
+        title: 'Key Exchange Accepted',
+        body: 'Your key exchange request was accepted',
+        senderId: data['senderId']?.toString(),
+        senderName: data['senderName']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
+
+      // Notify KeyExchangeService about the acceptance
+      try {
+        await KeyExchangeService.instance.handleKeyExchangeAccepted(data);
+        print(
+            '🔑 SeSocketService: ✅ Key exchange acceptance processed by KeyExchangeService');
+      } catch (e) {
+        print(
+            '🔑 SeSocketService: ❌ Error processing key exchange acceptance: $e');
+      }
+
+      // Call the callback if set
+      if (onKeyExchangeResponse != null) {
+        onKeyExchangeResponse!(data);
+      }
+    });
+
     // Key exchange error events
     _socket!.on('key_exchange:error', (data) async {
       print('🔑 SeSocketService: Key exchange error received');
@@ -1012,7 +1044,10 @@ class SeSocketService {
       final String showIndicatorOnSessionId =
           data['showIndicatorOnSessionId'] ?? ''; // NEW: Server field
       final bool isTyping = data['isTyping'];
-      final bool delivered = data['delivered'];
+      final dynamic deliveredData = data['delivered'];
+      final bool delivered = deliveredData is bool
+          ? deliveredData
+          : (deliveredData is Map && deliveredData['success'] == true);
       final bool autoStopped = data['autoStopped'] ?? false;
       final bool silent = data['silent'] ?? false;
 

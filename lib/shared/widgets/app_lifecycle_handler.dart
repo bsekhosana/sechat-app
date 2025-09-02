@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
 import '../../core/services/se_socket_service.dart';
 import '../../core/services/app_state_service.dart';
 import '../../features/notifications/services/local_notification_badge_service.dart';
 import '../../realtime/realtime_service_manager.dart';
+import '../../core/services/indicator_service.dart';
+import '../../features/key_exchange/providers/key_exchange_request_provider.dart';
+import '../../main.dart';
 import 'package:flutter/services.dart';
 
 class AppLifecycleHandler extends StatefulWidget {
@@ -134,6 +138,24 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       await LocalNotificationBadgeService().clearAllDeviceNotifications();
       print(
           '🔌 AppLifecycleHandler: ✅ All device notifications cleared from tray');
+
+      // DON'T reset the IndicatorService badge counts - they should persist
+      // Only reset the app badge counter, not the internal navigation badge counts
+      print(
+          '🔌 AppLifecycleHandler: ℹ️ Keeping navigation badge counts intact');
+
+      // Force refresh all providers to update UI
+      try {
+        // Force refresh KeyExchangeRequestProvider
+        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+        await keyExchangeProvider.refresh();
+        print('🔌 AppLifecycleHandler: ✅ KeyExchangeRequestProvider refreshed');
+      } catch (e) {
+        print(
+            '🔌 AppLifecycleHandler: ⚠️ Failed to refresh KeyExchangeRequestProvider: $e');
+      }
     } catch (e) {
       print(
           '🔌 AppLifecycleHandler: ⚠️ Could not reset badge/clear notifications: $e');

@@ -309,6 +309,48 @@ class LocalNotificationItemsService {
     await _databaseService.markAsRead(notificationId);
   }
 
+  /// Create conversation created notification
+  Future<void> createConversationCreatedNotification({
+    required String conversationId,
+    required String participantName,
+    required String participantId,
+  }) async {
+    try {
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId == null) {
+        print('📱 LocalNotificationItemsService: ❌ No current session ID');
+        return;
+      }
+
+      final notification = LocalNotificationItem(
+        type: 'conversation_created',
+        icon: 'message',
+        title: 'New Conversation',
+        description: 'You can now chat with $participantName',
+        status: 'unread',
+        direction: 'incoming',
+        senderId: participantId,
+        recipientId: currentUserId,
+        conversationId: conversationId,
+        date: DateTime.now(),
+        metadata: {
+          'type': 'conversation_created',
+          'conversationId': conversationId,
+          'participantName': participantName,
+          'participantId': participantId,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+
+      await _databaseService.insertNotification(notification);
+      print(
+          '📱 LocalNotificationItemsService: ✅ Conversation created notification created for: $participantName');
+    } catch (e) {
+      print(
+          '📱 LocalNotificationItemsService: ❌ Failed to create conversation created notification: $e');
+    }
+  }
+
   /// Clear all notifications
   Future<void> clearAllNotifications() async {
     await _databaseService.clearAllNotifications();

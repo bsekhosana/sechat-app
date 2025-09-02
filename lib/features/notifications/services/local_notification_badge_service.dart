@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'local_notification_database_service.dart';
+import '../models/local_notification_item.dart';
 import '../../../core/services/indicator_service.dart';
 import '../../../main.dart'; // Import to access global navigator key
 
@@ -85,6 +86,12 @@ class LocalNotificationBadgeService {
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
 
+      // Create notification channels for Android (required for foreground notifications)
+      await _createNotificationChannels();
+
+      // Request notification permissions for Android
+      await _requestNotificationPermissions();
+
       print(
           '📱 LocalNotificationBadgeService: 🔧 Notification tap handler registered: _onNotificationTapped');
 
@@ -93,6 +100,158 @@ class LocalNotificationBadgeService {
     } catch (e) {
       print(
           '📱 LocalNotificationBadgeService: ❌ Failed to initialize local notifications: $e');
+    }
+  }
+
+  /// Create notification channels for Android (required for foreground notifications)
+  Future<void> _createNotificationChannels() async {
+    try {
+      // Create KER notifications channel
+      const AndroidNotificationChannel kerChannel = AndroidNotificationChannel(
+        'ker_notifications',
+        'Key Exchange Requests',
+        description: 'Notifications for key exchange requests',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+        enableLights: true,
+        ledColor: Color(0xFFFF6B35),
+      );
+
+      // Create badge update channel
+      const AndroidNotificationChannel badgeChannel =
+          AndroidNotificationChannel(
+        'badge_update',
+        'Badge Update',
+        description: 'Updates app badge count',
+        importance: Importance.low,
+        playSound: false,
+        enableVibration: false,
+        showBadge: true,
+      );
+
+      // Create message notifications channel
+      const AndroidNotificationChannel messageChannel =
+          AndroidNotificationChannel(
+        'message_notifications',
+        'Message Notifications',
+        description: 'Notifications for new messages',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+        enableLights: true,
+        ledColor: Color(0xFFFF6B35),
+      );
+
+      // Register channels
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(kerChannel);
+
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(badgeChannel);
+
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(messageChannel);
+
+      print(
+          '📱 LocalNotificationBadgeService: ✅ Notification channels created');
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Failed to create notification channels: $e');
+    }
+  }
+
+  /// Request notification permissions for Android
+  Future<void> _requestNotificationPermissions() async {
+    try {
+      // Request permissions for Android
+      final androidPlugin =
+          _localNotifications.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      if (androidPlugin != null) {
+        final granted = await androidPlugin.requestNotificationsPermission();
+        print(
+            '📱 LocalNotificationBadgeService: 🔧 Android notification permission granted: $granted');
+
+        if (granted == true) {
+          // Also request exact alarm permission for Android 12+
+          final exactAlarmGranted =
+              await androidPlugin.requestExactAlarmsPermission();
+          print(
+              '📱 LocalNotificationBadgeService: 🔧 Android exact alarm permission granted: $exactAlarmGranted');
+        }
+      }
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Failed to request notification permissions: $e');
+    }
+  }
+
+  /// Check if app is currently in background
+  Future<bool> _isAppInBackground() async {
+    try {
+      // Import WidgetsBinding to check app lifecycle state
+      final binding = WidgetsBinding.instance;
+      return binding.lifecycleState == AppLifecycleState.paused ||
+          binding.lifecycleState == AppLifecycleState.detached;
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Failed to check app state: $e');
+      return false; // Default to foreground if we can't determine
+    }
+  }
+
+  /// Create notification item in database
+  Future<void> _createNotificationItem(
+    String title,
+    String body,
+    String type,
+    Map<String, dynamic>? payload,
+  ) async {
+    try {
+      final databaseService = LocalNotificationDatabaseService();
+      final notificationItem = LocalNotificationItem(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: title,
+        description: body,
+        type: type,
+        icon: _getIconForType(type),
+        status: 'unread',
+        direction: 'incoming',
+        metadata: payload,
+        date: DateTime.now(),
+      );
+      await databaseService.insertNotification(notificationItem);
+      print(
+          '📱 LocalNotificationBadgeService: ✅ Notification item created in database');
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Failed to create notification item: $e');
+    }
+  }
+
+  /// Get appropriate icon for notification type
+  String _getIconForType(String type) {
+    switch (type) {
+      case 'key_exchange:request':
+        return 'key';
+      case 'key_exchange:accept':
+        return 'check';
+      case 'key_exchange:decline':
+        return 'times';
+      case 'message_received':
+        return 'message';
+      default:
+        return 'bell';
     }
   }
 
@@ -353,6 +512,89 @@ class LocalNotificationBadgeService {
     }
   }
 
+  /// Show local push notification for messages
+  Future<void> showMessageNotification({
+    required String title,
+    required String body,
+    required String type,
+    Map<String, dynamic>? payload,
+  }) async {
+    try {
+      // Check if app is in background - only increment notification count if in background
+      final isInBackground = await _isAppInBackground();
+
+      // Create notification details
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'message_notifications',
+        'Message Notifications',
+        channelDescription: 'Notifications for new messages',
+        importance: Importance.max,
+        priority: Priority.max,
+        showWhen: true,
+        enableVibration: true,
+        playSound: true,
+        enableLights: true,
+        ledColor: Color(0xFFFF6B35),
+        fullScreenIntent: false,
+        autoCancel: true,
+        ongoing: false,
+        visibility: NotificationVisibility.public,
+        category: AndroidNotificationCategory.message,
+      );
+
+      final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge:
+            false, // Don't increment badge here - let IndicatorService handle it
+        presentSound: true,
+      );
+
+      final NotificationDetails notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      // Show the notification
+      final notificationPayload = payload != null ? jsonEncode(payload) : null;
+      print(
+          '📱 LocalNotificationBadgeService: 🔧 Creating message notification with payload: $notificationPayload');
+      print(
+          '📱 LocalNotificationBadgeService: 🔧 App in background: $isInBackground');
+      print(
+          '📱 LocalNotificationBadgeService: 🔧 Notification details: $notificationDetails');
+
+      final notificationId =
+          DateTime.now().millisecondsSinceEpoch.remainder(100000);
+      await _localNotifications.show(
+        notificationId,
+        title,
+        body,
+        notificationDetails,
+        payload: notificationPayload,
+      );
+
+      print(
+          '📱 LocalNotificationBadgeService: ✅ Message notification shown with ID: $notificationId');
+
+      // Only create notification item in database if app is in background
+      if (isInBackground) {
+        await _createNotificationItem(title, body, type, payload);
+        print(
+            '📱 LocalNotificationBadgeService: ✅ Background message notification item created');
+      } else {
+        print(
+            '📱 LocalNotificationBadgeService: ℹ️ Foreground message notification - no database item created');
+      }
+
+      print(
+          '📱 LocalNotificationBadgeService: ✅ Message notification shown: $title');
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Failed to show message notification: $e');
+    }
+  }
+
   /// Show local push notification for KER events
   Future<void> showKerNotification({
     required String title,
@@ -361,8 +603,8 @@ class LocalNotificationBadgeService {
     Map<String, dynamic>? payload,
   }) async {
     try {
-      // Get current unread count for badge
-      final unreadCount = await getUnreadCount();
+      // Check if app is in background - only increment notification count if in background
+      final isInBackground = await _isAppInBackground();
 
       // Create notification details
       const AndroidNotificationDetails androidDetails =
@@ -370,18 +612,25 @@ class LocalNotificationBadgeService {
         'ker_notifications',
         'Key Exchange Requests',
         channelDescription: 'Notifications for key exchange requests',
-        importance: Importance.high,
-        priority: Priority.high,
+        importance: Importance.max,
+        priority: Priority.max,
         showWhen: true,
         enableVibration: true,
         playSound: true,
+        enableLights: true,
+        ledColor: Color(0xFFFF6B35),
+        fullScreenIntent: false,
+        autoCancel: true,
+        ongoing: false,
+        visibility: NotificationVisibility.public,
+        category: AndroidNotificationCategory.message,
       );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
-        presentBadge: true,
+        presentBadge:
+            false, // Don't increment badge here - let IndicatorService handle it
         presentSound: true,
-        badgeNumber: unreadCount + 1, // Increment badge
       );
 
       final NotificationDetails notificationDetails = NotificationDetails(
@@ -393,14 +642,33 @@ class LocalNotificationBadgeService {
       final notificationPayload = payload != null ? jsonEncode(payload) : null;
       print(
           '📱 LocalNotificationBadgeService: 🔧 Creating notification with payload: $notificationPayload');
+      print(
+          '📱 LocalNotificationBadgeService: 🔧 App in background: $isInBackground');
+      print(
+          '📱 LocalNotificationBadgeService: 🔧 Notification details: $notificationDetails');
 
+      final notificationId =
+          DateTime.now().millisecondsSinceEpoch.remainder(100000);
       await _localNotifications.show(
-        DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        notificationId,
         title,
         body,
         notificationDetails,
         payload: notificationPayload,
       );
+
+      print(
+          '📱 LocalNotificationBadgeService: ✅ Notification shown with ID: $notificationId');
+
+      // Only create notification item in database if app is in background
+      if (isInBackground) {
+        await _createNotificationItem(title, body, type, payload);
+        print(
+            '📱 LocalNotificationBadgeService: ✅ Background notification item created');
+      } else {
+        print(
+            '📱 LocalNotificationBadgeService: ℹ️ Foreground notification - no database item created');
+      }
 
       print(
           '📱 LocalNotificationBadgeService: ✅ KER notification shown: $title');
@@ -451,6 +719,57 @@ class LocalNotificationBadgeService {
     } catch (e) {
       print(
           '📱 LocalNotificationBadgeService: ❌ Failed to clear device notifications: $e');
+    }
+  }
+
+  /// Set app badge count to a specific number
+  Future<void> setBadgeCount(int count) async {
+    try {
+      // Create notification details for badge update
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'badge_update',
+        'Badge Update',
+        channelDescription: 'Updates app badge count',
+        importance: Importance.low,
+        priority: Priority.low,
+        showWhen: false,
+        enableVibration: false,
+        playSound: false,
+        silent: true,
+      );
+
+      final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: false,
+        presentBadge: true,
+        presentSound: false,
+        badgeNumber: count,
+      );
+
+      final NotificationDetails notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      // Show a silent notification to update badge
+      await _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        '', // Empty title
+        '', // Empty body
+        notificationDetails,
+        payload: 'badge_update',
+      );
+
+      // Immediately cancel the notification to keep it silent
+      await _localNotifications.cancel(
+        DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      );
+
+      print(
+          '📱 LocalNotificationBadgeService: ✅ App badge count set to: $count');
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Failed to set badge count: $e');
     }
   }
 

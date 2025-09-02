@@ -129,6 +129,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
     return Consumer<KeyExchangeRequestProvider>(
       builder: (context, provider, child) {
         final sentRequests = provider.sentRequests;
+        print(
+            '🔑 KeyExchangeScreen: 🔄 Consumer rebuild - sent requests count: ${sentRequests.length}');
+        print(
+            '🔑 KeyExchangeScreen: 🔄 Sent requests statuses: ${sentRequests.map((req) => '${req.id}:${req.status}').toList()}');
 
         if (sentRequests.isEmpty) {
           return _buildEmptyState(
@@ -258,11 +262,21 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
               const SizedBox(height: 16),
               _buildResendButton(request),
             ],
-            // Add delete button based on request status and type
-            if (_shouldShowDeleteButton(request, isReceived)) ...[
-              const SizedBox(height: 16),
-              _buildDeleteButton(request, isReceived),
-            ],
+            // Debug: Log request status for sent requests
+            // if (!isReceived) ...[
+            //   Text(
+            //     'DEBUG: Status: ${request.status}',
+            //     style: TextStyle(
+            //       color: Colors.grey[400],
+            //       fontSize: 10,
+            //     ),
+            //   ),
+            // ],
+            // TODO: Remove delete/revoke buttons - will implement later
+            // if (_shouldShowDeleteButton(request, isReceived)) ...[
+            //   const SizedBox(height: 16),
+            //   _buildDeleteButton(request, isReceived),
+            // ],
           ],
         ),
       ),
@@ -395,21 +409,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
       final provider = context.read<KeyExchangeRequestProvider>();
       final success = await provider.acceptKeyExchangeRequest(request, context);
 
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Key exchange request accepted successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to accept key exchange request'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // Note: No snackbar needed since push notification handles this
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -427,21 +427,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
       final provider = context.read<KeyExchangeRequestProvider>();
       final success = await provider.declineKeyExchangeRequest(requestId);
 
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Key exchange request declined'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to decline key exchange request'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // Note: No snackbar needed since push notification handles this
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -459,21 +445,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
       final provider = context.read<KeyExchangeRequestProvider>();
       final success = await provider.retryKeyExchangeRequest(requestId);
 
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Key exchange request retried successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to retry key exchange request'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // Note: No snackbar needed since push notification handles this
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -491,21 +463,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
       final provider = context.read<KeyExchangeRequestProvider>();
       final success = await provider.resendKeyExchangeRequest(requestId);
 
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Key exchange request resent successfully'),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to resend key exchange request'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // Note: No snackbar needed since push notification handles this
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -599,23 +557,7 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
         success = await provider.deleteSentRequest(request.id);
       }
 
-      if (success && mounted) {
-        final actionText = isReceived ? 'deleted' : 'revoked';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Key exchange request $actionText successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else if (mounted) {
-        final actionText = isReceived ? 'delete' : 'revoke';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to $actionText key exchange request'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // Note: No snackbar needed since push notification handles this
     } catch (e) {
       if (mounted) {
         final actionText = isReceived ? 'delete' : 'revoke';
