@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SeChat KER Server Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>🔑 SeChat KER Server Test</h1>
+    
+    <div id="status">Connecting...</div>
+    
+    <div>
+        <h3>Test KER Flow:</h3>
+        <button onclick="testKERFlow()">Test Complete KER Flow</button>
+        <button onclick="testAcceptOnly()">Test Accept Event Only</button>
+    </div>
+    
+    <div id="logs" style="background: #f0f0f0; padding: 10px; margin: 10px; height: 400px; overflow-y: scroll; font-family: monospace; font-size: 12px;"></div>
+
+    <script>
+        const socket = io('https://sechat-socket.strapblaque.com');
+        
+        function log(message) {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `[${timestamp}] ${message}<br>`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+        
+        socket.on('connect', () => {
+            log('✅ Connected to server');
+            document.getElementById('status').innerHTML = 'Connected to server';
+            
+            // Register both test sessions
+            registerSessions();
+        });
+        
+        socket.on('disconnect', () => {
+            log('❌ Disconnected from server');
+            document.getElementById('status').innerHTML = 'Disconnected from server';
+        });
+        
+        socket.on('connect_error', (error) => {
+            log(`🔴 Connection error: ${error}`);
+        });
+        
+        function registerSessions() {
+            log('🔐 Registering test sessions...');
+            
+            // Register Device A (Requester)
+            socket.emit('register_session', {
+                sessionId: 'test_device_a_001',
+                publicKey: 'test_public_key_a_123'
+            });
+            
+            // Register Device B (Acceptor)
+            socket.emit('register_session', {
+                sessionId: 'test_device_b_002',
+                publicKey: 'test_public_key_b_456'
+            });
+            
+            log('🔐 Test sessions registered');
+        }
+        
+        function testKERFlow() {
+            log('🚀 Starting complete KER flow test...');
+            
+            // Step 1: Send KER request
+            const requestId = 'test_ker_' + Date.now();
+            log(`📤 Sending KER request: ${requestId}`);
+            
+            socket.emit('key_exchange:request', {
+                senderId: 'test_device_a_001',
+                recipientId: 'test_device_b_002',
+                publicKey: 'test_public_key_a_123',
+                requestId: requestId,
+                requestPhrase: 'Test KER request from Device A',
+                version: '1.0',
+                timestamp: new Date().toISOString()
+            });
+            
+            // Step 2: Accept KER request (after a delay)
+            setTimeout(() => {
+                log(`📤 Sending KER accept for request: ${requestId}`);
+                
+                socket.emit('key_exchange:accept', {
+                    requestId: requestId,
+                    recipientId: 'test_device_a_001',  // Requester's ID
+                    senderId: 'test_device_b_002',     // Acceptor's ID
+                    publicKey: 'test_public_key_b_456'
+                });
+                
+                log('✅ KER accept sent - waiting for response...');
+            }, 2000);
+        }
+        
+        function testAcceptOnly() {
+            const requestId = 'test_accept_only_' + Date.now();
+            log(`📤 Testing accept event only with requestId: ${requestId}`);
+            
+            socket.emit('key_exchange:accept', {
+                requestId: requestId,
+                recipientId: 'test_device_a_001',  // Requester's ID
+                senderId: 'test_device_b_002',     // Acceptor's ID
+                publicKey: 'test_public_key_b_456'
+            });
+            
+            log('✅ Accept event sent - check server logs');
+        }
+        
+        // Listen for all events
+        socket.onAny((eventName, ...args) => {
+            log(`📡 Event received: ${eventName} - ${JSON.stringify(args)}`);
+        });
+        
+        // Specific event listeners
+        socket.on('key_exchange:response', (data) => {
+            log(`🎉 KEY EXCHANGE RESPONSE RECEIVED: ${JSON.stringify(data)}`);
+        });
+        
+        socket.on('key_exchange:declined', (data) => {
+            log(`🚫 KER Declined: ${JSON.stringify(data)}`);
+        });
+        
+        socket.on('key_exchange:revoked', (data) => {
+            log(`🔄 KER Revoked: ${JSON.stringify(data)}`);
+        });
+        
+        socket.on('session_registered', (data) => {
+            log(`✅ Session registered: ${JSON.stringify(data)}`);
+        });
+    </script>
+</body>
+</html>

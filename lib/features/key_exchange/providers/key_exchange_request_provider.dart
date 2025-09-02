@@ -38,7 +38,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
   /// Refresh the data from storage
   Future<void> refresh() async {
+    print('🔑 KeyExchangeRequestProvider: 🔄 Refreshing data from storage');
     await _loadSavedRequests();
+    print(
+        '🔑 KeyExchangeRequestProvider: ✅ Refresh completed - sent: ${_sentRequests.length}, received: ${_receivedRequests.length}');
   }
 
   List<KeyExchangeRequest> get sentRequests => List.unmodifiable(_sentRequests);
@@ -149,33 +152,61 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         return false;
       }
 
-      // Check if we already have a pending or existing request with this session
-      final existingRequest = _sentRequests.firstWhere(
+      // Get the current user's public key
+      final userSession = SeSessionService().currentSession;
+      final currentUserPublicKey = userSession?.publicKey;
+      if (currentUserPublicKey == null) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ❌ Current user public key not available');
+        UIService().showSnack('Public key not available. Please try again.');
+        return false;
+      }
+
+      // Check if we already have a request with this session - if so, update it instead of creating new one
+      // Only update if the request is not in a final state (accepted/revoked)
+      final existingRequestIndex = _sentRequests.indexWhere(
         (req) =>
             req.toSessionId == recipientSessionId &&
-            (req.status == 'pending' || req.status == 'sent'),
-        orElse: () => KeyExchangeRequest(
-          id: '',
-          fromSessionId: '',
-          toSessionId: '',
-          requestPhrase: '',
-          status: '',
-          timestamp: DateTime.now(),
-          type: '',
-          version: '',
-        ),
+            (req.status == 'pending' ||
+                req.status == 'sent' ||
+                req.status == 'failed' ||
+                req.status == 'declined'),
       );
 
-      if (existingRequest.id.isNotEmpty) {
+      if (existingRequestIndex != -1) {
+        // Update existing request instead of creating new one
+        final existingRequest = _sentRequests[existingRequestIndex];
         print(
-            '🔑 KeyExchangeRequestProvider: ❌ Already have a pending/sent request with $recipientSessionId (status: ${existingRequest.status})');
+            '🔑 KeyExchangeRequestProvider: 🔄 Updating existing request with $recipientSessionId (status: ${existingRequest.status})');
 
-        // Show error message to user
-        UIService().showSnack(
-          'You already have a pending key exchange request with this user.',
+        // Update the existing request with new data
+        _sentRequests[existingRequestIndex] = KeyExchangeRequest(
+          id: existingRequest.id, // Keep the same ID
+          fromSessionId: currentUserId,
+          toSessionId: recipientSessionId,
+          requestPhrase: requestPhrase,
+          status: 'pending', // Reset to pending
+          timestamp: DateTime.now(), // Update timestamp
+          type: 'key_exchange_request',
+          version: '1',
+          publicKey: currentUserPublicKey,
         );
 
-        return false;
+        // Save the updated request
+        await _saveSentRequest(_sentRequests[existingRequestIndex]);
+        notifyListeners();
+
+        // Send the updated request
+        _socketService.sendKeyExchangeRequest(
+          recipientId: recipientSessionId,
+          publicKey: currentUserPublicKey,
+          requestId: existingRequest.id, // Use existing ID
+          requestPhrase: requestPhrase,
+        );
+
+        print(
+            '🔑 KeyExchangeRequestProvider: ✅ Updated existing request and resent to $recipientSessionId');
+        return true;
       }
 
       // Check if we have a received request from this session that we haven't responded to
@@ -269,6 +300,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         // Show error message to user
         UIService().showSnack(
           'Failed to send key exchange request. Please try again.',
+          isError: true,
         );
 
         return false;
@@ -291,8 +323,8 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       Map<String, dynamic> data) async {
     try {
       print(
-          '🔑 KeyExchangeRequestProvider: Processing received key exchange request');
-      print('🔑 KeyExchangeRequestProvider: 📋 Request data: $data');
+          '🔑 KeyExchangeRequestProvider: 🔥 Processing received key exchange request');
+      print('🔑 KeyExchangeRequestProvider: 🔥 Request data: $data');
 
       // Handle both old and new data formats
       final requestId =
@@ -320,8 +352,14 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         timestamp = DateTime.fromMillisecondsSinceEpoch(timestampRaw);
       } else if (timestampRaw is String) {
         try {
-          timestamp =
-              DateTime.fromMillisecondsSinceEpoch(int.parse(timestampRaw));
+          // Try parsing as ISO string first
+          if (timestampRaw.contains('T') || timestampRaw.contains('Z')) {
+            timestamp = DateTime.parse(timestampRaw);
+          } else {
+            // Try parsing as milliseconds since epoch
+            timestamp =
+                DateTime.fromMillisecondsSinceEpoch(int.parse(timestampRaw));
+          }
         } catch (e) {
           print(
               '🔑 KeyExchangeRequestProvider: Invalid timestamp string: $timestampRaw, using current time');
@@ -333,7 +371,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         timestamp = DateTime.now();
       }
 
-      // Check if we already have this request
+      // Check if we already have this request by ID
       if (_receivedRequests.any((req) => req.id == requestId)) {
         print('🔑 KeyExchangeRequestProvider: Request already processed');
         return;
@@ -343,6 +381,45 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Handle both old (snake_case) and new (camelCase) field names
       final senderPublicKey =
           data['publicKey'] as String? ?? data['sender_public_key'] as String?;
+
+      // Check if we already have a request from this sender - if so, update it instead of creating new one
+      // Only update if the request is not in a final state (accepted/declined/failed)
+      final existingRequestIndex = _receivedRequests.indexWhere(
+        (req) =>
+            req.fromSessionId == senderId &&
+            (req.status == 'received' ||
+                req.status == 'pending' ||
+                req.status == 'processing'),
+      );
+
+      if (existingRequestIndex != -1) {
+        // Update existing request instead of creating new one
+        final existingRequest = _receivedRequests[existingRequestIndex];
+        print(
+            '🔑 KeyExchangeRequestProvider: 🔄 Updating existing received request from $senderId (status: ${existingRequest.status})');
+
+        // Update the existing request with new data
+        _receivedRequests[existingRequestIndex] = KeyExchangeRequest(
+          id: requestId, // Use new request ID
+          fromSessionId: senderId,
+          toSessionId: SeSessionService().currentSessionId ?? '',
+          requestPhrase: requestPhrase,
+          status: 'received', // Reset to received
+          timestamp: timestamp, // Update timestamp
+          type: 'key_exchange_request',
+          version: data['version']?.toString(),
+          publicKey: senderPublicKey,
+        );
+
+        // Save the updated request
+        await _saveReceivedRequest(_receivedRequests[existingRequestIndex]);
+        notifyListeners();
+
+        print(
+            '🔑 KeyExchangeRequestProvider: ✅ Updated existing received request from $senderId');
+        return;
+      }
+
       if (senderPublicKey != null) {
         print(
             '🔑 KeyExchangeRequestProvider: Storing sender public key for: $senderId');
@@ -376,7 +453,12 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       );
 
       _receivedRequests.add(request);
+      print(
+          '🔑 KeyExchangeRequestProvider: ✅ Added request to _receivedRequests list (total: ${_receivedRequests.length})');
+
+      // Force UI update
       notifyListeners();
+      print('🔑 KeyExchangeRequestProvider: ✅ notifyListeners() called');
 
       // Notify about new items for badge indicators
       _notifyNewItems();
@@ -590,8 +672,8 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
       _socketService.emit('key_exchange:accept', {
         'requestId': request.id,
-        'recipientId': currentUserId, // The acceptor (us)
-        'senderId': request.fromSessionId, // The requester
+        'senderId': currentUserId, // The acceptor (us) - CORRECTED
+        'recipientId': request.fromSessionId, // The requester - CORRECTED
         'publicKey': currentUserPublicKey, // CRITICAL: Include our public key
         'encryptedUserData':
             encryptedUserData, // CRITICAL: Include encrypted user data
@@ -682,13 +764,12 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Get the version from the original request if available
       final requestVersion = request.version ?? '1';
 
-      // Send key exchange response
-      _socketService.sendKeyExchangeResponse(
+      // Send key exchange decline according to API documentation
+      _socketService.sendKeyExchangeDecline(
+        senderId: currentUserId,
         recipientId: request.fromSessionId,
-        publicKey: '', // No public key needed for decline
-        responseId: GuidGenerator.generateGuid(),
-        requestVersion: requestVersion,
-        type: 'key_exchange_declined',
+        requestId: requestId,
+        reason: 'User declined the key exchange request',
       );
 
       print(
@@ -814,6 +895,151 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       print(
           '🔑 KeyExchangeRequestProvider: Error retrying key exchange request: $e');
       return false;
+    }
+  }
+
+  /// Handle key exchange error from socket
+  void handleKeyExchangeError(Map<String, dynamic> errorData) {
+    try {
+      print('🔑 KeyExchangeRequestProvider: Handling key exchange error');
+      print('🔑 KeyExchangeRequestProvider: Error data: $errorData');
+
+      final errorCode = errorData['errorCode']?.toString();
+      final requestId = errorData['requestId']?.toString();
+      final recipientId = errorData['recipientId']?.toString();
+
+      // Find the request in sent requests and update its status
+      if (requestId != null) {
+        final requestIndex =
+            _sentRequests.indexWhere((req) => req.id == requestId);
+        if (requestIndex != -1) {
+          _sentRequests[requestIndex].status = 'failed';
+          notifyListeners();
+          print(
+              '🔑 KeyExchangeRequestProvider: Updated request $requestId status to failed');
+        }
+      }
+
+      // If we have recipientId, find and update any requests to that recipient
+      if (recipientId != null) {
+        for (int i = 0; i < _sentRequests.length; i++) {
+          if (_sentRequests[i].toSessionId == recipientId &&
+              (_sentRequests[i].status == 'pending' ||
+                  _sentRequests[i].status == 'sent')) {
+            _sentRequests[i].status = 'failed';
+            print(
+                '🔑 KeyExchangeRequestProvider: Updated request to $recipientId status to failed');
+          }
+        }
+        notifyListeners();
+      }
+
+      // Show user-friendly error message
+      String userMessage = _getUserFriendlyErrorMessage(errorCode);
+      UIService().showSnack(userMessage,
+          isError: true, duration: const Duration(seconds: 5));
+    } catch (e) {
+      print(
+          '🔑 KeyExchangeRequestProvider: Error handling key exchange error: $e');
+    }
+  }
+
+  /// Handle key exchange declined from socket
+  Future<void> handleKeyExchangeDeclined(
+      Map<String, dynamic> declineData) async {
+    try {
+      print('🔑 KeyExchangeRequestProvider: Handling key exchange declined');
+      print('🔑 KeyExchangeRequestProvider: Decline data: $declineData');
+
+      final senderId = declineData['senderId']?.toString();
+      final requestId = declineData['requestId']?.toString();
+      final reason = declineData['reason']?.toString();
+
+      // Find the request in sent requests and update its status
+      if (requestId != null) {
+        final requestIndex =
+            _sentRequests.indexWhere((req) => req.id == requestId);
+        if (requestIndex != -1) {
+          _sentRequests[requestIndex].status = 'declined';
+          _sentRequests[requestIndex].respondedAt = DateTime.now();
+
+          // Save the updated status to local storage
+          await _saveSentRequest(_sentRequests[requestIndex]);
+
+          notifyListeners();
+          print(
+              '🔑 KeyExchangeRequestProvider: Updated request $requestId status to declined');
+        }
+      }
+
+      // If we have senderId, find and update any requests to that sender
+      if (senderId != null) {
+        for (int i = 0; i < _sentRequests.length; i++) {
+          if (_sentRequests[i].toSessionId == senderId &&
+              (_sentRequests[i].status == 'pending' ||
+                  _sentRequests[i].status == 'sent')) {
+            _sentRequests[i].status = 'declined';
+            _sentRequests[i].respondedAt = DateTime.now();
+
+            // Save the updated status to local storage
+            await _saveSentRequest(_sentRequests[i]);
+
+            print(
+                '🔑 KeyExchangeRequestProvider: Updated request to $senderId status to declined');
+          }
+        }
+        notifyListeners();
+      }
+
+      // Create local notification for declined request
+      try {
+        final notificationService = LocalNotificationItemsService();
+        final currentUserId = SeSessionService().currentSessionId;
+        if (currentUserId != null && senderId != null) {
+          await notificationService.createKerDeclinedNotification(
+            senderId: senderId,
+            recipientId: currentUserId,
+            requestPhrase: reason ?? 'Key exchange request declined',
+          );
+          print(
+              '🔑 KeyExchangeRequestProvider: ✅ Local notification created for declined KER');
+        }
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
+      }
+
+      // Show user-friendly decline message
+      String userMessage = reason ?? 'Your key exchange request was declined';
+      UIService().showSnack(userMessage,
+          isError: false, duration: const Duration(seconds: 4));
+    } catch (e) {
+      print(
+          '🔑 KeyExchangeRequestProvider: Error handling key exchange decline: $e');
+    }
+  }
+
+  /// Get user-friendly error message based on error code
+  String _getUserFriendlyErrorMessage(String? errorCode) {
+    switch (errorCode) {
+      case 'RECIPIENT_NOT_FOUND':
+        return 'The recipient is currently offline. Your request will be delivered when they come online.';
+      case 'INVALID_PAYLOAD':
+        return 'Invalid request format. Please try again.';
+      case 'UNAUTHORIZED_REQUEST':
+        return 'You can only send key exchange requests from your own session.';
+      case 'NO_PUBLIC_KEY':
+        return 'No public key found. Please ensure you are properly registered.';
+      case 'REQUESTER_NOT_FOUND':
+        return 'Unable to deliver response. The requester may be offline.';
+      case 'UNAUTHORIZED_ACCEPT':
+        return 'You can only accept key exchange requests sent to you.';
+      case 'UNAUTHORIZED_DECLINE':
+        return 'You can only decline key exchange requests sent to you.';
+      case 'DECLINE_NOTIFICATION_FAILED':
+        return 'Unable to notify requester of decline. They may be offline.';
+      default:
+        return 'An error occurred during key exchange. Please try again.';
     }
   }
 

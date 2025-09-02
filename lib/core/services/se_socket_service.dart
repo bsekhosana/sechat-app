@@ -228,6 +228,7 @@ class SeSocketService {
   Function(Map<String, dynamic> data)? onKeyExchangeRequest;
   Function(Map<String, dynamic> data)? onKeyExchangeResponse;
   Function(Map<String, dynamic> data)? onKeyExchangeRevoked;
+  Function(Map<String, dynamic> data)? onKeyExchangeDeclined;
   Function(Map<String, dynamic> data)? onUserDataExchange;
   Function(Map<String, dynamic> data)? onConversationCreated;
   Function(Map<String, dynamic> data)? onUserDeleted;
@@ -468,6 +469,16 @@ class SeSocketService {
     _socket!.on('key_exchange:request', (data) async {
       print('🔑 SeSocketService: Key exchange request received');
 
+      // Process the key exchange request with KeyExchangeService
+      try {
+        KeyExchangeService.instance.processKeyExchangeRequest(data);
+        print(
+            '🔑 SeSocketService: ✅ Key exchange request processed by KeyExchangeService');
+      } catch (e) {
+        print(
+            '🔑 SeSocketService: ❌ Error processing key exchange request: $e');
+      }
+
       // Create notification for key exchange request
       await _createSocketEventNotification(
         eventType: 'key_exchange:request',
@@ -481,7 +492,12 @@ class SeSocketService {
       );
 
       if (onKeyExchangeRequest != null) {
+        print(
+            '🔑 SeSocketService: 🚀 Calling onKeyExchangeRequest callback...');
         onKeyExchangeRequest!(data);
+        print('🔑 SeSocketService: ✅ onKeyExchangeRequest callback completed');
+      } else {
+        print('🔑 SeSocketService: ❌ onKeyExchangeRequest callback is NULL!');
       }
     });
 
@@ -556,6 +572,47 @@ class SeSocketService {
       if (onKeyExchangeRevoked != null) {
         onKeyExchangeRevoked!(data);
       }
+    });
+
+    // Key exchange declined events (received by requester)
+    _socket!.on('key_exchange:declined', (data) async {
+      print('🔑 SeSocketService: Key exchange declined');
+      print('🔑 SeSocketService: Decline data: $data');
+
+      // Create notification for key exchange declined
+      await _createSocketEventNotification(
+        eventType: 'key_exchange:declined',
+        title: 'Key Exchange Declined',
+        body: 'Your key exchange request was declined',
+        senderId: data['senderId']?.toString(),
+        senderName: data['senderName']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
+
+      // Notify KeyExchangeService about the decline
+      try {
+        await KeyExchangeService.instance.handleKeyExchangeDeclined(data);
+        print(
+            '🔑 SeSocketService: ✅ Key exchange decline processed by KeyExchangeService');
+      } catch (e) {
+        print(
+            '🔑 SeSocketService: ❌ Error processing key exchange decline: $e');
+      }
+
+      // Call the callback if set
+      if (onKeyExchangeDeclined != null) {
+        onKeyExchangeDeclined!(data);
+      }
+    });
+
+    // Key exchange error events
+    _socket!.on('key_exchange:error', (data) async {
+      print('🔑 SeSocketService: Key exchange error received');
+      print('🔑 SeSocketService: Error data: $data');
+
+      // Handle key exchange error
+      await _handleKeyExchangeError(data);
     });
 
     // User data exchange events
@@ -1122,6 +1179,70 @@ class SeSocketService {
     });
   }
 
+  /// Handle key exchange error events
+  Future<void> _handleKeyExchangeError(Map<String, dynamic> errorData) async {
+    try {
+      print('🔑 SeSocketService: Handling key exchange error');
+
+      final errorCode = errorData['errorCode']?.toString();
+      final errorType = errorData['errorType']?.toString();
+      final message = errorData['message']?.toString();
+      final requestId = errorData['requestId']?.toString();
+
+      print('🔑 SeSocketService: Error Code: $errorCode');
+      print('🔑 SeSocketService: Error Type: $errorType');
+      print('🔑 SeSocketService: Message: $message');
+      print('🔑 SeSocketService: Request ID: $requestId');
+
+      // Create user-friendly error message
+      String userMessage = _getUserFriendlyErrorMessage(errorCode, message);
+
+      // Notify KeyExchangeService about the error (it will handle the snackbar)
+      try {
+        KeyExchangeService.instance.handleKeyExchangeError(errorData);
+      } catch (e) {
+        print('🔑 SeSocketService: Error notifying KeyExchangeService: $e');
+      }
+
+      // Create notification for the error
+      await _createSocketEventNotification(
+        eventType: 'key_exchange:error',
+        title: 'Key Exchange Error',
+        body: userMessage,
+        senderId: errorData['recipientId']?.toString(),
+        conversationId: null,
+        metadata: errorData,
+      );
+    } catch (e) {
+      print('🔑 SeSocketService: Error handling key exchange error: $e');
+    }
+  }
+
+  /// Get user-friendly error message based on error code
+  String _getUserFriendlyErrorMessage(String? errorCode, String? message) {
+    switch (errorCode) {
+      case 'RECIPIENT_NOT_FOUND':
+        return 'The recipient is currently offline. Your request will be delivered when they come online.';
+      case 'INVALID_PAYLOAD':
+        return 'Invalid request format. Please try again.';
+      case 'UNAUTHORIZED_REQUEST':
+        return 'You can only send key exchange requests from your own session.';
+      case 'NO_PUBLIC_KEY':
+        return 'No public key found. Please ensure you are properly registered.';
+      case 'REQUESTER_NOT_FOUND':
+        return 'Unable to deliver response. The requester may be offline.';
+      case 'UNAUTHORIZED_ACCEPT':
+        return 'You can only accept key exchange requests sent to you.';
+      case 'UNAUTHORIZED_DECLINE':
+        return 'You can only decline key exchange requests sent to you.';
+      case 'DECLINE_NOTIFICATION_FAILED':
+        return 'Unable to notify requester of decline. They may be offline.';
+      default:
+        return message ??
+            'An error occurred during key exchange. Please try again.';
+    }
+  }
+
   void _scheduleReconnect() {
     if (_reconnectAttempts >= _maxReconnectAttempts) {
       print('🔌 SeSocketService: Max reconnection attempts reached');
@@ -1432,13 +1553,16 @@ class SeSocketService {
       required String requestPhrase,
       String version = '1'}) {
     if (!isConnected || _sessionId == null) return;
+
+    // Send according to API documentation format
     _socket!.emit('key_exchange:request', {
-      'recipientId': recipientId,
       'senderId': _sessionId,
+      'recipientId': recipientId,
       'publicKey': publicKey,
       'requestId': requestId,
       'requestPhrase': requestPhrase,
-      'version': version
+      'version': version,
+      'timestamp': DateTime.now().millisecondsSinceEpoch
     });
   }
 
@@ -1456,6 +1580,24 @@ class SeSocketService {
       'responseId': responseId,
       'requestVersion': requestVersion,
       'type': type
+    });
+  }
+
+  void sendKeyExchangeDecline({
+    required String senderId,
+    required String recipientId,
+    required String requestId,
+    String? reason,
+  }) {
+    if (!isConnected || _sessionId == null) return;
+
+    // Send according to API documentation format
+    _socket!.emit('key_exchange:decline', {
+      'senderId': senderId,
+      'recipientId': recipientId,
+      'requestId': requestId,
+      'reason': reason ?? 'Key exchange request declined',
+      'timestamp': DateTime.now().millisecondsSinceEpoch
     });
   }
 
@@ -1672,19 +1814,15 @@ class SeSocketService {
     }
   }
 
-  void setOnKeyExchangeResponse(Function(Map<String, dynamic> data)? callback) {
+  void setOnKeyExchangeDeclined(Function(Map<String, dynamic> data)? callback) {
     if (callback != null) {
-      onKeyExchangeResponse = callback;
+      onKeyExchangeDeclined = callback;
     }
   }
 
-  void setOnKeyExchangeDeclined(Function(Map<String, dynamic> data)? callback) {
-    // This might need to be handled differently since there's no direct decline event
-    // For now, we'll map it to a general key exchange event
+  void setOnKeyExchangeResponse(Function(Map<String, dynamic> data)? callback) {
     if (callback != null) {
-      // We could emit a custom event or handle it through the response callback
-      print(
-          '⚠️ setOnKeyExchangeDeclined: Not implemented in current socket service');
+      onKeyExchangeResponse = callback;
     }
   }
 

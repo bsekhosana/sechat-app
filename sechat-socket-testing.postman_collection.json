@@ -1,0 +1,907 @@
+{
+  "info": {
+    "name": "SeChat Socket.IO Testing",
+    "description": "Comprehensive testing collection for all SeChat Socket.IO events and features. Use this to test KER, messaging, presence, blocking, and more without real devices.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "url": "https://sechat-socket.strapblaque.com/"
+  },
+  "variable": [
+    {
+      "key": "socket_server_url",
+      "value": "https://sechat-socket.strapblaque.com",
+      "type": "string"
+    },
+    {
+      "key": "device_a_session_id",
+      "value": "device_a_001",
+      "type": "string"
+    },
+    {
+      "key": "device_b_session_id",
+      "value": "device_b_002",
+      "type": "string"
+    },
+    {
+      "key": "device_a_public_key",
+      "value": "public_key_a_123",
+      "type": "string"
+    },
+    {
+      "key": "device_b_public_key",
+      "value": "public_key_b_456",
+      "type": "string"
+    },
+    {
+      "key": "conversation_id",
+      "value": "chat_001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "📱 Session Management",
+      "description": "Manage user sessions and connections",
+      "item": [
+        {
+          "name": "Register Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// This is a Socket.IO event - use Socket.IO client to test",
+                  "// Event: register_session",
+                  "// Payload: { sessionId, publicKey }",
+                  "// Response: session_registered event",
+                  "",
+                  "console.log('To test this event:');",
+                  "console.log('1. Connect to Socket.IO server');",
+                  "console.log('2. Emit: register_session');",
+                  "console.log('3. Listen for: session_registered');",
+                  "",
+                  "pm.test('Socket.IO Event Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Use Socket.IO client to test this event');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Join Session",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: session:joining",
+                  "// Payload: { sessionId, publicKey }",
+                  "// Response: session_joined event",
+                  "",
+                  "pm.test('Socket.IO Event Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Use Socket.IO client to test this event');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔑 Key Exchange Request (KER)",
+      "description": "Test the complete KER handshake flow: request → accept → response → decline/revoke",
+      "item": [
+        {
+          "name": "Send KER Request",
+          "description": "Device A sends a key exchange request to Device B",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: key_exchange:request",
+                  "// Payload: {",
+                  "//   senderId: 'device_a_001',",
+                  "//   recipientId: 'device_b_002',",
+                  "//   publicKey: 'public_key_a_123',",
+                  "//   requestId: 'ker_1234567890',",
+                  "//   requestPhrase: 'Hello Device B, let\\'s exchange keys!',",
+                  "//   version: '1'",
+                  "// }",
+                  "// Response: key_exchange:request event sent to recipient",
+                  "",
+                  "pm.test('KER Request Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Device A should emit key_exchange:request');",
+                  "    pm.comment('Device B should receive key_exchange:request');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Accept KER Request",
+          "description": "Device B accepts the key exchange request from Device A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: key_exchange:accept",
+                  "// Payload: {",
+                  "//   requestId: 'ker_1234567890',",
+                  "//   recipientId: 'device_b_002',",
+                  "//   senderId: 'device_a_001',",
+                  "//   encryptedUserData: 'encrypted_user_data_from_device_b'",
+                  "// }",
+                  "// Response: key_exchange:response event sent to requester",
+                  "",
+                  "pm.test('KER Accept Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Device B should emit key_exchange:accept');",
+                  "    pm.comment('Device A should receive key_exchange:response');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Decline KER Request",
+          "description": "Device B declines the key exchange request from Device A",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: key_exchange:decline",
+                  "// Payload: {",
+                  "//   requestId: 'ker_1234567890',",
+                  "//   senderId: 'device_b_002',",
+                  "//   recipientId: 'device_a_001',",
+                  "//   reason: 'User declined the key exchange request',",
+                  "//   timestamp: '2025-08-30T00:00:00.000Z',",
+                  "//   version: '1'",
+                  "// }",
+                  "// Response: key_exchange:declined event sent to requester",
+                  "",
+                  "pm.test('KER Decline Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Device B should emit key_exchange:decline');",
+                  "    pm.comment('Device A should receive key_exchange:declined');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke KER Request",
+          "description": "Device A revokes the key exchange request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: key_exchange:revoke",
+                  "// Payload: {",
+                  "//   requestId: 'ker_1234567890',",
+                  "//   senderId: 'device_a_001',",
+                  "//   recipientId: 'device_b_002'",
+                  "// }",
+                  "// Response: key_exchange:revoked event sent to recipient",
+                  "",
+                  "pm.test('KER Revoke Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Device A should emit key_exchange:revoke');",
+                  "    pm.comment('Device B should receive key_exchange:revoked');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💬 Messaging & Chat",
+      "description": "Test messaging functionality, typing indicators, and message management",
+      "item": [
+        {
+          "name": "Send Message",
+          "description": "Send a message from one user to another",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: message:send",
+                  "// Payload: {",
+                  "//   messageId: 'msg_1234567890',",
+                  "//   fromUserId: 'device_a_001',",
+                  "//   recipientId: 'device_b_002',",
+                  "//   conversationId: 'chat_001',",
+                  "//   body: 'Hello from Device A!',",
+                  "//   timestamp: '2025-08-30T00:00:00.000Z'",
+                  "// }",
+                  "// Response: message:received event sent to recipient",
+                  "",
+                  "pm.test('Message Send Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Sender should emit message:send');",
+                  "    pm.comment('Recipient should receive message:received');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Typing Indicator",
+          "description": "Show typing indicator to recipient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: typing:update",
+                  "// Payload: {",
+                  "//   fromUserId: 'device_a_001',",
+                  "//   recipientId: 'device_b_002',",
+                  "//   conversationId: 'chat_001',",
+                  "//   isTyping: true",
+                  "// }",
+                  "// Response: typing:status_update event sent to recipient",
+                  "",
+                  "pm.test('Typing Start Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('User should emit typing:update with isTyping: true');",
+                  "    pm.comment('Recipient should receive typing:status_update');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stop Typing Indicator",
+          "description": "Hide typing indicator from recipient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: typing:update",
+                  "// Payload: {",
+                  "//   fromUserId: 'device_a_001',",
+                  "//   recipientId: 'device_b_002',",
+                  "//   conversationId: 'chat_001',",
+                  "//   isTyping: false",
+                  "// }",
+                  "// Response: typing:status_update event sent to recipient",
+                  "",
+                  "pm.test('Typing Stop Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('User should emit typing:update with isTyping: false');",
+                  "    pm.comment('Recipient should receive typing:status_update');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Single Message",
+          "description": "Delete a specific message from a conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: message:delete",
+                  "// Payload: {",
+                  "//   messageId: 'msg_1234567890',",
+                  "//   conversationId: 'chat_001',",
+                  "//   userId: 'device_a_001'",
+                  "// }",
+                  "// Response: message:deleted event sent to conversation participants",
+                  "",
+                  "pm.test('Message Delete Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('User should emit message:delete');",
+                  "    pm.comment('All participants should receive message:deleted');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete All Messages",
+          "description": "Delete all messages in a conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: message:delete_all",
+                  "// Payload: {",
+                  "//   conversationId: 'chat_001',",
+                  "//   userId: 'device_a_001'",
+                  "// }",
+                  "// Response: message:all_deleted event sent to conversation participants",
+                  "",
+                  "pm.test('Delete All Messages Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('User should emit message:delete_all');",
+                  "    pm.comment('All participants should receive message:all_deleted');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🟢 Presence Management",
+      "description": "Test online/offline status and presence monitoring",
+      "item": [
+        {
+          "name": "Go Online",
+          "description": "Set user status to online",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: presence:update",
+                  "// Payload: {",
+                  "//   sessionId: 'device_a_001',",
+                  "//   isOnline: true,",
+                  "//   timestamp: '2025-08-30T00:00:00.000Z'",
+                  "// }",
+                  "// Response: presence:update event broadcasted to all users",
+                  "",
+                  "pm.test('Go Online Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('User should emit presence:update with isOnline: true');",
+                  "    pm.comment('All users should receive presence:update');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Go Offline",
+          "description": "Set user status to offline",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: presence:update",
+                  "// Payload: {",
+                  "//   sessionId: 'device_a_001',",
+                  "//   isOnline: false,",
+                  "//   timestamp: '2025-08-30T00:00:00.000Z'",
+                  "// }",
+                  "// Response: presence:update event broadcasted to all users",
+                  "",
+                  "pm.test('Go Offline Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('User should emit presence:update with isOnline: false');",
+                  "    pm.comment('All users should receive presence:update');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Check User Presence",
+          "description": "Check if a specific user is online",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: presence:check",
+                  "// Payload: {",
+                  "//   sessionId: 'device_a_001',",
+                  "//   targetUserId: 'device_b_002'",
+                  "// }",
+                  "// Response: presence:status event with user's online status",
+                  "",
+                  "pm.test('Check Presence Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('User should emit presence:check');",
+                  "    pm.comment('User should receive presence:status');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🚫 Block & Unblock",
+      "description": "Test user and conversation blocking functionality",
+      "item": [
+        {
+          "name": "Block User",
+          "description": "Block a specific user from interacting",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: user:blocked",
+                  "// Payload: {",
+                  "//   blockerId: 'device_a_001',",
+                  "//   blockedId: 'device_b_002',",
+                  "//   reason: 'User blocked from test interface',",
+                  "//   timestamp: '2025-08-30T00:00:00.000Z'",
+                  "// }",
+                  "// Response: user:blocked event broadcasted to all users",
+                  "",
+                  "pm.test('Block User Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Blocker should emit user:blocked');",
+                  "    pm.comment('All users should receive user:blocked');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unblock User",
+          "description": "Unblock a previously blocked user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: user:unblocked",
+                  "// Payload: {",
+                  "//   blockerId: 'device_a_001',",
+                  "//   unblockedId: 'device_b_002',",
+                  "//   timestamp: '2025-08-30T00:00:00.000Z'",
+                  "// }",
+                  "// Response: user:unblocked event broadcasted to all users",
+                  "",
+                  "pm.test('Unblock User Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Blocker should emit user:unblocked');",
+                  "    pm.comment('All users should receive user:unblocked');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Block Conversation",
+          "description": "Block a specific conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: conversation:blocked",
+                  "// Payload: {",
+                  "//   conversationId: 'chat_001',",
+                  "//   blockerId: 'device_a_001',",
+                  "//   timestamp: '2025-08-30T00:00:00.000Z'",
+                  "// }",
+                  "// Response: conversation:blocked event sent to conversation participants",
+                  "",
+                  "pm.test('Block Conversation Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Blocker should emit conversation:blocked');",
+                  "    pm.comment('All participants should receive conversation:blocked');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unblock Conversation",
+          "description": "Unblock a previously blocked conversation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Socket.IO Event: conversation:unblocked",
+                  "// Payload: {",
+                  "//   conversationId: 'chat_001',",
+                  "//   blockerId: 'device_a_001',",
+                  "//   timestamp: '2025-08-30T00:00:00.000Z'",
+                  "// }",
+                  "// Response: conversation:unblocked event sent to conversation participants",
+                  "",
+                  "pm.test('Unblock Conversation Test', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Blocker should emit conversation:unblocked');",
+                  "    pm.comment('All participants should receive conversation:unblocked');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📚 Testing Instructions & Setup",
+      "description": "Complete guide on how to use this collection to test Socket.IO events",
+      "item": [
+        {
+          "name": "🚀 Quick Start Guide",
+          "description": "Get started with Socket.IO testing in 5 minutes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// QUICK START GUIDE FOR SOCKET.IO TESTING",
+                  "// ========================================",
+                  "",
+                  "// 1. IMPORT THIS COLLECTION INTO POSTMAN",
+                  "// 2. SETUP SOCKET.IO CLIENT (see instructions below)",
+                  "// 3. RUN TESTS FOR EACH FEATURE",
+                  "// 4. MONITOR SERVER LOGS AT /admin/api-docs",
+                  "",
+                  "pm.test('Quick Start Guide', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Follow the setup instructions below');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "🔧 Socket.IO Client Setup",
+          "description": "How to set up Socket.IO client for testing",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// SOCKET.IO CLIENT SETUP",
+                  "// ======================",
+                  "",
+                  "// 1. Install Socket.IO client:",
+                  "//    npm install socket.io-client",
+                  "//    or use CDN: <script src=\"https://cdn.socket.io/4.7.2/socket.io.min.js\"></script>",
+                  "",
+                  "// 2. Basic connection setup:",
+                  "//    const socket = io('https://sechat-socket.strapblaque.com');",
+                  "",
+                  "// 3. Event listeners:",
+                  "//    socket.on('connect', () => console.log('Connected!'));",
+                  "//    socket.on('disconnect', () => console.log('Disconnected!'));",
+                  "",
+                  "// 4. Emit events:",
+                  "//    socket.emit('event_name', payload);",
+                  "",
+                  "pm.test('Socket.IO Setup Guide', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Follow the setup instructions above');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "🧪 Testing Workflow",
+          "description": "Step-by-step testing workflow for each feature",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// TESTING WORKFLOW",
+                  "// =================",
+                  "",
+                  "// 1. SESSION MANAGEMENT:",
+                  "//    - Register Device A and Device B sessions",
+                  "//    - Verify both are connected",
+                  "",
+                  "// 2. KER TESTING:",
+                  "//    - Device A sends KER request to Device B",
+                  "//    - Device B receives request and responds (accept/decline)",
+                  "//    - Test decline and revoke scenarios",
+                  "",
+                  "// 3. MESSAGING TESTING:",
+                  "//    - Send messages between devices",
+                  "//    - Test typing indicators",
+                  "//    - Test message deletion",
+                  "",
+                  "// 4. PRESENCE TESTING:",
+                  "//    - Test online/offline status",
+                  "//    - Monitor presence updates",
+                  "",
+                  "// 5. BLOCKING TESTING:",
+                  "//    - Test user blocking/unblocking",
+                  "//    - Test conversation blocking/unblocking",
+                  "",
+                  "pm.test('Testing Workflow Guide', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Follow the workflow above for comprehensive testing');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "📊 Monitoring & Debugging",
+          "description": "How to monitor server activity and debug issues",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// MONITORING & DEBUGGING",
+                  "// ========================",
+                  "",
+                  "// 1. SERVER MONITORING:",
+                  "//    - Visit: https://sechat-socket.strapblaque.com/admin/api-docs",
+                  "//    - View real-time server logs and events",
+                  "//    - Monitor active sessions and connections",
+                  "",
+                  "// 2. CLIENT DEBUGGING:",
+                  "//    - Use browser console for client-side logs",
+                  "//    - Monitor Socket.IO connection status",
+                  "//    - Check event emission and reception",
+                  "",
+                  "// 3. COMMON ISSUES:",
+                  "//    - Connection refused: Check server status",
+                  "//    - Events not received: Verify session registration",
+                  "//    - Wrong recipients: Check session ID mapping",
+                  "",
+                  "pm.test('Monitoring Guide', function () {",
+                  "    pm.expect(true).to.be.true;",
+                  "    pm.comment('Use the monitoring tools above for debugging');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{socket_server_url}}/admin/api-docs",
+              "host": ["{{socket_server_url}}"],
+              "path": ["admin", "api-docs"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

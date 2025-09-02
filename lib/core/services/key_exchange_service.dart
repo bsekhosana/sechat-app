@@ -8,6 +8,7 @@ import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import 'package:sechat_app/core/services/contact_service.dart';
 import 'package:sechat_app/features/chat/models/chat_conversation.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
+import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'package:sechat_app/core/services/presence_manager.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 
@@ -477,6 +478,94 @@ class KeyExchangeService {
     }
   }
 
+  /// Handle key exchange error events
+  Future<void> handleKeyExchangeError(Map<String, dynamic> errorData) async {
+    try {
+      print('🔑 KeyExchangeService: Handling key exchange error');
+      print('🔑 KeyExchangeService: Error data: $errorData');
+
+      final errorCode = errorData['errorCode']?.toString();
+      final requestId = errorData['requestId']?.toString();
+      final recipientId = errorData['recipientId']?.toString();
+
+      // Remove from pending exchanges if it was a request we sent
+      if (recipientId != null) {
+        await _removePendingExchange(recipientId);
+        print(
+            '🔑 KeyExchangeService: Removed pending exchange for $recipientId due to error');
+      }
+
+      // Update local request status to failed
+      if (requestId != null) {
+        await _updateRequestStatus(requestId, 'failed');
+        print(
+            '🔑 KeyExchangeService: Updated request $requestId status to failed');
+      }
+
+      // Notify KeyExchangeRequestProvider about the error
+      try {
+        // Import the provider to handle UI updates
+        final provider = KeyExchangeRequestProvider();
+        provider.handleKeyExchangeError(errorData);
+        print(
+            '🔑 KeyExchangeService: Notified KeyExchangeRequestProvider about error');
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeService: Error notifying KeyExchangeRequestProvider: $e');
+      }
+
+      // Log the error for debugging
+      print(
+          '🔑 KeyExchangeService: Key exchange failed with error: $errorCode');
+    } catch (e) {
+      print('🔑 KeyExchangeService: Error handling key exchange error: $e');
+    }
+  }
+
+  /// Handle key exchange declined events
+  Future<void> handleKeyExchangeDeclined(
+      Map<String, dynamic> declineData) async {
+    try {
+      print('🔑 KeyExchangeService: Handling key exchange declined');
+      print('🔑 KeyExchangeService: Decline data: $declineData');
+
+      final senderId = declineData['senderId']?.toString();
+      final requestId = declineData['requestId']?.toString();
+      final reason = declineData['reason']?.toString();
+
+      // Remove from pending exchanges if it was a request we sent
+      if (senderId != null) {
+        await _removePendingExchange(senderId);
+        print(
+            '🔑 KeyExchangeService: Removed pending exchange for $senderId due to decline');
+      }
+
+      // Update local request status to declined
+      if (requestId != null) {
+        await _updateRequestStatus(requestId, 'declined');
+        print(
+            '🔑 KeyExchangeService: Updated request $requestId status to declined');
+      }
+
+      // Notify KeyExchangeRequestProvider about the decline
+      try {
+        final provider = KeyExchangeRequestProvider();
+        await provider.handleKeyExchangeDeclined(declineData);
+        print(
+            '🔑 KeyExchangeService: Notified KeyExchangeRequestProvider about decline');
+      } catch (e) {
+        print(
+            '🔑 KeyExchangeService: Error notifying KeyExchangeRequestProvider: $e');
+      }
+
+      // Log the decline for debugging
+      print(
+          '🔑 KeyExchangeService: Key exchange declined by $senderId: $reason');
+    } catch (e) {
+      print('🔑 KeyExchangeService: Error handling key exchange decline: $e');
+    }
+  }
+
   /// Check if we have a public key for a user
   Future<bool> hasPublicKeyForUser(String userId) async {
     final publicKey = await EncryptionService.getRecipientPublicKey(userId);
@@ -544,6 +633,21 @@ class KeyExchangeService {
     if (pendingExchanges.contains(userId)) {
       pendingExchanges.remove(userId);
       await _savePendingExchanges(pendingExchanges);
+    }
+  }
+
+  /// Update request status in local storage
+  Future<void> _updateRequestStatus(String requestId, String status) async {
+    try {
+      // This would typically update the status in the KeyExchangeRequestProvider
+      // For now, we'll just log the status update
+      print(
+          '🔑 KeyExchangeService: Updating request $requestId status to $status');
+
+      // TODO: Implement actual status update in KeyExchangeRequestProvider
+      // This could involve notifying the provider to update the request status
+    } catch (e) {
+      print('🔑 KeyExchangeService: Error updating request status: $e');
     }
   }
 

@@ -663,11 +663,27 @@ void _setupSocketCallbacks(SeSocketService socketService) {
 
   // Set up key exchange callbacks
   socketService.setOnKeyExchangeRequestReceived((data) {
-    print('🔌 Main: Key exchange request received from socket: $data');
+    print('🔌 Main: 🔥 Key exchange request received from socket: $data');
+    print('🔌 Main: 🔥 Callback is being triggered!');
 
-    // Update badge counts in real-time ONLY if user is not on K.Exchange screen
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Process the received key exchange request
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
+        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Process the received key exchange request
+        keyExchangeProvider.processReceivedKeyExchangeRequest(data);
+        print('🔌 Main: ✅ Key exchange request processed by provider');
+        print(
+            '🔌 Main: 📊 Provider received requests count: ${keyExchangeProvider.receivedRequests.length}');
+
+        // Force refresh the provider to ensure UI updates
+        await keyExchangeProvider.refresh();
+        print('🔌 Main: ✅ Provider refreshed after processing request');
+
+        // Update badge counts in real-time ONLY if user is not on K.Exchange screen
         final indicatorService = Provider.of<IndicatorService>(
             navigatorKey.currentContext!,
             listen: false);
@@ -677,20 +693,56 @@ void _setupSocketCallbacks(SeSocketService socketService) {
 
         // Always update badge count using context-aware method
         // The indicator service will handle screen context internally
-        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
-            navigatorKey.currentContext!,
-            listen: false);
-
         // Only count pending/received requests that haven't been processed yet
         final pendingCount = keyExchangeProvider.receivedRequests
             .where((req) => req.status == 'received' || req.status == 'pending')
             .length;
+
+        print('🔌 Main: 🔥 Updating badge count to: $pendingCount');
+        print('🔌 Main: 🔥 Current screen index: $_currentScreenIndex');
+
         indicatorService.updateCountsWithContext(
             pendingKeyExchange: pendingCount);
         print(
             '🔌 Main: ✅ Badge count updated for new key exchange request using context-aware method');
       } catch (e) {
-        print('🔌 Main: ❌ Failed to update badge count: $e');
+        print('🔌 Main: ❌ Failed to process key exchange request: $e');
+      }
+    });
+  });
+
+  socketService.setOnKeyExchangeDeclined((data) {
+    print('🔌 Main: Key exchange declined from socket: $data');
+
+    // Process the declined key exchange request
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Process the declined key exchange request
+        await keyExchangeProvider.handleKeyExchangeDeclined(data);
+        print('🔌 Main: ✅ Key exchange decline processed by provider');
+
+        // Update badge counts
+        final indicatorService = Provider.of<IndicatorService>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        // Recalculate the actual pending count after decline
+        final keyExchangeProvider2 = Provider.of<KeyExchangeRequestProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+
+        final pendingCount = keyExchangeProvider2.receivedRequests
+            .where((req) => req.status == 'received' || req.status == 'pending')
+            .length;
+        indicatorService.updateCountsWithContext(
+            pendingKeyExchange: pendingCount);
+        print('🔌 Main: ✅ Badge count updated for key exchange decline');
+      } catch (e) {
+        print('🔌 Main: ❌ Failed to process key exchange decline: $e');
       }
     });
   });

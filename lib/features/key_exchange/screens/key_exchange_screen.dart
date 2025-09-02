@@ -22,13 +22,19 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
 
-    // Clear key exchange indicator when screen is loaded
+    // Refresh the key exchange data when screen is loaded
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      IndicatorService().clearKeyExchangeIndicator();
-
       // Refresh the key exchange data
       final provider = context.read<KeyExchangeRequestProvider>();
       provider.refresh();
+
+      // Update badge count to reflect current state
+      final indicatorService = IndicatorService();
+      final pendingCount = provider.receivedRequests
+          .where((req) => req.status == 'received' || req.status == 'pending')
+          .length;
+      indicatorService.updateCountsWithContext(
+          pendingKeyExchange: pendingCount);
     });
   }
 
@@ -96,6 +102,8 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
     return Consumer<KeyExchangeRequestProvider>(
       builder: (context, provider, child) {
         final receivedRequests = provider.receivedRequests;
+        print(
+            '🔑 KeyExchangeScreen: 🔄 Consumer rebuild - received requests count: ${receivedRequests.length}');
 
         if (receivedRequests.isEmpty) {
           return _buildEmptyState(
