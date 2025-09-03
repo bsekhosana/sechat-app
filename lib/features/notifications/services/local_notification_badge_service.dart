@@ -541,6 +541,15 @@ class LocalNotificationBadgeService {
         ongoing: false,
         visibility: NotificationVisibility.public,
         category: AndroidNotificationCategory.message,
+        // Force notification to show even when app is in foreground
+        channelShowBadge: true,
+        channelAction: AndroidNotificationChannelAction.createIfNotExists,
+        // Additional settings to ensure notifications show in foreground
+        ticker: 'New message received',
+        showProgress: false,
+        maxProgress: 0,
+        indeterminate: false,
+        onlyAlertOnce: false,
       );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
@@ -566,6 +575,8 @@ class LocalNotificationBadgeService {
 
       final notificationId =
           DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+      // Force show notification even in foreground
       await _localNotifications.show(
         notificationId,
         title,
@@ -573,6 +584,29 @@ class LocalNotificationBadgeService {
         notificationDetails,
         payload: notificationPayload,
       );
+
+      // Additional attempt to ensure notification is visible
+      if (!isInBackground) {
+        print(
+            '📱 LocalNotificationBadgeService: 🔧 Forcing notification display in foreground');
+        // Try to show again with a different ID to force display
+        await _localNotifications.show(
+          notificationId + 1,
+          title,
+          body,
+          notificationDetails,
+          payload: notificationPayload,
+        );
+
+        // Also try to show a heads-up notification
+        await _localNotifications.show(
+          notificationId + 2,
+          '🔔 $title',
+          body,
+          notificationDetails,
+          payload: notificationPayload,
+        );
+      }
 
       print(
           '📱 LocalNotificationBadgeService: ✅ Message notification shown with ID: $notificationId');
@@ -624,6 +658,9 @@ class LocalNotificationBadgeService {
         ongoing: false,
         visibility: NotificationVisibility.public,
         category: AndroidNotificationCategory.message,
+        // Force notification to show even when app is in foreground
+        channelShowBadge: true,
+        channelAction: AndroidNotificationChannelAction.createIfNotExists,
       );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(

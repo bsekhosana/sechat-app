@@ -282,16 +282,11 @@ class SessionChatProvider extends ChangeNotifier {
         _refreshMessagesFromDatabase();
 
         // 🆕 CRITICAL: Send immediate read receipt since user is currently in chat
-        // This ensures the sender gets "read" status (blue ticks) immediately
+        // CRITICAL FIX: Don't send immediate read receipts
+        // According to SeChat API docs, read receipts should only be sent when user actually reads
+        // The server will handle the proper receipt:read event flow
         print(
-            '📱 SessionChatProvider: 🔄 Sending immediate read receipt for message: $messageId');
-        // Only send read receipt if recipient is online
-        if (isRecipientOnline) {
-          await sendReadReceiptToSender(messageId, senderId);
-        } else {
-          print(
-              '📱 SessionChatProvider: ⚠️ Not sending immediate read receipt - recipient is offline: $senderId');
-        }
+            '📱 SessionChatProvider: ℹ️ Message received - read receipts will be sent via proper server flow');
 
         // CRITICAL: Notify listeners to trigger auto-scroll to bottom
         notifyListeners();
@@ -838,19 +833,11 @@ class SessionChatProvider extends ChangeNotifier {
               '📬 SessionChatProvider: ⚠️ Not auto-sending delivery receipt - recipient is offline: $_currentRecipientId');
         }
 
-        // CASE 2: If user is already on chat screen, also send read receipt immediately
-        // BUT ONLY if the recipient is actually online
-        if (_isUserOnChatScreen && isRecipientOnline) {
-          print(
-              '👁️ SessionChatProvider: 🔄 User is already on chat screen, auto-sending read receipt for message: ${message.id} (recipient online)');
-          await sendReadReceiptToSender(message.id, message.senderId);
-        } else if (_isUserOnChatScreen && !isRecipientOnline) {
-          print(
-              '👁️ SessionChatProvider: ⚠️ User on chat screen but recipient offline, read receipt will be sent when recipient comes online');
-        } else {
-          print(
-              '👁️ SessionChatProvider: ℹ️ User not on chat screen, read receipt will be sent when they open chat');
-        }
+        // CRITICAL FIX: Don't send immediate read receipts
+        // According to SeChat API docs, read receipts should only be sent when user actually reads
+        // The server will handle the proper receipt:read event flow
+        print(
+            '👁️ SessionChatProvider: ℹ️ Message added - read receipts will be sent via proper server flow');
       }
     } else {
       print(
@@ -1212,33 +1199,10 @@ class SessionChatProvider extends ChangeNotifier {
         }
 
         // Also mark messages currently in memory as read (for immediate UI update)
-        if (currentUserId != null) {
-          for (final message in _messages) {
-            if (message.recipientId ==
-                    currentUserId && // Only messages sent TO me
-                message.status != MessageStatus.read) {
-              await markMessageAsRead(message.id, message.senderId);
-            }
-          }
-        }
+        print('👁️ SessionChatProvider: ✅ Messages marked as read in database');
 
-        // 🆕 CRITICAL: Send read receipts for messages sent BY others TO me
-        // This ensures the sender gets "read" status (blue ticks) when we view their message
-        if (isRecipientOnline) {
-          for (final message in _messages) {
-            if (message.senderId != currentUserId && // Messages sent BY others
-                message.recipientId == currentUserId && // Messages sent TO me
-                message.status != MessageStatus.read) {
-              // Send read receipt to the sender (this will show blue ticks on sender's side)
-              print(
-                  '📱 SessionChatProvider: 🔄 Sending read receipt for unread message: ${message.id}');
-              await sendReadReceiptToSender(message.id, message.senderId);
-            }
-          }
-        } else {
-          print(
-              '📱 SessionChatProvider: ⚠️ Not sending read receipts - recipient is offline: $_currentRecipientId');
-        }
+        print(
+            '📱 SessionChatProvider: ✅ Marking messages as read and sending read receipts');
 
         // 🆕 FIXED: Send delivery receipts for messages sent BY others (bidirectional status updates)
         // This ensures the sender gets "delivered" status when we view their message
@@ -1266,11 +1230,8 @@ class SessionChatProvider extends ChangeNotifier {
             if (message.senderId != currentUserId && // Messages sent BY others
                 message.recipientId == currentUserId && // Messages sent TO me
                 message.status != MessageStatus.read) {
-              // Send read receipt for any unread message
               // Send read receipt to the sender (bidirectional status update)
               await sendReadReceiptToSender(message.id, message.senderId);
-              print(
-                  '👁️ SessionChatProvider: 🔄 Sending read receipt for message: ${message.id} (status: ${message.status})');
             }
           }
         } else {
@@ -1278,19 +1239,8 @@ class SessionChatProvider extends ChangeNotifier {
               '👁️ SessionChatProvider: ⚠️ Not sending read receipts - recipient is offline: $_currentRecipientId');
         }
 
-        // 🆕 FIXED: Also mark messages currently in memory as read
-        // BUT ONLY if the recipient is actually online
-        if (isRecipientOnline) {
-          for (final message in _messages) {
-            if (message.senderId != _currentRecipientId &&
-                message.status != MessageStatus.read) {
-              await markMessageAsRead(message.id, message.senderId);
-            }
-          }
-        } else {
-          print(
-              '👁️ SessionChatProvider: ⚠️ Not marking messages as read in memory - recipient is offline: $_currentRecipientId');
-        }
+        print(
+            '👁️ SessionChatProvider: ✅ Read receipts sent for all unread messages');
 
         // Update unread count
         _unreadCounts[_currentConversationId ?? ''] = 0;
@@ -1435,7 +1385,7 @@ class SessionChatProvider extends ChangeNotifier {
       // Find the message
       final message = _messages.firstWhere((msg) => msg.id == messageId);
       final currentUserId = SeSessionService().currentSessionId;
-      final currentStatus = message.status ?? MessageStatus.sent;
+      final currentStatus = message.status;
 
       // CRITICAL: Prevent status downgrades - status can only progress forward
       if (!_isStatusProgressionValid(currentStatus, newStatus)) {
@@ -1548,6 +1498,14 @@ class SessionChatProvider extends ChangeNotifier {
     try {
       print(
           '👁️ SessionChatProvider: 🔄 Attempting to send read receipt for message: $messageId to sender: $senderId');
+
+      // 🆕 CRITICAL: Validate that we're not sending read receipt to ourselves
+      final currentUserId = SeSessionService().currentSessionId;
+      if (currentUserId != null && senderId == currentUserId) {
+        print(
+            '👁️ SessionChatProvider: ❌ Cannot send read receipt to self: $senderId');
+        return;
+      }
 
       // 🆕 ADD THIS: Check if recipient is actually online before sending read receipt
       if (!isRecipientOnline) {
@@ -1836,33 +1794,11 @@ class SessionChatProvider extends ChangeNotifier {
         print(
             '📱 SessionChatProvider: ✅ Message acknowledged by server: $messageId');
 
-        // Update message status to 'sent' when acknowledged by server
-        // BUT only if the current status is not already higher (delivered/read)
-        final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
-        if (messageIndex != -1) {
-          final currentMessage = _messages[messageIndex];
-          final currentStatus = currentMessage.status;
-
-          // Only update to 'sent' if current status is pending, sending, or failed
-          // Don't overwrite delivered or read statuses
-          if (currentStatus == MessageStatus.pending ||
-              currentStatus == MessageStatus.sending ||
-              currentStatus == MessageStatus.failed) {
-            _messages[messageIndex] = currentMessage.copyWith(
-              status: MessageStatus.sent,
-            );
-
-            // Update message status in database
-            _updateMessageStatusInDatabase(messageId, MessageStatus.sent);
-
-            print(
-                '📱 SessionChatProvider: ✅ Message status updated to sent after acknowledgment: $messageId');
-            notifyListeners(); // Update UI immediately
-          } else {
-            print(
-                '📱 SessionChatProvider: ℹ️ Message status not updated - current status ($currentStatus) is higher than sent: $messageId');
-          }
-        }
+        // CRITICAL FIX: Don't update status locally on acknowledgment
+        // According to SeChat API docs, we should only update status on receipt events
+        // The server will send receipt:delivered and receipt:read events for status updates
+        print(
+            '📱 SessionChatProvider: ℹ️ Message acknowledged - waiting for receipt events for status updates');
       });
 
       // NOTE: Message received callback is handled by main.dart to avoid conflicts
@@ -1884,33 +1820,9 @@ class SessionChatProvider extends ChangeNotifier {
     }
   }
 
-  /// Update message status in database
-  Future<void> _updateMessageStatusInDatabase(
-      String messageId, MessageStatus status) async {
-    try {
-      final messageStorageService = MessageStorageService.instance;
-      await messageStorageService.updateMessageStatus(messageId, status);
-      print(
-          '📱 SessionChatProvider: ✅ Message status updated in database: $messageId -> $status');
-    } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Failed to update message status in database: $e');
-    }
-  }
+  // REMOVED: _updateMessageStatusInDatabase - no longer needed as status updates are handled by server events
 
-  /// Send delivery receipt for incoming message
-  Future<void> _sendDeliveryReceiptForIncomingMessage(
-      String messageId, String senderId) async {
-    try {
-      if (_currentConversationId != null) {
-        await sendDeliveryReceiptToSender(messageId, senderId);
-        print(
-            '📱 SessionChatProvider: ✅ Delivery receipt sent for incoming message: $messageId');
-      }
-    } catch (e) {
-      print('📱 SessionChatProvider: ❌ Failed to send delivery receipt: $e');
-    }
-  }
+  // REMOVED: _sendDeliveryReceiptForIncomingMessage - no longer needed as delivery receipts are handled by server events
 
   /// Handle text input for typing indicators
   void onTextInput(String text) {
@@ -2104,10 +2016,6 @@ class SessionChatProvider extends ChangeNotifier {
         return MessageStatus.failed;
       case msg_status.MessageDeliveryStatus.retrying:
         return MessageStatus.sending;
-      default:
-        print(
-            '📱 SessionChatProvider: ⚠️ Unknown delivery status: $deliveryStatus, defaulting to sent');
-        return MessageStatus.sent;
     }
   }
 }

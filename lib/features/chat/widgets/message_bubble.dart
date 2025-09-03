@@ -27,12 +27,19 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Consumer<SessionChatProvider>(
+      key: ValueKey('consumer_${message.id}'),
       builder: (context, provider, child) {
         // Get the real-time message from the provider
         final realTimeMessage = provider.messages.firstWhere(
           (msg) => msg.id == message.id,
           orElse: () => message,
         );
+
+        // Debug: Log status changes for current user's messages
+        if (isFromCurrentUser && realTimeMessage.status != message.status) {
+          print(
+              '🔄 MessageBubble: Status changed for ${message.id}: ${message.status} -> ${realTimeMessage.status}');
+        }
 
         return _buildMessageBubble(context, realTimeMessage);
       },
@@ -41,6 +48,7 @@ class MessageBubble extends StatelessWidget {
 
   Widget _buildMessageBubble(BuildContext context, Message realTimeMessage) {
     return Container(
+      key: ValueKey('message_${realTimeMessage.id}_${realTimeMessage.status}'),
       margin: EdgeInsets.only(
         left: isFromCurrentUser ? 56 : 20,
         right: isFromCurrentUser ? 20 : 56,
@@ -149,8 +157,7 @@ class MessageBubble extends StatelessWidget {
         break;
       case MessageStatus.read:
         icon = Icons.done_all; // Double blue ticks
-        color =
-            Theme.of(context).colorScheme.primary; // Use theme primary color
+        color = Colors.blue; // Use bright blue for read status
         break;
       case MessageStatus.queued:
         icon = Icons.schedule_send;
@@ -164,22 +171,20 @@ class MessageBubble extends StatelessWidget {
         icon = Icons.delete_outline;
         color = Colors.grey[400]!; // Grey for deleted
         break;
-      default:
-        // Fallback for unknown status
-        icon = Icons.help_outline;
-        color = Colors.grey[400]!;
-        break;
     }
 
     return Container(
-      padding: const EdgeInsets.all(4),
+      key: ValueKey('status_${realTimeMessage.id}_${realTimeMessage.status}'),
+      padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: Colors.grey[50], // Very light grey background
-        borderRadius: BorderRadius.circular(6),
+        color: realTimeMessage.status == MessageStatus.read
+            ? Colors.blue.withOpacity(0.1) // Light blue background for read
+            : Colors.grey[50], // Very light grey background for others
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(
         icon,
-        size: 14,
+        size: 16,
         color: color,
       ),
     );

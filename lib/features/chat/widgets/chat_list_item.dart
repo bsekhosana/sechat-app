@@ -361,19 +361,41 @@ class ChatListItem extends StatelessWidget {
         MessageStatus? messageStatus;
 
         // First, try to get the message from SessionChatProvider (real-time status)
+        // BUT ONLY if we're currently in this conversation
         if (sessionChatProvider.currentConversationId == conversation.id) {
           // Get the latest message from SessionChatProvider's memory
           final messages = sessionChatProvider.messages;
           if (messages.isNotEmpty) {
-            // Find the latest message sent by current user
-            for (int i = messages.length - 1; i >= 0; i--) {
-              if (messages[i].senderId == currentUserId) {
-                latestMessage = messages[i];
-                messageStatus = messages[i].status;
-                break;
-              }
+            // Find the specific message by ID (the last message in the conversation)
+            final targetMessage = messages.firstWhere(
+              (msg) => msg.id == messageId,
+              orElse: () => Message(
+                id: '',
+                conversationId: '',
+                senderId: '',
+                recipientId: '',
+                type: MessageType.text,
+                content: {},
+                status: MessageStatus.pending,
+              ),
+            );
+
+            if (targetMessage.id.isNotEmpty &&
+                targetMessage.senderId == currentUserId) {
+              latestMessage = targetMessage;
+              messageStatus = targetMessage.status;
+              print(
+                  '🔍 ChatListItem: Found target message from current user in SessionChatProvider: ${targetMessage.id}, status: ${targetMessage.status}');
+            } else {
+              print(
+                  '🔍 ChatListItem: Target message not found or not from current user: $messageId');
             }
           }
+        } else {
+          // If we're not in this conversation, don't use SessionChatProvider data
+          // This prevents showing status for messages from other conversations
+          print(
+              '🔍 ChatListItem: Not in this conversation (${conversation.id}), using database fallback');
         }
 
         // Fallback to database if not found in SessionChatProvider
@@ -431,25 +453,41 @@ class ChatListItem extends StatelessWidget {
         final currentUserId = _getCurrentUserId();
 
         // First, try to get the message from SessionChatProvider (real-time status)
+        // BUT ONLY if we're currently in this conversation
         if (sessionChatProvider.currentConversationId == conversation.id) {
           // Get the latest message from SessionChatProvider's memory
           final messages = sessionChatProvider.messages;
           if (messages.isNotEmpty) {
-            // Find the latest message sent by current user
-            for (int i = messages.length - 1; i >= 0; i--) {
-              if (messages[i].senderId == currentUserId) {
-                latestMessage = messages[i];
-                messageStatus = messages[i].status;
-                print(
-                    '🔍 ChatListItem: Found message from current user: ${messages[i].id}, status: ${messages[i].status}');
-                break;
-              }
-            }
-            if (latestMessage == null) {
+            // Find the specific message by ID (the last message in the conversation)
+            final targetMessage = messages.firstWhere(
+              (msg) => msg.id == messageId,
+              orElse: () => Message(
+                id: '',
+                conversationId: '',
+                senderId: '',
+                recipientId: '',
+                type: MessageType.text,
+                content: {},
+                status: MessageStatus.pending,
+              ),
+            );
+
+            if (targetMessage.id.isNotEmpty &&
+                targetMessage.senderId == currentUserId) {
+              latestMessage = targetMessage;
+              messageStatus = targetMessage.status;
               print(
-                  '🔍 ChatListItem: No message found from current user in SessionChatProvider');
+                  '🔍 ChatListItem: Found target message from current user in SessionChatProvider: ${targetMessage.id}, status: ${targetMessage.status}');
+            } else {
+              print(
+                  '🔍 ChatListItem: Target message not found or not from current user: $messageId');
             }
           }
+        } else {
+          // If we're not in this conversation, don't use SessionChatProvider data
+          // This prevents showing status for messages from other conversations
+          print(
+              '🔍 ChatListItem: Not in this conversation (${conversation.id}), using database fallback');
         }
 
         // Fallback to database if not found in SessionChatProvider

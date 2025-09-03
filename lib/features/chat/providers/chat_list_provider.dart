@@ -100,14 +100,10 @@ class ChatListProvider extends ChangeNotifier {
     String? conversationId,
     String? recipientId,
   }) async {
-    // 🆕 FIXED: Filter out delivered/read status updates at ChatListProvider level
-    // These should only come through the dedicated onDelivered/onRead callbacks
-    if (update.status == msg_status.MessageDeliveryStatus.delivered ||
-        update.status == msg_status.MessageDeliveryStatus.read) {
-      print(
-          '📱 ChatListProvider: ⚠️ Ignoring delivered/read status update - should come through dedicated callbacks: ${update.messageId} -> ${update.status}');
-      return; // Don't process delivered/read status updates here
-    }
+    // 🆕 FIXED: Process ALL status updates including delivered/read for chat list items
+    // The chat list needs to show the latest message status for proper UI updates
+    print(
+        '📱 ChatListProvider: 🔄 Processing status update: ${update.messageId} -> ${update.status}');
 
     // First, update the chat list (conversation metadata)
     await _updateMessageStatusWithContext(update,

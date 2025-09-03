@@ -369,9 +369,7 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         print(
             '🔌 Main: ✅ Incoming message saved to database via UnifiedMessageService');
 
-        // Show push notification with sender name and generic body
-        _showMessageNotification(
-            senderName, messageId, actualConversationId ?? '');
+        // Push notification will be shown later in the callback
 
         // CRITICAL: Update conversation with new message and decrypt preview
         WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -431,19 +429,11 @@ void _setupSocketCallbacks(SeSocketService socketService) {
                 await sessionChatProvider.refreshMessages();
                 print('🔌 Main: ✅ SessionChatProvider messages refreshed');
 
-                // 🆕 CRITICAL: Send immediate read receipt since user is currently in chat
-                // This ensures the sender gets "read" status (blue ticks) immediately
+                // CRITICAL FIX: Don't send immediate read receipts
+                // According to SeChat API docs, read receipts should only be sent when user actually reads
+                // The server will handle the proper receipt:read event flow
                 print(
-                    '🔌 Main: 🔄 Sending immediate read receipt for message: $messageId');
-                // Only send read receipt if recipient is online
-                if (sessionChatProvider.isRecipientOnline) {
-                  await sessionChatProvider.sendReadReceiptToSender(
-                      messageId, senderId);
-                  print('🔌 Main: ✅ Immediate read receipt sent');
-                } else {
-                  print(
-                      '🔌 Main: ⚠️ Not sending immediate read receipt - recipient is offline: $senderId');
-                }
+                    '🔌 Main: ℹ️ Message received - read receipts will be sent via proper server flow');
               } else {
                 print(
                     '🔌 Main: ℹ️ Message not for current conversation - SessionChatProvider not updated');

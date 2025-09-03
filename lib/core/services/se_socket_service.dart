@@ -1693,10 +1693,9 @@ class SeSocketService {
         'fromUserId': _sessionId,
         'toUserId': toUserId,
         'conversationId': consistentConversationId,
-        'recipientId': toUserId,
+        'timestamp': DateTime.now().toIso8601String(),
         'encryptedData': encryptedData['data'],
         'checksum': encryptedData['checksum'],
-        'timestamp': DateTime.now().toIso8601String(),
         'metadata': {
           'encrypted': true,
           'version': '1.0',
