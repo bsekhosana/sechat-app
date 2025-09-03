@@ -386,10 +386,15 @@ class ChatListItem extends StatelessWidget {
 
                 // Only show status for messages sent by current user
                 if (message.senderId == currentUserId) {
+                  print(
+                      '🔍 ChatListItem: Showing status for message from current user: ${message.id}, status: ${message.status}');
                   return Container(
                     margin: const EdgeInsets.only(left: 4),
                     child: _buildStatusIcon(message.status),
                   );
+                } else {
+                  print(
+                      '🔍 ChatListItem: Not showing status - message not from current user: ${message.senderId} != $currentUserId');
                 }
               }
 
@@ -399,8 +404,10 @@ class ChatListItem extends StatelessWidget {
           );
         }
 
-        // Show status from SessionChatProvider (real-time)
+        // If we found a message from current user in SessionChatProvider, show its status
         if (messageStatus != null) {
+          print(
+              '🔍 ChatListItem: Showing status for message from current user: ${latestMessage!.id}, status: $messageStatus');
           return Container(
             margin: const EdgeInsets.only(left: 4),
             child: _buildStatusIcon(messageStatus),
@@ -433,8 +440,14 @@ class ChatListItem extends StatelessWidget {
               if (messages[i].senderId == currentUserId) {
                 latestMessage = messages[i];
                 messageStatus = messages[i].status;
+                print(
+                    '🔍 ChatListItem: Found message from current user: ${messages[i].id}, status: ${messages[i].status}');
                 break;
               }
+            }
+            if (latestMessage == null) {
+              print(
+                  '🔍 ChatListItem: No message found from current user in SessionChatProvider');
             }
           }
         }

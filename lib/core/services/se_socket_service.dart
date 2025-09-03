@@ -1666,23 +1666,49 @@ class SeSocketService {
     }
   }
 
-  void sendReadReceipt(String toUserId, String messageId) {
+  Future<void> sendReadReceipt(String toUserId, String messageId) async {
     if (!isConnected || _sessionId == null) return;
 
-    // CRITICAL: Use consistent conversation ID for both users
-    final currentUserId = _sessionId!;
-    final consistentConversationId =
-        _generateConsistentConversationId(currentUserId, toUserId);
+    try {
+      // CRITICAL: Use consistent conversation ID for both users
+      final currentUserId = _sessionId!;
+      final consistentConversationId =
+          _generateConsistentConversationId(currentUserId, toUserId);
 
-    _socket!.emit('receipt:read', {
-      'messageId': messageId,
-      'fromUserId': _sessionId,
-      'toUserId': toUserId,
-      'conversationId':
-          consistentConversationId, // Use consistent conversation ID
-      'recipientId': toUserId, // Add recipient ID for server routing
-      'timestamp': DateTime.now().toIso8601String()
-    });
+      // Create the read receipt data payload for encryption
+      final receiptData = {
+        'messageId': messageId,
+        'fromUserId': _sessionId,
+        'toUserId': toUserId,
+        'conversationId': consistentConversationId,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      // Encrypt the receipt data using AES encryption
+      final encryptedData =
+          await EncryptionService.encryptAesCbcPkcs7(receiptData, toUserId);
+
+      _socket!.emit('receipt:read', {
+        'messageId': messageId,
+        'fromUserId': _sessionId,
+        'toUserId': toUserId,
+        'conversationId': consistentConversationId,
+        'recipientId': toUserId,
+        'encryptedData': encryptedData['data'],
+        'checksum': encryptedData['checksum'],
+        'timestamp': DateTime.now().toIso8601String(),
+        'metadata': {
+          'encrypted': true,
+          'version': '1.0',
+          'encryptionType': 'aes-cbc-pkcs7'
+        }
+      });
+
+      print(
+          '📬 SeSocketService: ✅ Encrypted read receipt sent: $messageId -> $toUserId');
+    } catch (e) {
+      print('📬 SeSocketService: ❌ Error sending encrypted read receipt: $e');
+    }
   }
 
   void sendKeyExchangeRequest(
@@ -2760,8 +2786,13 @@ class SeSocketService {
       String messageId, String status, String recipientId) {
     print(
         '📊 SeSocketService: Notifying message status change: $messageId -> $status');
-    // TODO: Implement notification system for message status changes
-    // This should update the UI without showing user notifications
+
+    // Notify the message status change callbacks
+    if (status.toLowerCase() == 'delivered' && onDelivered != null) {
+      onDelivered!(messageId, _sessionId!, recipientId);
+    } else if (status.toLowerCase() == 'read' && onRead != null) {
+      onRead!(messageId, _sessionId!, recipientId);
+    }
   }
 
   void _notifyTypingStatusChange(String fromUserId, String recipientId,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/message.dart';
+import '../providers/session_chat_provider.dart';
 import 'text_message_bubble.dart';
 import 'reply_message_bubble.dart';
 import 'system_message_bubble.dart';
@@ -24,6 +26,20 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Consumer<SessionChatProvider>(
+      builder: (context, provider, child) {
+        // Get the real-time message from the provider
+        final realTimeMessage = provider.messages.firstWhere(
+          (msg) => msg.id == message.id,
+          orElse: () => message,
+        );
+
+        return _buildMessageBubble(context, realTimeMessage);
+      },
+    );
+  }
+
+  Widget _buildMessageBubble(BuildContext context, Message realTimeMessage) {
     return Container(
       margin: EdgeInsets.only(
         left: isFromCurrentUser ? 56 : 20,
@@ -37,23 +53,23 @@ class MessageBubble extends StatelessWidget {
             : CrossAxisAlignment.start,
         children: [
           // Message content
-          _buildMessageContent(context),
+          _buildMessageContent(context, realTimeMessage),
 
           const SizedBox(height: 6),
 
           // Message metadata (time, status, etc.)
-          _buildMessageMetadata(context),
+          _buildMessageMetadata(context, realTimeMessage),
         ],
       ),
     );
   }
 
   /// Build the main message content based on type
-  Widget _buildMessageContent(BuildContext context) {
-    switch (message.type) {
+  Widget _buildMessageContent(BuildContext context, Message realTimeMessage) {
+    switch (realTimeMessage.type) {
       case MessageType.text:
         return TextMessageBubble(
-          message: message,
+          message: realTimeMessage,
           isFromCurrentUser: isFromCurrentUser,
           onTap: onTap,
           onLongPress: onLongPress,
@@ -61,7 +77,7 @@ class MessageBubble extends StatelessWidget {
 
       case MessageType.reply:
         return ReplyMessageBubble(
-          message: message,
+          message: realTimeMessage,
           isFromCurrentUser: isFromCurrentUser,
           onTap: onTap,
           onLongPress: onLongPress,
@@ -69,7 +85,7 @@ class MessageBubble extends StatelessWidget {
 
       case MessageType.system:
         return SystemMessageBubble(
-          message: message,
+          message: realTimeMessage,
           onTap: onTap,
           onLongPress: onLongPress,
         );
@@ -77,7 +93,7 @@ class MessageBubble extends StatelessWidget {
   }
 
   /// Build message metadata (time, status, etc.)
-  Widget _buildMessageMetadata(BuildContext context) {
+  Widget _buildMessageMetadata(BuildContext context, Message realTimeMessage) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment:
@@ -91,7 +107,7 @@ class MessageBubble extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
-            _formatTimestamp(message.timestamp),
+            _formatTimestamp(realTimeMessage.timestamp),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.grey[600], // Light grey text for timestamp
                   fontSize: 11,
@@ -103,18 +119,18 @@ class MessageBubble extends StatelessWidget {
         // Status indicators (only for current user's messages)
         if (isFromCurrentUser) ...[
           const SizedBox(width: 8),
-          _buildStatusIndicator(context),
+          _buildStatusIndicator(context, realTimeMessage),
         ],
       ],
     );
   }
 
   /// Build status indicator (ticks) with modern styling
-  Widget _buildStatusIndicator(BuildContext context) {
+  Widget _buildStatusIndicator(BuildContext context, Message realTimeMessage) {
     IconData icon;
     Color color;
 
-    switch (message.status) {
+    switch (realTimeMessage.status) {
       case MessageStatus.pending:
         icon = Icons.schedule;
         color = Colors.orange; // Orange for pending

@@ -430,6 +430,20 @@ void _setupSocketCallbacks(SeSocketService socketService) {
                 // Trigger message refresh from database
                 await sessionChatProvider.refreshMessages();
                 print('🔌 Main: ✅ SessionChatProvider messages refreshed');
+
+                // 🆕 CRITICAL: Send immediate read receipt since user is currently in chat
+                // This ensures the sender gets "read" status (blue ticks) immediately
+                print(
+                    '🔌 Main: 🔄 Sending immediate read receipt for message: $messageId');
+                // Only send read receipt if recipient is online
+                if (sessionChatProvider.isRecipientOnline) {
+                  await sessionChatProvider.sendReadReceiptToSender(
+                      messageId, senderId);
+                  print('🔌 Main: ✅ Immediate read receipt sent');
+                } else {
+                  print(
+                      '🔌 Main: ⚠️ Not sending immediate read receipt - recipient is offline: $senderId');
+                }
               } else {
                 print(
                     '🔌 Main: ℹ️ Message not for current conversation - SessionChatProvider not updated');

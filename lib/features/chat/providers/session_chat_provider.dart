@@ -237,8 +237,12 @@ class SessionChatProvider extends ChangeNotifier {
   }
 
   /// Handle chat message received from socket callback
-  void _handleChatMessageReceivedFromSocket(String senderId, String senderName,
-      String message, String conversationId, String messageId) {
+  Future<void> _handleChatMessageReceivedFromSocket(
+      String senderId,
+      String senderName,
+      String message,
+      String conversationId,
+      String messageId) async {
     try {
       print(
           '📱 SessionChatProvider: 🔔 Chat message callback received: $senderName -> $message (ID: $messageId)');
@@ -276,6 +280,18 @@ class SessionChatProvider extends ChangeNotifier {
         print(
             '📱 SessionChatProvider: 🔄 Message belongs to current conversation, refreshing from database');
         _refreshMessagesFromDatabase();
+
+        // 🆕 CRITICAL: Send immediate read receipt since user is currently in chat
+        // This ensures the sender gets "read" status (blue ticks) immediately
+        print(
+            '📱 SessionChatProvider: 🔄 Sending immediate read receipt for message: $messageId');
+        // Only send read receipt if recipient is online
+        if (isRecipientOnline) {
+          await sendReadReceiptToSender(messageId, senderId);
+        } else {
+          print(
+              '📱 SessionChatProvider: ⚠️ Not sending immediate read receipt - recipient is offline: $senderId');
+        }
 
         // CRITICAL: Notify listeners to trigger auto-scroll to bottom
         notifyListeners();
@@ -351,7 +367,8 @@ class SessionChatProvider extends ChangeNotifier {
   }
 
   /// Handle typing indicator from socket callback
-  void _handleTypingIndicatorFromSocket(String senderId, bool isTyping) {
+  Future<void> _handleTypingIndicatorFromSocket(
+      String senderId, bool isTyping) async {
     try {
       print(
           '🔌 SessionChatProvider: Typing indicator callback received: $senderId -> $isTyping');
@@ -502,7 +519,7 @@ class SessionChatProvider extends ChangeNotifier {
           '📱 SessionChatProvider: 🔍 Message created: ${message.id} for conversation: ${message.conversationId}');
 
       // Add message to chat using conversation ID
-      _addMessageToChat(conversationId, message);
+      await _addMessageToChat(conversationId, message);
 
       // Update chat using conversation ID
       _updateOrCreateChat(conversationId, message);
@@ -669,7 +686,7 @@ class SessionChatProvider extends ChangeNotifier {
       );
 
       // Add message to chat
-      _addMessageToChat(senderId, message);
+      await _addMessageToChat(senderId, message);
 
       // Update chat
       _updateOrCreateChat(senderId, message);
@@ -788,7 +805,7 @@ class SessionChatProvider extends ChangeNotifier {
   }
 
   // Add message to chat
-  void _addMessageToChat(String chatId, Message message) {
+  Future<void> _addMessageToChat(String chatId, Message message) async {
     // Add message to the messages list for the current conversation
     // Also add if this is a message we're sending (sender is current user)
     final currentUserId = SeSessionService().currentSessionId;
@@ -812,7 +829,7 @@ class SessionChatProvider extends ChangeNotifier {
       if (!isOwnMessage) {
         // CASE 1: Send delivery receipt immediately when we receive their message
         // BUT ONLY if the recipient is actually online
-        if (_isRecipientOnline) {
+        if (isRecipientOnline) {
           sendDeliveryReceiptToSender(message.id, message.senderId);
           print(
               '📬 SessionChatProvider: ✅ Auto-sent delivery receipt for incoming message: ${message.id} (recipient online)');
@@ -823,11 +840,11 @@ class SessionChatProvider extends ChangeNotifier {
 
         // CASE 2: If user is already on chat screen, also send read receipt immediately
         // BUT ONLY if the recipient is actually online
-        if (_isUserOnChatScreen && _isRecipientOnline) {
+        if (_isUserOnChatScreen && isRecipientOnline) {
           print(
               '👁️ SessionChatProvider: 🔄 User is already on chat screen, auto-sending read receipt for message: ${message.id} (recipient online)');
-          sendReadReceiptToSender(message.id, message.senderId);
-        } else if (_isUserOnChatScreen && !_isRecipientOnline) {
+          await sendReadReceiptToSender(message.id, message.senderId);
+        } else if (_isUserOnChatScreen && !isRecipientOnline) {
           print(
               '👁️ SessionChatProvider: ⚠️ User on chat screen but recipient offline, read receipt will be sent when recipient comes online');
         } else {
@@ -985,20 +1002,16 @@ class SessionChatProvider extends ChangeNotifier {
         );
       }
 
-      // 🆕 FIXED: Send read status update back to the sender via socket
+      // 🆕 FIXED: Send read receipt back to the sender via socket
       // BUT ONLY if the recipient is actually online
-      if (_isRecipientOnline) {
+      if (isRecipientOnline) {
         final socketService = SeSocketService.instance;
-        await socketService.sendMessageStatusUpdate(
-          recipientId: senderId,
-          messageId: messageId,
-          status: 'read',
-        );
+        await socketService.sendReadReceipt(senderId, messageId);
         print(
-            '📱 SessionChatProvider: ✅ Read status update sent to sender: $messageId (recipient online)');
+            '📱 SessionChatProvider: ✅ Read receipt sent to sender: $messageId (recipient online)');
       } else {
         print(
-            '📱 SessionChatProvider: ⚠️ Not sending read status update - recipient is offline: $_currentRecipientId');
+            '📱 SessionChatProvider: ⚠️ Not sending read receipt - recipient is offline: $_currentRecipientId');
       }
 
       print(
@@ -1209,10 +1222,28 @@ class SessionChatProvider extends ChangeNotifier {
           }
         }
 
+        // 🆕 CRITICAL: Send read receipts for messages sent BY others TO me
+        // This ensures the sender gets "read" status (blue ticks) when we view their message
+        if (isRecipientOnline) {
+          for (final message in _messages) {
+            if (message.senderId != currentUserId && // Messages sent BY others
+                message.recipientId == currentUserId && // Messages sent TO me
+                message.status != MessageStatus.read) {
+              // Send read receipt to the sender (this will show blue ticks on sender's side)
+              print(
+                  '📱 SessionChatProvider: 🔄 Sending read receipt for unread message: ${message.id}');
+              await sendReadReceiptToSender(message.id, message.senderId);
+            }
+          }
+        } else {
+          print(
+              '📱 SessionChatProvider: ⚠️ Not sending read receipts - recipient is offline: $_currentRecipientId');
+        }
+
         // 🆕 FIXED: Send delivery receipts for messages sent BY others (bidirectional status updates)
         // This ensures the sender gets "delivered" status when we view their message
         // BUT ONLY if the recipient is actually online
-        if (_isRecipientOnline) {
+        if (isRecipientOnline) {
           for (final message in _messages) {
             if (message.senderId != currentUserId && // Messages sent BY others
                 message.recipientId == currentUserId && // Messages sent TO me
@@ -1230,14 +1261,14 @@ class SessionChatProvider extends ChangeNotifier {
         // 🆕 FIXED: Send read receipts for messages sent BY others (bidirectional status updates)
         // This ensures the sender gets "read" status when we read their message
         // BUT ONLY if the recipient is actually online
-        if (_isRecipientOnline) {
+        if (isRecipientOnline) {
           for (final message in _messages) {
             if (message.senderId != currentUserId && // Messages sent BY others
                 message.recipientId == currentUserId && // Messages sent TO me
                 message.status != MessageStatus.read) {
               // Send read receipt for any unread message
               // Send read receipt to the sender (bidirectional status update)
-              sendReadReceiptToSender(message.id, message.senderId);
+              await sendReadReceiptToSender(message.id, message.senderId);
               print(
                   '👁️ SessionChatProvider: 🔄 Sending read receipt for message: ${message.id} (status: ${message.status})');
             }
@@ -1249,7 +1280,7 @@ class SessionChatProvider extends ChangeNotifier {
 
         // 🆕 FIXED: Also mark messages currently in memory as read
         // BUT ONLY if the recipient is actually online
-        if (_isRecipientOnline) {
+        if (isRecipientOnline) {
           for (final message in _messages) {
             if (message.senderId != _currentRecipientId &&
                 message.status != MessageStatus.read) {
@@ -1354,9 +1385,9 @@ class SessionChatProvider extends ChangeNotifier {
 
       // Method 1: Check if this is the current recipient and we have their status
       if (userId == _currentRecipientId) {
-        if (_isRecipientOnline) {
+        if (isRecipientOnline) {
           print(
-              '📱 SessionChatProvider: ✅ Current recipient $userId is online (local status)');
+              '📱 SessionChatProvider: ✅ Current recipient $userId is online (from ContactService)');
           return true;
         }
         if (_recipientLastSeen != null) {
@@ -1486,7 +1517,7 @@ class SessionChatProvider extends ChangeNotifier {
       String messageId, String senderId) async {
     try {
       // 🆕 ADD THIS: Check if recipient is actually online before sending delivery receipt
-      if (!_isRecipientOnline) {
+      if (!isRecipientOnline) {
         print(
             '📬 SessionChatProvider: ⚠️ Not sending delivery receipt - recipient is offline: $_currentRecipientId');
         return; // Don't send delivery receipt if recipient is offline
@@ -1519,7 +1550,7 @@ class SessionChatProvider extends ChangeNotifier {
           '👁️ SessionChatProvider: 🔄 Attempting to send read receipt for message: $messageId to sender: $senderId');
 
       // 🆕 ADD THIS: Check if recipient is actually online before sending read receipt
-      if (!_isRecipientOnline) {
+      if (!isRecipientOnline) {
         print(
             '👁️ SessionChatProvider: ⚠️ Not sending read receipt - recipient is offline: $_currentRecipientId');
         return; // Don't send read receipt if recipient is offline
@@ -1528,7 +1559,7 @@ class SessionChatProvider extends ChangeNotifier {
       final socketService = SeSocketService.instance;
 
       // Send read receipt to the sender
-      socketService.sendReadReceipt(senderId, messageId);
+      await socketService.sendReadReceipt(senderId, messageId);
 
       print(
           '👁️ SessionChatProvider: ✅ Read receipt sent to sender: $senderId for message: $messageId');
