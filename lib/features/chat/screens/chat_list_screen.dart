@@ -3,11 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../models/chat_conversation.dart';
 import '../providers/chat_list_provider.dart';
+import '../providers/unified_chat_provider.dart';
 import '../widgets/chat_list_item.dart';
 import '../widgets/chat_search_bar.dart';
 import '../../../shared/widgets/connection_status_widget.dart';
 import '../../../shared/widgets/key_exchange_request_dialog.dart';
-import '../screens/chat_screen.dart';
+import '../screens/unified_chat_screen.dart';
 import '../../../core/services/contact_service.dart';
 import '../../../core/services/se_session_service.dart';
 
@@ -428,11 +429,14 @@ class _ChatListScreenState extends State<ChatListScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ChatScreen(
-          conversationId: conversation.id,
-          recipientId: effectiveRecipientId,
-          recipientName: effectiveRecipientName,
-          isOnline: isOnline,
+        builder: (context) => ChangeNotifierProvider(
+          create: (context) => UnifiedChatProvider(),
+          child: UnifiedChatScreen(
+            conversationId: conversation.id,
+            recipientId: effectiveRecipientId,
+            recipientName: effectiveRecipientName,
+            isOnline: isOnline,
+          ),
         ),
       ),
     );

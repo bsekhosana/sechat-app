@@ -158,9 +158,9 @@ class Message {
   String get previewText {
     switch (type) {
       case MessageType.text:
-        // For encrypted messages, show generic preview
+        // For encrypted messages, return the raw text - decryption will happen in ChatListProvider
         if (isEncrypted) {
-          return '[Encrypted Message]';
+          return content['text'] as String? ?? '[Encrypted Message]';
         }
         return content['text'] as String? ?? '';
       case MessageType.reply:

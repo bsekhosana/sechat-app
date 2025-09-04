@@ -28,7 +28,7 @@ class TypingService {
   static const Duration _debounceDelay = Duration(milliseconds: 250);
   static const Duration _heartbeatInterval = Duration(seconds: 3);
   static const Duration _autoStopDelay =
-      Duration(seconds: 2); // Increased from 700ms to 2s
+      Duration(seconds: 6); // Increased to 4s for better UX
   static const Duration _serverTimeout = Duration(seconds: 4);
 
   // Stream controllers for typing updates

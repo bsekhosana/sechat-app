@@ -147,11 +147,96 @@ class ChatListProvider extends ChangeNotifier {
       );
 
       if (conversationIndex != -1) {
+        // CRITICAL: Decrypt the message content for preview
+        String decryptedPreview = content;
+
+        // Debug: Log the content being processed
+        print(
+            '📱 ChatListProvider: 🔍 Processing message content for preview: ${content.length} chars, starts with: ${content.length > 50 ? content.substring(0, 50) : content}');
+
+        // Check if this looks like encrypted content (base64 encoded JSON)
+        // Look for common patterns in encrypted messages
+        bool isEncryptedContent = content.length > 100 &&
+            (content.contains('eyJ') ||
+                content.contains('eyJ2') ||
+                content.startsWith('eyJ') ||
+                content.contains('{"v":') ||
+                content.contains('"alg":') ||
+                content.contains('"iv":') ||
+                content.contains('"ct":') ||
+                // Additional patterns for encrypted content
+                content.contains('AES-256-CBC') ||
+                content.contains('PKCS7') ||
+                // Check if it's a long base64 string (typical of encrypted content)
+                (content.length > 200 &&
+                    RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(content)));
+
+        if (isEncryptedContent) {
+          print(
+              '📱 ChatListProvider: 🔓 Attempting to decrypt message preview for chat list');
+          try {
+            // Use EncryptionService to decrypt the message (first layer)
+            final decryptedData =
+                await EncryptionService.decryptAesCbcPkcs7(content);
+
+            if (decryptedData != null && decryptedData.containsKey('text')) {
+              final firstLayerDecrypted = decryptedData['text'] as String;
+              print(
+                  '📱 ChatListProvider: ✅ First layer decrypted for preview: $firstLayerDecrypted');
+
+              // Check if the decrypted text is still encrypted (double encryption scenario)
+              if (firstLayerDecrypted.length > 100 &&
+                  firstLayerDecrypted.contains('eyJ')) {
+                print(
+                    '📱 ChatListProvider: 🔍 Detected double encryption in preview, decrypting inner layer...');
+                try {
+                  // Decrypt the inner encrypted content
+                  final innerDecryptedData =
+                      await EncryptionService.decryptAesCbcPkcs7(
+                          firstLayerDecrypted);
+
+                  if (innerDecryptedData != null &&
+                      innerDecryptedData.containsKey('text')) {
+                    final finalDecryptedText =
+                        innerDecryptedData['text'] as String;
+                    print(
+                        '📱 ChatListProvider: ✅ Inner layer decrypted for preview successfully');
+                    decryptedPreview = finalDecryptedText;
+                  } else {
+                    print(
+                        '📱 ChatListProvider: ⚠️ Inner layer decryption failed for preview, using first layer');
+                    decryptedPreview = firstLayerDecrypted;
+                  }
+                } catch (e) {
+                  print(
+                      '📱 ChatListProvider: ❌ Inner layer decryption error for preview: $e, using first layer');
+                  decryptedPreview = firstLayerDecrypted;
+                }
+              } else {
+                // Single layer encryption, use as is
+                print(
+                    '📱 ChatListProvider: ✅ Single layer decryption completed for preview');
+                decryptedPreview = firstLayerDecrypted;
+              }
+            } else {
+              print(
+                  '📱 ChatListProvider: ⚠️ Decryption failed for preview - invalid format, using encrypted text');
+              decryptedPreview = '[Encrypted Message]';
+            }
+          } catch (e) {
+            print('📱 ChatListProvider: ❌ Decryption failed for preview: $e');
+            decryptedPreview = '[Encrypted Message]';
+          }
+        } else {
+          print(
+              '📱 ChatListProvider: ℹ️ Message appears to be plain text for preview, using as-is');
+        }
+
         // Update the conversation with new message info
         final oldConversation = _conversations[conversationIndex];
         final updatedConversation = oldConversation.copyWith(
           lastMessageId: messageId,
-          lastMessagePreview: _truncateMessagePreview(content),
+          lastMessagePreview: _truncateMessagePreview(decryptedPreview),
           lastMessageAt: timestamp,
           lastMessageType: messageType,
           updatedAt: DateTime.now(),
@@ -167,7 +252,7 @@ class ChatListProvider extends ChangeNotifier {
         notifyListeners();
 
         print(
-            '📱 ChatListProvider: ✅ Chat list updated with new message: $messageId');
+            '📱 ChatListProvider: ✅ Chat list updated with decrypted message preview: $messageId');
       } else {
         print(
             '📱 ChatListProvider: ⚠️ Conversation not found for new message: $conversationId');

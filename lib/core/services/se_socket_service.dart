@@ -227,6 +227,9 @@ class SeSocketService {
   Function(String fromUserId, String conversationId, bool isTyping)? onTyping;
   Function(Map<String, dynamic> data)? onKeyExchangeRequest;
   Function(Map<String, dynamic> data)? onKeyExchangeResponse;
+  // Message delete callbacks - API Compliant
+  Function(Map<String, dynamic> data)? onMessageDeleted;
+  Function(Map<String, dynamic> data)? onAllMessagesDeleted;
   Function(Map<String, dynamic> data)? onKeyExchangeRevoked;
   Function(Map<String, dynamic> data)? onKeyExchangeDeclined;
   Function(Map<String, dynamic> data)? onUserDataExchange;
@@ -788,6 +791,47 @@ class SeSocketService {
       } else {
         print(
             '💬 SeSocketService: ❌ onMessageReceived callback is null - message not processed!');
+      }
+    });
+
+    // Message delete events - API Compliant
+    _socket!.on('message:deleted', (data) async {
+      print('🗑️ SeSocketService: Message deleted event received');
+      print('🗑️ SeSocketService: 🔍 Delete data: $data');
+
+      // Create notification for message deleted
+      await _createSocketEventNotification(
+        eventType: 'message:deleted',
+        title: 'Message Deleted',
+        body: 'A message has been deleted',
+        senderId: data['deletedBy']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
+
+      // Call message deleted callback if set
+      if (onMessageDeleted != null) {
+        onMessageDeleted!(data);
+      }
+    });
+
+    _socket!.on('message:all_deleted', (data) async {
+      print('🗑️ SeSocketService: All messages deleted event received');
+      print('🗑️ SeSocketService: 🔍 Delete all data: $data');
+
+      // Create notification for all messages deleted
+      await _createSocketEventNotification(
+        eventType: 'message:all_deleted',
+        title: 'All Messages Deleted',
+        body: 'All messages in conversation have been deleted',
+        senderId: data['deletedBy']?.toString(),
+        conversationId: data['conversationId']?.toString(),
+        metadata: data,
+      );
+
+      // Call all messages deleted callback if set
+      if (onAllMessagesDeleted != null) {
+        onAllMessagesDeleted!(data);
       }
     });
 
@@ -1530,18 +1574,16 @@ class SeSocketService {
 
       final payload = {
         'fromUserId': _sessionId,
-        'recipientId': recipientId, // Required by server for direct routing
-        'conversationId': finalConversationId, // Use the passed conversation ID
+        'recipientId': recipientId,
+        'conversationId': finalConversationId,
         'isTyping': isTyping,
-        'showIndicatorOnSessionId':
-            cleanShowIndicatorId, // Clean session ID for display
+        'showIndicatorOnSessionId': cleanShowIndicatorId,
         'encryptedData': encryptedData['data'],
         'checksum': encryptedData['checksum'],
         'metadata': {
-          'encrypted':
-              true, // ✅ FIXED: Set to true for encrypted typing indicators
-          'version': '1.0',
-          'encryptionType': 'aes-cbc-pkcs7'
+          'encrypted': true,
+          'version': '2.0',
+          'encryptionType': 'AES-256-CBC'
         }
       };
 
@@ -1629,13 +1671,10 @@ class SeSocketService {
       }
 
       final payload = {
-        'type': 'message:send',
         'messageId': messageId,
-        'conversationId':
-            consistentConversationId, // Use consistent conversation ID
-        'fromUserId': _sessionId, // CORRECT: This should be the sender's ID
-        'recipientId': recipientId, // Add recipient ID for server routing
-        'toUserIds': [recipientId],
+        'fromUserId': _sessionId,
+        'recipientId': recipientId,
+        'conversationId': consistentConversationId,
         'body': encryptedResult['data']!,
         'checksum': encryptedResult['checksum']!,
         'timestamp': DateTime.now().toIso8601String(),
@@ -1643,7 +1682,6 @@ class SeSocketService {
           'encrypted': true,
           'version': '2.0',
           'encryptionType': 'AES-256-CBC',
-          'checksum': encryptedResult['checksum']!,
         },
       };
 
@@ -1692,14 +1730,12 @@ class SeSocketService {
         'messageId': messageId,
         'fromUserId': _sessionId,
         'toUserId': toUserId,
-        'conversationId': consistentConversationId,
-        'timestamp': DateTime.now().toIso8601String(),
         'encryptedData': encryptedData['data'],
         'checksum': encryptedData['checksum'],
         'metadata': {
           'encrypted': true,
-          'version': '1.0',
-          'encryptionType': 'aes-cbc-pkcs7'
+          'version': '2.0',
+          'encryptionType': 'AES-256-CBC'
         }
       });
 
@@ -1707,6 +1743,49 @@ class SeSocketService {
           '📬 SeSocketService: ✅ Encrypted read receipt sent: $messageId -> $toUserId');
     } catch (e) {
       print('📬 SeSocketService: ❌ Error sending encrypted read receipt: $e');
+    }
+  }
+
+  /// Delete a single message - API Compliant
+  Future<void> deleteMessage({
+    required String messageId,
+    required String conversationId,
+    required String deletedBy,
+  }) async {
+    if (!isConnected || _sessionId == null) return;
+
+    try {
+      _socket!.emit('message:delete', {
+        'messageId': messageId,
+        'conversationId': conversationId,
+        'deletedBy': deletedBy,
+        'timestamp': DateTime.now().toIso8601String()
+      });
+
+      print('🗑️ SeSocketService: ✅ Message delete request sent: $messageId');
+    } catch (e) {
+      print('🗑️ SeSocketService: ❌ Error sending message delete: $e');
+    }
+  }
+
+  /// Delete all messages in a conversation - API Compliant
+  Future<void> deleteAllMessages({
+    required String conversationId,
+    required String deletedBy,
+  }) async {
+    if (!isConnected || _sessionId == null) return;
+
+    try {
+      _socket!.emit('message:delete_all', {
+        'conversationId': conversationId,
+        'deletedBy': deletedBy,
+        'timestamp': DateTime.now().toIso8601String()
+      });
+
+      print(
+          '🗑️ SeSocketService: ✅ Delete all messages request sent: $conversationId');
+    } catch (e) {
+      print('🗑️ SeSocketService: ❌ Error sending delete all messages: $e');
     }
   }
 

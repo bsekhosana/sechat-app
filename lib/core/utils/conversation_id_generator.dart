@@ -79,10 +79,18 @@ class ConversationIdGenerator {
   static List<String> extractParticipantIds(String conversationId) {
     if (!conversationId.startsWith('chat_')) return [];
 
-    final parts = conversationId.split('_');
-    if (parts.length < 3) return [];
+    // Remove 'chat_' prefix
+    final withoutPrefix = conversationId.substring(5);
 
-    return parts.sublist(1); // Skip 'chat' prefix
+    // Split by '_session_' to handle session IDs that contain underscores
+    final parts = withoutPrefix.split('_session_');
+    if (parts.length != 2) return [];
+
+    // Reconstruct the full session IDs (parts already contain session_ prefix)
+    final participant1 = parts[0];
+    final participant2 = 'session_${parts[1]}';
+
+    return [participant1, participant2];
   }
 
   /// Check if a user is a participant in a conversation

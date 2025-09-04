@@ -15,6 +15,7 @@ import 'features/chat/models/message_status.dart' as msg_status;
 import 'features/key_exchange/providers/key_exchange_request_provider.dart';
 import 'features/chat/providers/chat_list_provider.dart';
 import 'features/chat/providers/session_chat_provider.dart';
+import 'features/chat/services/unified_chat_socket_integration.dart';
 import 'shared/providers/socket_provider.dart';
 
 // import screens
@@ -383,29 +384,95 @@ void _setupSocketCallbacks(SeSocketService socketService) {
                 listen: false);
 
             try {
+              // CRITICAL: Decrypt the message content first
+              String decryptedContent = message;
+
+              // Check if this looks like encrypted content
+              if (message.length > 100 && message.contains('eyJ')) {
+                print(
+                    '🔌 Main: 🔓 Attempting to decrypt message for chat list preview');
+                try {
+                  // Use EncryptionService to decrypt the message (first layer)
+                  final decryptedData =
+                      await EncryptionService.decryptAesCbcPkcs7(message);
+
+                  if (decryptedData != null &&
+                      decryptedData.containsKey('text')) {
+                    final firstLayerDecrypted = decryptedData['text'] as String;
+                    print(
+                        '🔌 Main: ✅ First layer decrypted: $firstLayerDecrypted');
+
+                    // Check if the decrypted text is still encrypted (double encryption scenario)
+                    if (firstLayerDecrypted.length > 100 &&
+                        firstLayerDecrypted.contains('eyJ')) {
+                      print(
+                          '🔌 Main: 🔍 Detected double encryption, decrypting inner layer...');
+                      try {
+                        // Decrypt the inner encrypted content
+                        final innerDecryptedData =
+                            await EncryptionService.decryptAesCbcPkcs7(
+                                firstLayerDecrypted);
+
+                        if (innerDecryptedData != null &&
+                            innerDecryptedData.containsKey('text')) {
+                          final finalDecryptedText =
+                              innerDecryptedData['text'] as String;
+                          print(
+                              '🔌 Main: ✅ Inner layer decrypted successfully');
+                          decryptedContent = finalDecryptedText;
+                        } else {
+                          print(
+                              '🔌 Main: ⚠️ Inner layer decryption failed, using first layer');
+                          decryptedContent = firstLayerDecrypted;
+                        }
+                      } catch (e) {
+                        print(
+                            '🔌 Main: ❌ Inner layer decryption error: $e, using first layer');
+                        decryptedContent = firstLayerDecrypted;
+                      }
+                    } else {
+                      // Single layer encryption, use as is
+                      print('🔌 Main: ✅ Single layer decryption completed');
+                      decryptedContent = firstLayerDecrypted;
+                    }
+                  } else {
+                    print(
+                        '🔌 Main: ⚠️ Decryption failed - invalid format, using encrypted text');
+                    decryptedContent = '[Encrypted Message]';
+                  }
+                } catch (e) {
+                  print('🔌 Main: ❌ Decryption failed: $e');
+                  decryptedContent = '[Encrypted Message]';
+                }
+              } else {
+                print(
+                    '🔌 Main: ℹ️ Message appears to be plain text, using as-is');
+              }
+
               // Call handleIncomingMessage to decrypt the message preview
               if (actualConversationId != null) {
                 chatListProvider.handleIncomingMessage(
                   senderId: senderId,
                   senderName: senderName,
-                  message: message,
+                  message: decryptedContent, // Use decrypted content
                   conversationId: actualConversationId,
                   messageId: messageId,
                 );
                 print(
                     '🔌 Main: ✅ Conversation updated with decrypted message preview');
 
-                // CRITICAL: Also update chat list in real-time with new message
+                // CRITICAL: Also update chat list in real-time with new message using decrypted content
                 chatListProvider.handleNewMessageArrival(
                   messageId: messageId,
                   senderId: senderId,
-                  content: message,
+                  content:
+                      decryptedContent, // Use decrypted content instead of raw message
                   conversationId: actualConversationId,
                   timestamp: DateTime.now(),
                   messageType: MessageType.text,
                 );
                 print(
-                    '🔌 Main: ✅ Chat list updated in real-time with new message');
+                    '🔌 Main: ✅ Chat list updated in real-time with decrypted message');
               }
             } catch (e) {
               print(
@@ -440,6 +507,23 @@ void _setupSocketCallbacks(SeSocketService socketService) {
               }
             } catch (e) {
               print('🔌 Main: ⚠️ Failed to update SessionChatProvider: $e');
+            }
+
+            // CRITICAL: Update UnifiedChatProvider if the message is for the current conversation
+            try {
+              final unifiedChatSocketIntegration =
+                  UnifiedChatSocketIntegration();
+              unifiedChatSocketIntegration.handleIncomingMessage(
+                messageId: messageId,
+                senderId: senderId,
+                conversationId: actualConversationId ?? '',
+                body: message,
+                senderName: senderName,
+              );
+              print(
+                  '🔌 Main: ✅ UnifiedChatProvider updated for incoming message');
+            } catch (e) {
+              print('🔌 Main: ⚠️ Failed to update UnifiedChatProvider: $e');
             }
 
             // Count unread conversations
@@ -539,6 +623,21 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           }
         } catch (e) {
           print('🔌 Main: ⚠️ SessionChatProvider not available: $e');
+        }
+
+        // Also notify UnifiedChatProvider if there's an active unified chat
+        try {
+          // Import the UnifiedChatSocketIntegration to handle typing indicators
+          final unifiedChatSocketIntegration = UnifiedChatSocketIntegration();
+          unifiedChatSocketIntegration.handleTypingIndicator(
+            senderId: senderId,
+            isTyping: isTyping,
+            conversationId:
+                'temp_conversation_id', // This will be resolved in the integration service
+          );
+          print('🔌 Main: ✅ Typing indicator forwarded to UnifiedChatProvider');
+        } catch (e) {
+          print('🔌 Main: ⚠️ UnifiedChatProvider not available: $e');
         }
 
         print('🔌 Main: ✅ Typing indicator processed successfully');
@@ -658,6 +757,23 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           print('🔌 Main: 🔍 Stack trace: ${StackTrace.current}');
         }
 
+        // CRITICAL: Also update UnifiedChatProvider for real-time UI updates
+        try {
+          final unifiedChatSocketIntegration = UnifiedChatSocketIntegration();
+          unifiedChatSocketIntegration.handlePresenceUpdate(
+            userId: senderId,
+            isOnline: isOnline,
+            lastSeen: lastSeen != null && lastSeen.isNotEmpty
+                ? DateTime.parse(lastSeen)
+                : null,
+          );
+          print(
+              '🔌 Main: ✅ UnifiedChatProvider updated for presence: $senderId -> ${isOnline ? 'online' : 'offline'}');
+        } catch (e) {
+          print(
+              '🔌 Main: ⚠️ Failed to update UnifiedChatProvider for presence: $e');
+        }
+
         print(
             '🔌 Main: ✅ Presence update processed successfully for: $senderId');
       } catch (e) {
@@ -741,6 +857,20 @@ void _setupSocketCallbacks(SeSocketService socketService) {
           print(
               '✅ Main: ⚠️ Failed to update SessionChatProvider for delivery: $e');
         }
+
+        // CRITICAL: Also update UnifiedChatProvider for real-time UI updates
+        try {
+          final unifiedChatSocketIntegration = UnifiedChatSocketIntegration();
+          unifiedChatSocketIntegration.handleMessageStatusUpdate(
+            messageId: messageId,
+            status: msg_status.MessageDeliveryStatus.delivered,
+            senderId: fromUserId,
+          );
+          print('✅ Main: ✅ UnifiedChatProvider updated for delivered message');
+        } catch (e) {
+          print(
+              '✅ Main: ⚠️ Failed to update UnifiedChatProvider for delivered: $e');
+        }
       } catch (e) {
         print('❌ Main: Failed to process message delivery status: $e');
       }
@@ -818,6 +948,19 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         } catch (e) {
           print('✅ Main: ⚠️ Failed to update SessionChatProvider for read: $e');
         }
+
+        // CRITICAL: Also update UnifiedChatProvider for real-time UI updates
+        try {
+          final unifiedChatSocketIntegration = UnifiedChatSocketIntegration();
+          unifiedChatSocketIntegration.handleMessageStatusUpdate(
+            messageId: messageId,
+            status: msg_status.MessageDeliveryStatus.read,
+            senderId: fromUserId,
+          );
+          print('✅ Main: ✅ UnifiedChatProvider updated for read message');
+        } catch (e) {
+          print('✅ Main: ⚠️ Failed to update UnifiedChatProvider for read: $e');
+        }
       } catch (e) {
         print('❌ Main: Failed to process message read status: $e');
       }
@@ -873,6 +1016,20 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             conversationId: conversationId, recipientId: recipientId);
         print(
             '🔌 Main: ✅ Message status updated in ChatListProvider with enhanced lookup data: $status');
+
+        // CRITICAL: Also update UnifiedChatProvider for real-time UI updates
+        try {
+          final unifiedChatSocketIntegration = UnifiedChatSocketIntegration();
+          unifiedChatSocketIntegration.handleMessageStatusUpdate(
+            messageId: messageId,
+            status: parsedStatus,
+            senderId: senderId,
+          );
+          print('🔌 Main: ✅ UnifiedChatProvider updated for status: $status');
+        } catch (e) {
+          print(
+              '🔌 Main: ⚠️ Failed to update UnifiedChatProvider for status: $e');
+        }
       } catch (e) {
         print('🔌 Main: ❌ Failed to process message status update: $e');
       }
