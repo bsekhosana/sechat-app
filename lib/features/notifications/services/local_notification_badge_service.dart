@@ -191,13 +191,8 @@ class LocalNotificationBadgeService {
         Logger.debug(
             '📱 LocalNotificationBadgeService: 🔧 Android notification permission granted: $granted');
 
-        if (granted == true) {
-          // Also request exact alarm permission for Android 12+
-          final exactAlarmGranted =
-              await androidPlugin.requestExactAlarmsPermission();
-          Logger.debug(
-              '📱 LocalNotificationBadgeService: 🔧 Android exact alarm permission granted: $exactAlarmGranted');
-        }
+        // Note: Removed exact alarm permission request as we only need basic notifications
+        // for chat messages, not scheduled alarms
       }
     } catch (e) {
       Logger.error(
