@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/message.dart';
 import '../models/chat_conversation.dart';
 import '../../../core/services/se_shared_preference_service.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Simplified service for managing local storage of text-based chat messages and conversations
 class MessageStorageService {
@@ -21,16 +22,16 @@ class MessageStorageService {
   /// Initialize the storage service
   Future<void> initialize() async {
     try {
-      print('💾 MessageStorageService: Initializing storage service');
+      Logger.debug('💾 MessageStorageService: Initializing storage service');
 
       // Initialize database
       await _initializeDatabase();
 
-      print(
-          '💾 MessageStorageService: ✅ Storage service initialized successfully');
+      Logger.success(
+          '💾 MessageStorageService:  Storage service initialized successfully');
     } catch (e) {
-      print(
-          '💾 MessageStorageService: ❌ Failed to initialize storage service: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to initialize storage service: $e');
       rethrow;
     }
   }
@@ -48,9 +49,10 @@ class MessageStorageService {
         onCreate: _createDatabaseTables,
       );
 
-      print('💾 MessageStorageService: ✅ Database initialized');
+      Logger.success('💾 MessageStorageService:  Database initialized');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to initialize database: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to initialize database: $e');
       rethrow;
     }
   }
@@ -118,9 +120,10 @@ class MessageStorageService {
       await db.execute(
           'CREATE INDEX idx_messages_sender_id ON messages (sender_id)');
 
-      print('💾 MessageStorageService: ✅ Database tables created');
+      Logger.success('💾 MessageStorageService:  Database tables created');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to create database tables: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to create database tables: $e');
       rethrow;
     }
   }
@@ -166,10 +169,11 @@ class MessageStorageService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      print(
-          '💾 MessageStorageService: ✅ Conversation saved: ${conversation.id}');
+      Logger.success(
+          '💾 MessageStorageService:  Conversation saved: ${conversation.id}');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to save conversation: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to save conversation: $e');
       rethrow;
     }
   }
@@ -203,9 +207,9 @@ class MessageStorageService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      print('💾 MessageStorageService: ✅ Message saved: ${message.id}');
+      Logger.success('💾 MessageStorageService:  Message saved: ${message.id}');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to save message: $e');
+      Logger.error('💾 MessageStorageService:  Failed to save message: $e');
       rethrow;
     }
   }
@@ -228,11 +232,11 @@ class MessageStorageService {
       );
 
       final messages = maps.map((map) => _mapToMessage(map)).toList();
-      print(
-          '💾 MessageStorageService: ✅ Retrieved ${messages.length} messages for conversation: $conversationId');
+      Logger.success(
+          '💾 MessageStorageService:  Retrieved ${messages.length} messages for conversation: $conversationId');
       return messages;
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to get messages: $e');
+      Logger.error('💾 MessageStorageService:  Failed to get messages: $e');
       rethrow;
     }
   }
@@ -250,11 +254,12 @@ class MessageStorageService {
       );
 
       final conversations = maps.map((map) => _mapToConversation(map)).toList();
-      print(
-          '💾 MessageStorageService: ✅ Retrieved ${conversations.length} conversations');
+      Logger.success(
+          '💾 MessageStorageService:  Retrieved ${conversations.length} conversations');
       return conversations;
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to get conversations: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to get conversations: $e');
       rethrow;
     }
   }
@@ -275,13 +280,13 @@ class MessageStorageService {
 
       if (maps.isNotEmpty) {
         final conversation = _mapToConversation(maps.first);
-        print(
-            '💾 MessageStorageService: ✅ Retrieved conversation: $conversationId');
+        Logger.success(
+            '💾 MessageStorageService:  Retrieved conversation: $conversationId');
         return conversation;
       }
       return null;
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to get conversation: $e');
+      Logger.error('💾 MessageStorageService:  Failed to get conversation: $e');
       rethrow;
     }
   }
@@ -301,11 +306,12 @@ class MessageStorageService {
       );
 
       final conversations = maps.map((map) => _mapToConversation(map)).toList();
-      print(
-          '💾 MessageStorageService: ✅ Retrieved ${conversations.length} conversations for user: $userId');
+      Logger.success(
+          '💾 MessageStorageService:  Retrieved ${conversations.length} conversations for user: $userId');
       return conversations;
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to get user conversations: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to get user conversations: $e');
       rethrow;
     }
   }
@@ -323,12 +329,12 @@ class MessageStorageService {
       );
 
       final conversations = maps.map((map) => _mapToConversation(map)).toList();
-      print(
-          '💾 MessageStorageService: ✅ Retrieved ${conversations.length} from getMyLocalConversations function');
+      Logger.success(
+          '💾 MessageStorageService:  Retrieved ${conversations.length} from getMyLocalConversations function');
       return conversations;
     } catch (e) {
-      print(
-          '💾 MessageStorageService: ❌ Failed to get my local conversations: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to get my local conversations: $e');
       rethrow;
     }
   }
@@ -343,11 +349,11 @@ class MessageStorageService {
       final result =
           await _database!.rawQuery('SELECT COUNT(*) as count FROM messages');
       final count = result.first['count'] as int? ?? 0;
-      print('💾 MessageStorageService: ✅ Total message count: $count');
+      Logger.success('💾 MessageStorageService:  Total message count: $count');
       return count;
     } catch (e) {
-      print(
-          '💾 MessageStorageService: ❌ Failed to get total message count: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to get total message count: $e');
       rethrow;
     }
   }
@@ -373,10 +379,11 @@ class MessageStorageService {
         whereArgs: [conversationId],
       );
 
-      print(
-          '💾 MessageStorageService: ✅ Conversation deleted: $conversationId');
+      Logger.success(
+          '💾 MessageStorageService:  Conversation deleted: $conversationId');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to delete conversation: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to delete conversation: $e');
       rethrow;
     }
   }
@@ -388,20 +395,22 @@ class MessageStorageService {
     }
 
     try {
-      print('💾 MessageStorageService: 🗑️ Starting complete chat deletion...');
+      Logger.info(
+          '💾 MessageStorageService:  Starting complete chat deletion...');
 
       // Delete all messages first
       final messagesDeleted = await _database!.delete('messages');
-      print('💾 MessageStorageService: ✅ Deleted $messagesDeleted messages');
+      Logger.success(
+          '💾 MessageStorageService:  Deleted $messagesDeleted messages');
 
       // Delete all conversations
       final conversationsDeleted = await _database!.delete('conversations');
-      print(
-          '💾 MessageStorageService: ✅ Deleted $conversationsDeleted conversations');
+      Logger.success(
+          '💾 MessageStorageService:  Deleted $conversationsDeleted conversations');
 
-      print('💾 MessageStorageService: 🗑️ All chats permanently deleted');
+      Logger.info('💾 MessageStorageService:  All chats permanently deleted');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to delete all chats: $e');
+      Logger.error('💾 MessageStorageService:  Failed to delete all chats: $e');
       rethrow;
     }
   }
@@ -413,7 +422,8 @@ class MessageStorageService {
     }
 
     try {
-      print('💾 MessageStorageService: 🧹 Starting conversation ID cleanup...');
+      Logger.info(
+          '💾 MessageStorageService:  Starting conversation ID cleanup...');
 
       // Get all conversations
       final List<Map<String, dynamic>> maps =
@@ -425,13 +435,14 @@ class MessageStorageService {
 
         // Check if conversation ID has double chat_ prefix
         if (conversationId.startsWith('chat_chat_')) {
-          print(
-              '💾 MessageStorageService: 🔍 Found malformed conversation ID: $conversationId');
+          Logger.info(
+              '💾 MessageStorageService:  Found malformed conversation ID: $conversationId');
 
           // Extract the correct conversation ID by removing the extra chat_ prefix
           final correctedId =
               conversationId.replaceFirst('chat_chat_', 'chat_');
-          print('💾 MessageStorageService: 🔧 Corrected to: $correctedId');
+          Logger.debug(
+              '💾 MessageStorageService: 🔧 Corrected to: $correctedId');
 
           // Update the conversation ID
           await _database!.update(
@@ -450,16 +461,16 @@ class MessageStorageService {
           );
 
           cleanedCount++;
-          print(
-              '💾 MessageStorageService: ✅ Cleaned conversation ID: $conversationId -> $correctedId');
+          Logger.success(
+              '💾 MessageStorageService:  Cleaned conversation ID: $conversationId -> $correctedId');
         }
 
         // NEW: Check for complex malformed IDs with multiple session_ prefixes
         else if (conversationId.startsWith('chat_') &&
             conversationId.contains('session_') &&
             conversationId.split('session_').length > 3) {
-          print(
-              '💾 MessageStorageService: 🔍 Found complex malformed conversation ID: $conversationId');
+          Logger.info(
+              '💾 MessageStorageService:  Found complex malformed conversation ID: $conversationId');
 
           // Extract the first two session IDs to create a proper conversation ID
           final parts = conversationId.split('session_');
@@ -469,7 +480,8 @@ class MessageStorageService {
 
             // Create proper conversation ID: chat_sessionId1_sessionId2
             final correctedId = 'chat_${firstSessionId}_${secondSessionId}';
-            print('💾 MessageStorageService: 🔧 Corrected to: $correctedId');
+            Logger.debug(
+                '💾 MessageStorageService: 🔧 Corrected to: $correctedId');
 
             // Update the conversation ID
             await _database!.update(
@@ -488,17 +500,17 @@ class MessageStorageService {
             );
 
             cleanedCount++;
-            print(
-                '💾 MessageStorageService: ✅ Cleaned complex conversation ID: $conversationId -> $correctedId');
+            Logger.success(
+                '💾 MessageStorageService:  Cleaned complex conversation ID: $conversationId -> $correctedId');
           }
         }
       }
 
-      print(
-          '💾 MessageStorageService: 🧹 Conversation ID cleanup completed. Cleaned $cleanedCount conversations.');
+      Logger.info(
+          '💾 MessageStorageService:  Conversation ID cleanup completed. Cleaned $cleanedCount conversations.');
     } catch (e) {
-      print(
-          '💾 MessageStorageService: ❌ Error during conversation ID cleanup: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Error during conversation ID cleanup: $e');
       rethrow;
     }
   }
@@ -523,9 +535,10 @@ class MessageStorageService {
 
       // Reinitialize
       await initialize();
-      print('💾 MessageStorageService: ✅ Database recreated');
+      Logger.success('💾 MessageStorageService:  Database recreated');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to recreate database: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to recreate database: $e');
       rethrow;
     }
   }
@@ -545,10 +558,11 @@ class MessageStorageService {
         whereArgs: [messageId],
       );
 
-      print(
-          '💾 MessageStorageService: ✅ Message status updated: $messageId -> ${status.name}');
+      Logger.success(
+          '💾 MessageStorageService:  Message status updated: $messageId -> ${status.name}');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to update message status: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to update message status: $e');
       rethrow;
     }
   }
@@ -572,11 +586,11 @@ class MessageStorageService {
         whereArgs: [conversationId, currentUserId, MessageStatus.read.name],
       );
 
-      print(
-          '💾 MessageStorageService: ✅ Messages sent TO user marked as read: $conversationId');
+      Logger.success(
+          '💾 MessageStorageService:  Messages sent TO user marked as read: $conversationId');
     } catch (e) {
-      print(
-          '💾 MessageStorageService: ❌ Failed to mark conversation messages as read: $e');
+      Logger.error(
+          '💾 MessageStorageService:  Failed to mark conversation messages as read: $e');
       rethrow;
     }
   }
@@ -594,9 +608,9 @@ class MessageStorageService {
         whereArgs: [messageId],
       );
 
-      print('💾 MessageStorageService: ✅ Message deleted: $messageId');
+      Logger.success('💾 MessageStorageService:  Message deleted: $messageId');
     } catch (e) {
-      print('💾 MessageStorageService: ❌ Failed to delete message: $e');
+      Logger.error('💾 MessageStorageService:  Failed to delete message: $e');
       rethrow;
     }
   }
@@ -606,7 +620,7 @@ class MessageStorageService {
     if (_database != null) {
       await _database!.close();
       _database = null;
-      print('💾 MessageStorageService: ✅ Database closed');
+      Logger.success('💾 MessageStorageService:  Database closed');
     }
   }
 
@@ -706,7 +720,7 @@ class MessageStorageService {
         }
         return {'text': value};
       } catch (e) {
-        print('💾 MessageStorageService: ❌ Failed to parse content: $e');
+        Logger.error('💾 MessageStorageService:  Failed to parse content: $e');
         return {'text': value};
       }
     }
@@ -735,7 +749,7 @@ class MessageStorageService {
         }
         return null;
       } catch (e) {
-        print('💾 MessageStorageService: ❌ Failed to parse metadata: $e');
+        Logger.error('💾 MessageStorageService:  Failed to parse metadata: $e');
         return null;
       }
     }

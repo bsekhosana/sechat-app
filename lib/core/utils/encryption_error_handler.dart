@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Enum representing different types of encryption errors
 enum EncryptionErrorType {
@@ -42,7 +43,8 @@ class EncryptionErrorHandler {
   // Log an encryption error
   void logError(String message,
       {EncryptionErrorType type = EncryptionErrorType.unknownError}) {
-    print('🔒 Encryption Error [${type.toString().split('.').last}]: $message');
+    Logger.debug(
+        '🔒 Encryption Error [${type.toString().split('.').last}]: $message');
 
     if (_logCallback != null) {
       _logCallback!(message, type: type);

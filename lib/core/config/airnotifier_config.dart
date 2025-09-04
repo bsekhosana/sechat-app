@@ -1,3 +1,5 @@
+import 'package:sechat_app//../core/utils/logger.dart';
+
 /// AirNotifier configuration for different environments
 class AirNotifierConfig {
   // Environment detection
@@ -39,14 +41,15 @@ class AirNotifierConfig {
 
   // Debug information
   static void printConfig() {
-    print(
+    Logger.debug(
         '🔧 AirNotifierConfig: Environment: ${isDevelopment ? "Development" : "Production"}');
-    print('🔧 AirNotifierConfig: Base URL: $baseUrl');
-    print('🔧 AirNotifierConfig: SSL Enabled: $sslEnabled');
-    print(
+    Logger.debug('🔧 AirNotifierConfig: Base URL: $baseUrl');
+    Logger.debug('🔧 AirNotifierConfig: SSL Enabled: $sslEnabled');
+    Logger.debug(
         '🔧 AirNotifierConfig: SSL Verification Required: $sslVerificationRequired');
-    print('🔧 AirNotifierConfig: App Name: $appName');
-    print('🔧 AirNotifierConfig: Connection Timeout: $connectionTimeout');
-    print('🔧 AirNotifierConfig: Max Retries: $maxRetries');
+    Logger.debug('🔧 AirNotifierConfig: App Name: $appName');
+    Logger.debug(
+        '🔧 AirNotifierConfig: Connection Timeout: $connectionTimeout');
+    Logger.debug('🔧 AirNotifierConfig: Max Retries: $maxRetries');
   }
 }

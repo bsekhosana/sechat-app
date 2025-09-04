@@ -11,6 +11,7 @@ import 'dart:io';
 
 import '../utils/encryption_error_handler.dart';
 import '../services/se_session_service.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 class EncryptionService {
   // ===== Public API =====
@@ -255,19 +256,19 @@ class EncryptionService {
       final decryptedPrivateKey = await sessionService.getDecryptedPrivateKey();
 
       if (decryptedPrivateKey != null && decryptedPrivateKey.isNotEmpty) {
-        print(
-            '🔒 EncryptionService: ✅ Successfully retrieved private key from session service');
+        Logger.success(
+            ' EncryptionService:  Successfully retrieved private key from session service');
         return decryptedPrivateKey;
       } else {
-        print(
-            '🔒 EncryptionService: No private key available from session service');
+        Logger.debug(
+            ' EncryptionService: No private key available from session service');
       }
 
       // Fallback: try to get from FlutterSecureStorage (legacy)
-      print('🔒 EncryptionService: Falling back to FlutterSecureStorage');
+      Logger.debug(' EncryptionService: Falling back to FlutterSecureStorage');
       return await _storage.read(key: _privateKeyKey);
     } catch (e) {
-      print('🔒 EncryptionService: Error getting private key: $e');
+      Logger.debug(' EncryptionService: Error getting private key: $e');
       return null;
     }
   }
@@ -305,7 +306,7 @@ class EncryptionService {
   /// Clear ALL recipient public keys (for account deletion)
   static Future<void> clearAllRecipientPublicKeys() async {
     try {
-      print('🔒 EncryptionService: 🗑️ Clearing all recipient public keys...');
+      Logger.info(' EncryptionService:  Clearing all recipient public keys...');
 
       // Get all keys from secure storage
       final allKeys = await _storage.readAll();
@@ -315,15 +316,16 @@ class EncryptionService {
       // Delete each recipient key
       for (final key in recipientKeys) {
         await _storage.delete(key: key);
-        print('🔒 EncryptionService: ✅ Deleted recipient key: $key');
+        Logger.success(' EncryptionService:  Deleted recipient key: $key');
       }
 
       // Clear the cache
       _recipientPublicKeysCache.clear();
 
-      print('🔒 EncryptionService: 🗑️ All recipient public keys cleared');
+      Logger.info(' EncryptionService:  All recipient public keys cleared');
     } catch (e) {
-      print('🔒 EncryptionService: ❌ Error clearing recipient public keys: $e');
+      Logger.error(
+          ' EncryptionService:  Error clearing recipient public keys: $e');
       rethrow;
     }
   }
@@ -333,7 +335,7 @@ class EncryptionService {
   static String _preview(String s) =>
       s.length <= 64 ? s : '${s.substring(0, 64)}…';
   static void _log(String tag, String msg) =>
-      print('🔐 EncryptionService[$tag] $msg');
+      Logger.debug(' EncryptionService[$tag] $msg');
 
   // ===== Storage and Cache =====
 
@@ -466,7 +468,7 @@ class EncryptionService {
 
       return decrypted['test'] == testData;
     } catch (e) {
-      print('🔒 EncryptionService: Test round-trip failed: $e');
+      Logger.debug(' EncryptionService: Test round-trip failed: $e');
       return false;
     }
   }

@@ -2,6 +2,7 @@ import '../models/message.dart';
 import 'message_storage_service.dart';
 import 'chat_encryption_service.dart';
 import 'message_status_tracking_service.dart';
+import '/../core/utils/logger.dart';
 
 /// Service for handling text messages only
 class TextMessageService {
@@ -26,7 +27,8 @@ class TextMessageService {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      print('💬 TextMessageService: Sending text message to $recipientId');
+      Logger.debug(
+          '💬 TextMessageService: Sending text message to $recipientId');
 
       // Validate text message
       if (!_validateTextMessage(text)) {
@@ -59,11 +61,11 @@ class TextMessageService {
       // Mark message as sent
       await _statusTrackingService.markMessageAsSent(message.id);
 
-      print(
-          '💬 TextMessageService: ✅ Text message sent successfully: ${message.id}');
+      Logger.success(
+          '💬 TextMessageService:  Text message sent successfully: ${message.id}');
       return message;
     } catch (e) {
-      print('💬 TextMessageService: ❌ Failed to send text message: $e');
+      Logger.error('💬 TextMessageService:  Failed to send text message: $e');
       rethrow;
     }
   }
@@ -80,11 +82,11 @@ class TextMessageService {
           .where((message) => message.type == MessageType.text)
           .toList();
 
-      print(
-          '💬 TextMessageService: ✅ Retrieved ${textMessages.length} text messages for conversation: $conversationId');
+      Logger.success(
+          '💬 TextMessageService:  Retrieved ${textMessages.length} text messages for conversation: $conversationId');
       return textMessages;
     } catch (e) {
-      print('💬 TextMessageService: ❌ Failed to get text messages: $e');
+      Logger.error('💬 TextMessageService:  Failed to get text messages: $e');
       rethrow;
     }
   }
@@ -119,9 +121,10 @@ class TextMessageService {
       // Save updated message
       await _storageService.saveMessage(updatedMessage);
 
-      print('💬 TextMessageService: ✅ Message text updated: $messageId');
+      Logger.success(
+          '💬 TextMessageService:  Message text updated: $messageId');
     } catch (e) {
-      print('💬 TextMessageService: ❌ Failed to update message text: $e');
+      Logger.error('💬 TextMessageService:  Failed to update message text: $e');
       rethrow;
     }
   }
@@ -130,9 +133,10 @@ class TextMessageService {
   Future<void> deleteTextMessage(String messageId) async {
     try {
       await _storageService.deleteMessage(messageId);
-      print('💬 TextMessageService: ✅ Text message deleted: $messageId');
+      Logger.success(
+          '💬 TextMessageService:  Text message deleted: $messageId');
     } catch (e) {
-      print('💬 TextMessageService: ❌ Failed to delete text message: $e');
+      Logger.error('💬 TextMessageService:  Failed to delete text message: $e');
       rethrow;
     }
   }
@@ -174,9 +178,10 @@ class TextMessageService {
       // Save updated conversation
       await _storageService.saveConversation(updatedConversation);
 
-      print('💬 TextMessageService: ✅ Conversation updated with new message');
+      Logger.success(
+          '💬 TextMessageService:  Conversation updated with new message');
     } catch (e) {
-      print('💬 TextMessageService: ❌ Failed to update conversation: $e');
+      Logger.error('💬 TextMessageService:  Failed to update conversation: $e');
       rethrow;
     }
   }

@@ -6,6 +6,7 @@ import '../models/notification_icons.dart';
 import '../services/local_notification_items_service.dart';
 import '../services/local_notification_badge_service.dart';
 import '../widgets/notification_action_screen.dart';
+import '/../core/utils/logger.dart';
 
 /// Local Notifications Screen
 /// Shows local notification items from the new database system
@@ -54,8 +55,8 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
           // Force a refresh of the badge counts to show current state
           indicatorService.forceDisplayCurrentCounts();
         } catch (e) {
-          print(
-              '❌ SocketNotificationsScreen: Failed to refresh badge count after loading: $e');
+          Logger.error(
+              ' SocketNotificationsScreen: Failed to refresh badge count after loading: $e');
         }
       });
     } catch (e) {
@@ -63,7 +64,8 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
         _isLoading = false;
       });
       if (mounted) {
-        print('❌ SocketNotificationsScreen: Failed to load notifications: $e');
+        Logger.error(
+            ' SocketNotificationsScreen: Failed to load notifications: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to load notifications: $e'),
@@ -136,13 +138,13 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
             // Force a refresh of the badge counts
             indicatorService.forceDisplayCurrentCounts();
           } catch (e) {
-            print(
-                '❌ SocketNotificationsScreen: Failed to refresh badge count: $e');
+            Logger.error(
+                ' SocketNotificationsScreen: Failed to refresh badge count: $e');
           }
         });
       } catch (e) {
-        print(
-            '❌ SocketNotificationsScreen: Failed to mark notification as read: $e');
+        Logger.error(
+            ' SocketNotificationsScreen: Failed to mark notification as read: $e');
       }
     }
 
@@ -161,8 +163,8 @@ class _SocketNotificationsScreenState extends State<SocketNotificationsScreen> {
               final indicatorService = context.read<IndicatorService>();
               indicatorService.forceDisplayCurrentCounts();
             } catch (e) {
-              print(
-                  '❌ SocketNotificationsScreen: Failed to refresh badge count after action: $e');
+              Logger.error(
+                  ' SocketNotificationsScreen: Failed to refresh badge count after action: $e');
             }
           });
         },

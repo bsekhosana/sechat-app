@@ -11,6 +11,7 @@ import '../../../shared/widgets/key_exchange_request_dialog.dart';
 import '../screens/unified_chat_screen.dart';
 import '../../../core/services/contact_service.dart';
 import '../../../core/services/se_session_service.dart';
+import '/../core/utils/logger.dart';
 
 /// Main screen for displaying the list of chat conversations
 class ChatListScreen extends StatefulWidget {
@@ -196,7 +197,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         },
         onFocusLost: () {
           // Handle focus lost if needed
-          print('📱 ChatListScreen: 🔍 Search focus lost');
+          Logger.info('📱 ChatListScreen:  Search focus lost');
         },
       ),
     );
@@ -420,11 +421,11 @@ class _ChatListScreenState extends State<ChatListScreen>
         conversation.displayName ??
         'Unknown User';
 
-    print('📱 ChatListScreen: 🔍 Opening chat with:');
-    print('📱 ChatListScreen: 🔍 Conversation ID: ${conversation.id}');
-    print(
-        '📱 ChatListScreen: 🔍 Effective Recipient ID: $effectiveRecipientId');
-    print('📱 ChatListScreen: 🔍 Recipient Name: $effectiveRecipientName');
+    Logger.info('📱 ChatListScreen:  Opening chat with:');
+    Logger.info('📱 ChatListScreen:  Conversation ID: ${conversation.id}');
+    Logger.info(
+        '📱 ChatListScreen:  Effective Recipient ID: $effectiveRecipientId');
+    Logger.info('📱 ChatListScreen:  Recipient Name: $effectiveRecipientName');
 
     Navigator.push(
       context,

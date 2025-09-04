@@ -5,6 +5,7 @@ import '../core/services/se_session_service.dart';
 import 'realtime_logger.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
+import '/../core/utils/logger.dart';
 
 /// Service to manage typing indicators with debouncing and heartbeat
 class TypingService {
@@ -187,8 +188,8 @@ class TypingService {
     try {
       final currentUserId = _sessionService.currentSessionId;
       if (currentUserId == null) {
-        print(
-            '📝 TypingService: ❌ No session ID available for typing indicator');
+        Logger.error(
+            '📝 TypingService:  No session ID available for typing indicator');
         return;
       }
 
@@ -196,8 +197,8 @@ class TypingService {
       final recipientId = ConversationIdGenerator.getOtherParticipant(
           conversationId, currentUserId);
       if (recipientId == null) {
-        print(
-            '📝 TypingService: ❌ Could not determine recipient from conversation: $conversationId');
+        Logger.error(
+            '📝 TypingService:  Could not determine recipient from conversation: $conversationId');
         return;
       }
 
@@ -205,10 +206,10 @@ class TypingService {
       final socketService = SeSocketService.instance;
       socketService.sendTypingIndicator(recipientId, isTyping);
 
-      print(
-          '📝 TypingService: ✅ Typing indicator sent via channel socket: $isTyping to $recipientId');
+      Logger.success(
+          '📝 TypingService:  Typing indicator sent via channel socket: $isTyping to $recipientId');
     } catch (e) {
-      print('📝 TypingService: ❌ Failed to send typing indicator: $e');
+      Logger.error('📝 TypingService:  Failed to send typing indicator: $e');
     }
   }
 
@@ -282,10 +283,10 @@ class TypingService {
           peerId: fromUserId,
           details: {'isTyping': isTyping});
 
-      print(
-          '🔄 TypingService: 🔔 Incoming typing indicator: $fromUserId -> $isTyping in conversation $conversationId');
-      print(
-          '🔄 TypingService: 🔍 Current stream listeners: ${_typingController.hasListener ? 'Yes' : 'No'}');
+      Logger.info(
+          ' TypingService:  Incoming typing indicator: $fromUserId -> $isTyping in conversation $conversationId');
+      Logger.info(
+          ' TypingService: 🔍 Current stream listeners: ${_typingController.hasListener ? 'Yes' : 'No'}');
 
       // Emit typing update for UI consumption
       _typingController.add(TypingUpdate(
@@ -295,12 +296,12 @@ class TypingService {
         source: 'peer', // This is from another user
       ));
 
-      print('🔄 TypingService: ✅ Typing update emitted to stream');
+      Logger.success('🔄 TypingService:  Typing update emitted to stream');
       RealtimeLogger.typing('Incoming typing indicator processed',
           convoId: conversationId, peerId: fromUserId);
     } catch (e) {
-      print(
-          '🔄 TypingService: ❌ Failed to handle incoming typing indicator: $e');
+      Logger.error(
+          '🔄 TypingService:  Failed to handle incoming typing indicator: $e');
       RealtimeLogger.typing('Failed to handle incoming typing indicator: $e',
           convoId: conversationId,
           peerId: fromUserId,

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'user_existence_guard.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 class ApiService {
   static String get baseUrl {
@@ -12,7 +13,7 @@ class ApiService {
 
   static Future<Map<String, String>> get _headers async {
     final deviceId = await _storage.read(key: 'device_id');
-    print('🔍 API Service - Device ID from storage: $deviceId');
+    Logger.info(' API Service - Device ID from storage: $deviceId');
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -25,12 +26,12 @@ class ApiService {
     try {
       final userId = await _storage.read(key: 'user_id');
       if (userId == null) {
-        print('🔍 API Service - No user ID found, user not logged in');
+        Logger.info(' API Service - No user ID found, user not logged in');
         return false;
       }
 
-      print(
-          '🔍 API Service - Checking if user $userId still exists in database');
+      Logger.info(
+          ' API Service - Checking if user $userId still exists in database');
 
       final response = await http.get(
         Uri.parse('$baseUrl/api/users/$userId/exists'),
@@ -40,15 +41,15 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final exists = data['exists'] ?? false;
-        print('🔍 API Service - User existence check result: $exists');
+        Logger.info(' API Service - User existence check result: $exists');
         return exists;
       } else {
-        print(
-            '🔍 API Service - User existence check failed: ${response.statusCode}');
+        Logger.info(
+            ' API Service - User existence check failed: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('🔍 API Service - User existence check error: $e');
+      Logger.info(' API Service - User existence check error: $e');
       return false;
     }
   }
@@ -62,7 +63,7 @@ class ApiService {
       // Check if user exists before making API call
       final userExists = await _checkUserExists();
       if (!userExists) {
-        print('🔍 API Service - User no longer exists, triggering logout');
+        Logger.info(' API Service - User no longer exists, triggering logout');
         await UserExistenceGuard.instance.handleUserNotFound();
         throw Exception('User account no longer exists');
       }
@@ -76,12 +77,12 @@ class ApiService {
 
       // Check for 401/403 errors that might indicate user issues
       if (e.toString().contains('401') || e.toString().contains('403')) {
-        print(
-            '🔍 API Service - Authentication error detected, checking user existence');
+        Logger.info(
+            ' API Service - Authentication error detected, checking user existence');
         final userExists = await _checkUserExists();
         if (!userExists) {
-          print(
-              '🔍 API Service - User no longer exists after auth error, triggering logout');
+          Logger.info(
+              ' API Service - User no longer exists after auth error, triggering logout');
           await UserExistenceGuard.instance.handleUserNotFound();
           throw Exception('User account no longer exists');
         }
@@ -109,15 +110,15 @@ class ApiService {
   static Future<Map<String, dynamic>> get(String endpoint) async {
     return _guardedApiCall(() async {
       final headers = await _headers;
-      print('🔍 API Service - GET $endpoint with headers: $headers');
+      Logger.info(' API Service - GET $endpoint with headers: $headers');
 
       final response = await http.get(
         Uri.parse('$baseUrl/api$endpoint'),
         headers: headers,
       );
 
-      print('🔍 API Service - Response status: ${response.statusCode}');
-      print('🔍 API Service - Response body: ${response.body}');
+      Logger.info(' API Service - Response status: ${response.statusCode}');
+      Logger.info(' API Service - Response body: ${response.body}');
 
       return _handleResponse(response);
     }, 'GET $endpoint');
@@ -149,15 +150,17 @@ class ApiService {
 
   static Future<Map<String, dynamic>> _unguardedGet(String endpoint) async {
     final headers = await _headers;
-    print('🔍 API Service - Unguarded GET $endpoint with headers: $headers');
+    Logger.info(
+        ' API Service - Unguarded GET $endpoint with headers: $headers');
 
     final response = await http.get(
       Uri.parse('$baseUrl/api$endpoint'),
       headers: headers,
     );
 
-    print('🔍 API Service - Unguarded response status: ${response.statusCode}');
-    print('🔍 API Service - Unguarded response body: ${response.body}');
+    Logger.info(
+        ' API Service - Unguarded response status: ${response.statusCode}');
+    Logger.info(' API Service - Unguarded response body: ${response.body}');
 
     return _handleResponse(response);
   }
@@ -181,7 +184,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> searchUsers(String query) {
-    print('🔍 API Service - Search request for: $query');
+    Logger.info(' API Service - Search request for: $query');
     return _unguardedGet('/search?query=$query');
   }
 
@@ -338,7 +341,7 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getUserSecurityQuestion() {
-    print('🔍 API Service - Getting user security question');
+    Logger.info(' API Service - Getting user security question');
     return _guardedApiCall(() async {
       final response = await http.get(
         Uri.parse('$baseUrl/api/security-question'),

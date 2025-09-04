@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// SeAuth Checker Service
 /// Handles authentication validation and session management
@@ -36,7 +37,7 @@ class SeAuthChecker {
 
   /// Initialize auth checker
   Future<void> initialize() async {
-    print('🔐 SeAuthChecker: Initializing...');
+    Logger.debug(' SeAuthChecker: Initializing...');
 
     try {
       // Check initial auth state
@@ -48,9 +49,9 @@ class SeAuthChecker {
       // Set up session validation
       _setupSessionValidation();
 
-      print('🔐 SeAuthChecker: ✅ Initialized successfully');
+      Logger.success(' SeAuthChecker:  Initialized successfully');
     } catch (e) {
-      print('🔐 SeAuthChecker: ❌ Failed to initialize: $e');
+      Logger.error(' SeAuthChecker:  Failed to initialize: $e');
       _authErrorController.add('Failed to initialize auth checker: $e');
     }
   }
@@ -60,14 +61,14 @@ class SeAuthChecker {
     if (_isChecking) return;
 
     _isChecking = true;
-    print('🔐 SeAuthChecker: Checking authentication state...');
+    Logger.debug(' SeAuthChecker: Checking authentication state...');
 
     try {
       // Check if session exists and is valid
       final sessionId = _sessionService.currentSessionId;
       if (sessionId == null) {
         _updateAuthState(false);
-        print('🔐 SeAuthChecker: ❌ No session ID found');
+        Logger.error(' SeAuthChecker:  No session ID found');
         return;
       }
 
@@ -76,12 +77,12 @@ class SeAuthChecker {
       _updateAuthState(isValid);
 
       if (isValid) {
-        print('🔐 SeAuthChecker: ✅ Session is valid');
+        Logger.success(' SeAuthChecker:  Session is valid');
       } else {
-        print('🔐 SeAuthChecker: ❌ Session is invalid');
+        Logger.error(' SeAuthChecker:  Session is invalid');
       }
     } catch (e) {
-      print('🔐 SeAuthChecker: ❌ Error checking auth state: $e');
+      Logger.error(' SeAuthChecker:  Error checking auth state: $e');
       _authErrorController.add('Authentication check failed: $e');
       _updateAuthState(false);
     } finally {
@@ -94,8 +95,8 @@ class SeAuthChecker {
     try {
       // Check if socket is connected
       if (!_socketService.isConnected) {
-        print(
-            '🔐 SeAuthChecker: ⚠️ Socket not connected, attempting to connect...');
+        Logger.warning(
+            ' SeAuthChecker:  Socket not connected, attempting to connect...');
         await _socketService.initialize();
         if (!_socketService.isConnected) {
           return false;
@@ -139,7 +140,7 @@ class SeAuthChecker {
 
       return isValid;
     } catch (e) {
-      print('🔐 SeAuthChecker: ❌ Error validating session with server: $e');
+      Logger.error(' SeAuthChecker:  Error validating session with server: $e');
       return false;
     }
   }
@@ -149,8 +150,8 @@ class SeAuthChecker {
     if (_isAuthenticated != isAuthenticated) {
       _isAuthenticated = isAuthenticated;
       _authStateController.add(isAuthenticated);
-      print(
-          '🔐 SeAuthChecker: 🔄 Auth state changed to: ${isAuthenticated ? "authenticated" : "unauthenticated"}');
+      Logger.info(
+          ' SeAuthChecker:  Auth state changed to: ${isAuthenticated ? "authenticated" : "unauthenticated"}');
     }
   }
 
@@ -187,12 +188,12 @@ class SeAuthChecker {
       // Check if session is expired locally (placeholder)
       // final isExpired = _sessionService.isSessionExpired();
       // if (isExpired) {
-      //   print('🔐 SeAuthChecker: ⚠️ Session expired locally');
+      //   Logger.warning(' SeAuthChecker:  Session expired locally');
       //   _updateAuthState(false);
       //   _handleSessionExpired();
       // }
     } catch (e) {
-      print('🔐 SeAuthChecker: ❌ Error in local session validation: $e');
+      Logger.error(' SeAuthChecker:  Error in local session validation: $e');
     }
   }
 
@@ -205,20 +206,20 @@ class SeAuthChecker {
       // Re-check authentication
       _checkAuthenticationState();
     } catch (e) {
-      print('🔐 SeAuthChecker: ❌ Failed to handle expired session: $e');
+      Logger.error(' SeAuthChecker:  Failed to handle expired session: $e');
       _authErrorController.add('Session refresh failed: $e');
     }
   }
 
   /// Force authentication check
   Future<void> forceAuthCheck() async {
-    print('🔐 SeAuthChecker: 🔄 Forcing authentication check...');
+    Logger.info(' SeAuthChecker:  Forcing authentication check...');
     await _checkAuthenticationState();
   }
 
   /// Logout and clear auth state
   Future<void> logout() async {
-    print('🔐 SeAuthChecker: 🔓 Logging out...');
+    Logger.debug(' SeAuthChecker: 🔓 Logging out...');
 
     try {
       // Disconnect socket
@@ -230,9 +231,9 @@ class SeAuthChecker {
       // Update auth state
       _updateAuthState(false);
 
-      print('🔐 SeAuthChecker: ✅ Logout completed');
+      Logger.success(' SeAuthChecker:  Logout completed');
     } catch (e) {
-      print('🔐 SeAuthChecker: ❌ Error during logout: $e');
+      Logger.error(' SeAuthChecker:  Error during logout: $e');
       _authErrorController.add('Logout failed: $e');
     }
   }
@@ -240,7 +241,8 @@ class SeAuthChecker {
   /// Check if user can perform action
   bool canPerformAction(String action) {
     if (!_isAuthenticated) {
-      print('🔐 SeAuthChecker: ❌ User not authenticated for action: $action');
+      Logger.error(
+          ' SeAuthChecker:  User not authenticated for action: $action');
       return false;
     }
 

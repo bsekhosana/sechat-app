@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Service for proactive memory management to prevent iOS memory warnings
 class MemoryManagementService {
@@ -27,9 +28,9 @@ class MemoryManagementService {
       _startMemoryMonitoring();
 
       _isInitialized = true;
-      print('📱 MemoryManagementService: ✅ Initialized successfully');
+      Logger.success('📱 MemoryManagementService:  Initialized successfully');
     } catch (e) {
-      print('📱 MemoryManagementService: ❌ Failed to initialize: $e');
+      Logger.error('📱 MemoryManagementService:  Failed to initialize: $e');
     }
   }
 
@@ -40,7 +41,8 @@ class MemoryManagementService {
         await _clearMemoryCaches();
         break;
       default:
-        print('📱 MemoryManagementService: Unknown method: ${call.method}');
+        Logger.debug(
+            '📱 MemoryManagementService: Unknown method: ${call.method}');
     }
   }
 
@@ -62,20 +64,20 @@ class MemoryManagementService {
           final memoryUsage = result['memoryUsage'] as double?;
           if (memoryUsage != null && memoryUsage > 500) {
             // 500 MB threshold
-            print(
+            Logger.debug(
                 '📱 MemoryManagementService: ⚠️ High memory usage detected: ${memoryUsage.toStringAsFixed(2)} MB');
             await _optimizeMemory();
           }
         }
       }
     } catch (e) {
-      print('📱 MemoryManagementService: Error checking memory: $e');
+      Logger.debug('📱 MemoryManagementService: Error checking memory: $e');
     }
   }
 
   /// Optimize memory usage proactively
   Future<void> _optimizeMemory() async {
-    print('📱 MemoryManagementService: 🔄 Optimizing memory usage');
+    Logger.info('📱 MemoryManagementService:  Optimizing memory usage');
 
     try {
       // Clear image caches
@@ -87,12 +89,14 @@ class MemoryManagementService {
       // Force garbage collection if available
       if (kDebugMode) {
         // In debug mode, we can force some cleanup
-        print('📱 MemoryManagementService: 🧹 Debug mode cleanup completed');
+        Logger.info(
+            '📱 MemoryManagementService:  Debug mode cleanup completed');
       }
 
-      print('📱 MemoryManagementService: ✅ Memory optimization completed');
+      Logger.success(
+          '📱 MemoryManagementService:  Memory optimization completed');
     } catch (e) {
-      print('📱 MemoryManagementService: ❌ Error optimizing memory: $e');
+      Logger.error('📱 MemoryManagementService:  Error optimizing memory: $e');
     }
   }
 
@@ -101,9 +105,10 @@ class MemoryManagementService {
     try {
       // Clear any cached images in memory
       // This would typically involve clearing image cache providers
-      print('📱 MemoryManagementService: 🖼️ Cleared image caches');
+      Logger.debug('📱 MemoryManagementService: 🖼️ Cleared image caches');
     } catch (e) {
-      print('📱 MemoryManagementService: ⚠️ Error clearing image caches: $e');
+      Logger.warning(
+          '📱 MemoryManagementService:  Error clearing image caches: $e');
     }
   }
 
@@ -112,15 +117,16 @@ class MemoryManagementService {
     try {
       // This would typically involve clearing temporary files
       // Implementation depends on your file management system
-      print('📱 MemoryManagementService: 📁 Cleared temporary files');
+      Logger.debug('📱 MemoryManagementService: 📁 Cleared temporary files');
     } catch (e) {
-      print('📱 MemoryManagementService: ⚠️ Error clearing temp files: $e');
+      Logger.warning(
+          '📱 MemoryManagementService:  Error clearing temp files: $e');
     }
   }
 
   /// Clear all memory caches (called when iOS sends memory warning)
   Future<void> _clearMemoryCaches() async {
-    print(
+    Logger.debug(
         '📱 MemoryManagementService: 🚨 iOS memory warning received - clearing caches');
 
     try {
@@ -130,9 +136,10 @@ class MemoryManagementService {
       // Notify other services to clear their caches
       // This could involve notifying providers to clear their in-memory data
 
-      print('📱 MemoryManagementService: ✅ All memory caches cleared');
+      Logger.success('📱 MemoryManagementService:  All memory caches cleared');
     } catch (e) {
-      print('📱 MemoryManagementService: ❌ Error clearing memory caches: $e');
+      Logger.error(
+          '📱 MemoryManagementService:  Error clearing memory caches: $e');
     }
   }
 
@@ -140,6 +147,6 @@ class MemoryManagementService {
   void dispose() {
     _memoryCheckTimer?.cancel();
     _isInitialized = false;
-    print('📱 MemoryManagementService: 🗑️ Disposed');
+    Logger.info('📱 MemoryManagementService:  Disposed');
   }
 }

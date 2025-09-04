@@ -8,6 +8,7 @@ import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:sechat_app/core/services/ui_service.dart';
 import 'package:sechat_app/core/utils/guid_generator.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 import 'package:sechat_app/features/notifications/services/local_notification_items_service.dart';
 import 'package:sechat_app/shared/models/key_exchange_request.dart';
@@ -42,8 +43,8 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
   /// Clean up any duplicate KER items
   Future<void> _cleanupDuplicates() async {
-    print(
-        '🔑 KeyExchangeRequestProvider: 🧹 Cleaning up duplicate KER items...');
+    Logger.debug(
+        '🧹 Cleaning up duplicate KER items...', 'KeyExchangeRequestProvider');
 
     // Clean up sent requests - keep only the most recent for each toSessionId
     final Map<String, KeyExchangeRequest> uniqueSentRequests = {};
@@ -79,34 +80,35 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
     if (sentCountBefore != sentCountAfter ||
         receivedCountBefore != receivedCountAfter) {
-      print('🔑 KeyExchangeRequestProvider: 🧹 Cleaned up duplicates:');
-      print('  - Sent requests: $sentCountBefore → $sentCountAfter');
-      print(
+      Logger.debug('🔑 KeyExchangeRequestProvider: 🧹 Cleaned up duplicates:');
+      Logger.debug('  - Sent requests: $sentCountBefore → $sentCountAfter');
+      Logger.debug(
           '  - Received requests: $receivedCountBefore → $receivedCountAfter');
 
       // Save the cleaned up data
       await _saveAllRequests();
       notifyListeners();
     } else {
-      print('🔑 KeyExchangeRequestProvider: ✅ No duplicates found');
+      Logger.debug('🔑 KeyExchangeRequestProvider: ✅ No duplicates found');
     }
   }
 
   /// Refresh the data from storage
   Future<void> refresh() async {
-    print('🔑 KeyExchangeRequestProvider: 🔄 Refreshing data from storage');
+    Logger.debug(
+        '🔑 KeyExchangeRequestProvider: 🔄 Refreshing data from storage');
     await _loadSavedRequests();
 
     // Clean up any duplicates that might have been created
     await _cleanupDuplicates();
 
-    print(
+    Logger.debug(
         '🔑 KeyExchangeRequestProvider: ✅ Refresh completed - sent: ${_sentRequests.length}, received: ${_receivedRequests.length}');
   }
 
   /// Manually clean up duplicates (can be called externally)
   Future<void> cleanupDuplicates() async {
-    print(
+    Logger.debug(
         '🔑 KeyExchangeRequestProvider: 🧹 Manual duplicate cleanup requested');
     await _cleanupDuplicates();
   }
@@ -162,10 +164,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     try {
       // Badge counts are now handled automatically by the main navigation screen
       // No need to manually notify the indicator service
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: New key exchange items detected, badge counts will update automatically');
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error in notification: $e');
+      Logger.debug('🔑 KeyExchangeRequestProvider: Error in notification: $e');
     }
   }
 
@@ -174,13 +176,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     try {
       // Connect to socket service for key exchange notifications
       // This will be handled by the main navigation screen
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Socket service connection will be handled by main navigation');
 
       // Set up socket event handlers for key exchange events
       _setupSocketEventHandlers();
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ❌ Failed to connect to socket service: $e');
     }
   }
@@ -190,10 +192,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     try {
       // ChannelSocketService uses an event-driven system instead of callbacks
       // Event listeners are set up when the service initializes
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Socket event handlers set up - using channel-based system');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ❌ Failed to set up socket event handlers: $e');
     }
   }
@@ -204,12 +206,12 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     required String requestPhrase,
   }) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Sending key exchange request to: $recipientSessionId');
 
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) {
-        print('🔑 KeyExchangeRequestProvider: User not logged in');
+        Logger.debug('🔑 KeyExchangeRequestProvider: User not logged in');
 
         // Show error message to user
         UIService().showSnack(
@@ -223,7 +225,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       final userSession = SeSessionService().currentSession;
       final currentUserPublicKey = userSession?.publicKey;
       if (currentUserPublicKey == null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Current user public key not available');
         UIService().showSnack('Public key not available. Please try again.');
         return false;
@@ -243,7 +245,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       if (existingSentRequestIndex != -1) {
         // Update existing sent request instead of creating new one
         final existingRequest = _sentRequests[existingSentRequestIndex];
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔄 Updating existing SENT request with $recipientSessionId (status: ${existingRequest.status})');
 
         // Update the existing request with new data
@@ -271,7 +273,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           requestPhrase: requestPhrase,
         );
 
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Updated existing SENT request and resent to $recipientSessionId');
         return true;
       }
@@ -280,7 +282,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         // We have a received request from this session - don't allow sending
         final existingReceivedRequest =
             _receivedRequests[existingReceivedRequestIndex];
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Cannot send request to $recipientSessionId - already have RECEIVED request from them (status: ${existingReceivedRequest.status})');
 
         // Show error message to user
@@ -318,10 +320,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           recipientId: recipientSessionId,
           requestPhrase: requestPhrase,
         );
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Local notification created for sent KER');
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
 
@@ -332,7 +334,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       );
 
       if (success) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Key exchange request sent successfully');
 
         // Update status from 'pending' to 'sent' after successful sending
@@ -344,7 +346,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
         return true;
       } else {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Failed to send key exchange request');
 
         // Remove the request from local list if sending failed
@@ -360,7 +362,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error sending key exchange request: $e');
 
       // Show error message to user
@@ -376,9 +378,9 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<void> processReceivedKeyExchangeRequest(
       Map<String, dynamic> data) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔥 Processing received key exchange request');
-      print('🔑 KeyExchangeRequestProvider: 🔥 Request data: $data');
+      Logger.debug('🔑 KeyExchangeRequestProvider: 🔥 Request data: $data');
 
       // Handle both old and new data formats
       final requestId =
@@ -390,7 +392,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       final timestampRaw = data['timestamp'];
 
       if (requestId == null || senderId == null || requestPhrase == null) {
-        print('🔑 KeyExchangeRequestProvider: Invalid request data');
+        Logger.debug('🔑 KeyExchangeRequestProvider: Invalid request data');
 
         // Show error message to user
         UIService().showSnack(
@@ -415,19 +417,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
                 DateTime.fromMillisecondsSinceEpoch(int.parse(timestampRaw));
           }
         } catch (e) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Invalid timestamp string: $timestampRaw, using current time');
           timestamp = DateTime.now();
         }
       } else {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Invalid timestamp type: ${timestampRaw.runtimeType}, using current time');
         timestamp = DateTime.now();
       }
 
       // Check if we already have this request by ID
       if (_receivedRequests.any((req) => req.id == requestId)) {
-        print('🔑 KeyExchangeRequestProvider: Request already processed');
+        Logger.debug(
+            '🔑 KeyExchangeRequestProvider: Request already processed');
         return;
       }
 
@@ -450,7 +453,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       if (existingReceivedRequestIndex != -1) {
         // Update existing received request instead of creating new one
         final existingRequest = _receivedRequests[existingReceivedRequestIndex];
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔄 Updating existing RECEIVED request from $senderId (status: ${existingRequest.status})');
 
         // Update the existing request with new data
@@ -471,7 +474,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             _receivedRequests[existingReceivedRequestIndex]);
         notifyListeners();
 
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Updated existing RECEIVED request from $senderId');
         return;
       }
@@ -480,29 +483,29 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         // We have a sent request to this session - this shouldn't happen normally
         // but if it does, we should handle it gracefully
         final existingSentRequest = _sentRequests[existingSentRequestIndex];
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Received request from $senderId but we already have a SENT request to them (status: ${existingSentRequest.status})');
 
         // For now, we'll still process the received request but log this unusual case
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔄 Processing received request despite existing sent request');
       }
 
       if (senderPublicKey != null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Storing sender public key for: $senderId');
         await EncryptionService.storeRecipientPublicKey(
             senderId, senderPublicKey);
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Public key stored successfully');
       } else {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ No public key found in request data');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Available fields: ${data.keys.toList()}');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 publicKey field: ${data['publicKey']}');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 sender_public_key field: ${data['sender_public_key']}');
       }
 
@@ -521,12 +524,12 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       );
 
       _receivedRequests.add(request);
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Added request to _receivedRequests list (total: ${_receivedRequests.length})');
 
       // Force UI update
       notifyListeners();
-      print('🔑 KeyExchangeRequestProvider: ✅ notifyListeners() called');
+      Logger.debug('🔑 KeyExchangeRequestProvider: ✅ notifyListeners() called');
 
       // Notify about new items for badge indicators
       _notifyNewItems();
@@ -541,21 +544,21 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             recipientId: currentUserId,
             requestPhrase: requestPhrase,
           );
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Local notification created for received KER');
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
 
       // Save to local storage for persistence
       await _saveReceivedRequest(request);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Received key exchange request processed');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error processing received request: $e');
     }
   }
@@ -564,18 +567,19 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<bool> acceptKeyExchangeRequest(
       KeyExchangeRequest request, BuildContext context) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Accepting key exchange request: ${request.id}');
 
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) {
-        print('🔑 KeyExchangeRequestProvider: ❌ Current user ID is null');
+        Logger.debug(
+            '🔑 KeyExchangeRequestProvider: ❌ Current user ID is null');
         return false;
       }
 
       // CRITICAL: Ensure socket is connected before sending accept event
       if (!_socketService.isConnected) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Socket not connected, attempting to reconnect...');
 
         try {
@@ -587,7 +591,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
           // Check if connection was successful
           if (!_socketService.isConnected) {
-            print(
+            Logger.debug(
                 '🔑 KeyExchangeRequestProvider: ❌ Failed to reconnect socket');
 
             // Show user-friendly error message about socket connectivity
@@ -624,10 +628,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             return false;
           }
 
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Socket reconnected successfully');
         } catch (e) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ❌ Failed to reconnect socket: $e');
 
           // Show user-friendly error message about socket connectivity
@@ -685,15 +689,15 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       await _saveAllRequests();
       notifyListeners();
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Cleaned up duplicate requests for accepted session: ${request.fromSessionId}');
 
       // CRITICAL: Send key exchange accept event to server (not response)
       // This triggers the server to send key_exchange:response with our public key
-      print('🔑 KeyExchangeRequestProvider: 🔍🔍🔍 ABOUT TO CALL EMIT!');
-      print(
+      Logger.debug('🔑 KeyExchangeRequestProvider: 🔍🔍🔍 ABOUT TO CALL EMIT!');
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔍🔍🔍 _socketService type: ${_socketService.runtimeType}');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔍🔍🔍 _socketService connected: ${_socketService.isConnected}');
 
       // Get the current user's public key to include in the accept event
@@ -701,7 +705,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       final currentUserPublicKey = userSession?.publicKey;
 
       if (currentUserPublicKey == null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Current user public key not available');
         return false;
       }
@@ -713,21 +717,21 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         if (requesterPublicKey != null && requesterPublicKey.isNotEmpty) {
           await EncryptionService.storeRecipientPublicKey(
               request.fromSessionId, requesterPublicKey);
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Stored requester public key for ${request.fromSessionId}');
         } else {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ⚠️ Warning: No public key in request to store');
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Failed to store requester public key: $e');
         // Don't fail the entire accept process if key storage fails
       }
 
       // Double-check socket connection before sending
       if (!_socketService.isConnected) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Socket still not connected after reconnection attempt');
         return false;
       }
@@ -754,7 +758,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           await EncryptionService.encryptData(userData, request.fromSessionId);
 
       if (encryptedUserData == null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Failed to encrypt user data for accept event');
         return false;
       }
@@ -771,13 +775,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         'timestamp': DateTime.now().toIso8601String(),
       });
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Key exchange accept event sent to server with encrypted user data');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Conversation ID included: $consistentConversationId');
 
       // No need to send separate user data exchange - it's now included in the accept event
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ℹ️ User data included in accept event, no separate exchange needed');
 
       // Mark the request as accepted
@@ -796,16 +800,16 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           recipientId: currentUserId,
           requestPhrase: request.requestPhrase,
         );
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Local notification created for accepted KER');
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
 
       return true;
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error accepting key exchange request: $e');
       // Reset status to received on error to allow retry
       try {
@@ -818,7 +822,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         // Save the reset status
         await _saveReceivedRequest(existingRequest);
       } catch (revertError) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Error reverting status: $revertError');
       }
       return false;
@@ -828,13 +832,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Decline a key exchange request
   Future<bool> declineKeyExchangeRequest(String requestId) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Declining key exchange request: $requestId');
 
       final request =
           _receivedRequests.firstWhere((req) => req.id == requestId);
       if (request.status != 'received') {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request is not in received status');
         return false;
       }
@@ -861,7 +865,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         reason: 'User declined the key exchange request',
       );
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Key exchange request declined successfully');
 
       // Mark the request as declined
@@ -880,16 +884,16 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           recipientId: currentUserId,
           requestPhrase: request.requestPhrase,
         );
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Local notification created for declined KER');
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
 
       return true;
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error declining key exchange request: $e');
       // Reset status to received on error to allow retry
       try {
@@ -902,7 +906,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         // Save the reset status
         await _saveReceivedRequest(request);
       } catch (revertError) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Error reverting status: $revertError');
       }
       return false;
@@ -928,17 +932,17 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         if (currentUserId != null) {
           // For failed requests, we'll create a simple notification
           // This could be enhanced with a specific failed notification type
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ℹ️ Key exchange request failed - no notification created');
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
 
-      print('🔑 KeyExchangeRequestProvider: ✅ Request marked as failed');
+      Logger.debug('🔑 KeyExchangeRequestProvider: ✅ Request marked as failed');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error marking request as failed: $e');
     }
   }
@@ -946,7 +950,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Retry a failed key exchange request
   Future<bool> retryKeyExchangeRequest(String requestId) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Retrying key exchange request: $requestId');
 
       final request =
@@ -970,18 +974,18 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             recipientId: request.toSessionId,
             requestPhrase: request.requestPhrase,
           );
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Local notification created for retry KER');
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
 
-      print('🔑 KeyExchangeRequestProvider: ✅ Request reset for retry');
+      Logger.debug('🔑 KeyExchangeRequestProvider: ✅ Request reset for retry');
       return true;
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error retrying key exchange request: $e');
       return false;
     }
@@ -990,8 +994,9 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Handle key exchange error from socket
   void handleKeyExchangeError(Map<String, dynamic> errorData) {
     try {
-      print('🔑 KeyExchangeRequestProvider: Handling key exchange error');
-      print('🔑 KeyExchangeRequestProvider: Error data: $errorData');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Handling key exchange error');
+      Logger.debug('🔑 KeyExchangeRequestProvider: Error data: $errorData');
 
       final errorCode = errorData['errorCode']?.toString();
       final requestId = errorData['requestId']?.toString();
@@ -1004,7 +1009,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         if (requestIndex != -1) {
           _sentRequests[requestIndex].status = 'failed';
           notifyListeners();
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Updated request $requestId status to failed');
         }
       }
@@ -1016,7 +1021,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
               (_sentRequests[i].status == 'pending' ||
                   _sentRequests[i].status == 'sent')) {
             _sentRequests[i].status = 'failed';
-            print(
+            Logger.debug(
                 '🔑 KeyExchangeRequestProvider: Updated request to $recipientId status to failed');
           }
         }
@@ -1025,7 +1030,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
       // Note: No snackbar needed since push notification handles this
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error handling key exchange error: $e');
     }
   }
@@ -1034,12 +1039,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<void> handleKeyExchangeDeclined(
       Map<String, dynamic> declineData) async {
     try {
-      print('🔑 KeyExchangeRequestProvider: Handling key exchange declined');
-      print('🔑 KeyExchangeRequestProvider: Decline data: $declineData');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Handling key exchange declined');
+      Logger.debug('🔑 KeyExchangeRequestProvider: Decline data: $declineData');
 
       // CRITICAL: Refresh data from storage to ensure we have the latest sent requests
       await _loadSavedRequests();
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Data refreshed from storage before processing decline');
 
       final senderId = declineData['senderId']?.toString();
@@ -1048,9 +1054,9 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
       // Find the request in sent requests and update its status
       if (requestId != null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Looking for sent request with ID: $requestId');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Available sent request IDs: ${_sentRequests.map((req) => req.id).toList()}');
 
         final requestIndex =
@@ -1063,19 +1069,19 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           await _saveSentRequest(_sentRequests[requestIndex]);
 
           notifyListeners();
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Updated request $requestId status to declined');
         } else {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ❌ Request $requestId not found in sent requests');
         }
       }
 
       // If we have senderId, find and update any requests to that sender
       if (senderId != null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Looking for sent requests to sender: $senderId');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Available sent requests: ${_sentRequests.map((req) => '${req.id}->${req.toSessionId}(${req.status})').toList()}');
 
         for (int i = 0; i < _sentRequests.length; i++) {
@@ -1088,7 +1094,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             // Save the updated status to local storage
             await _saveSentRequest(_sentRequests[i]);
 
-            print(
+            Logger.debug(
                 '🔑 KeyExchangeRequestProvider: ✅ Updated request to $senderId status to declined');
           }
         }
@@ -1105,17 +1111,17 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             recipientId: currentUserId,
             requestPhrase: reason ?? 'Key exchange request declined',
           );
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Local notification created for declined KER');
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
 
       // Note: No snackbar needed since push notification handles this
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error handling key exchange decline: $e');
     }
   }
@@ -1124,33 +1130,35 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<void> handleKeyExchangeAccepted(
       Map<String, dynamic> acceptData) async {
     try {
-      print('🔑 KeyExchangeRequestProvider: Handling key exchange accepted');
-      print('🔑 KeyExchangeRequestProvider: Accept data: $acceptData');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Handling key exchange accepted');
+      Logger.debug('🔑 KeyExchangeRequestProvider: Accept data: $acceptData');
 
       // CRITICAL: Refresh data from storage to ensure we have the latest sent requests
       await _loadSavedRequests();
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Data refreshed from storage before processing acceptance');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔍 Total sent requests after refresh: ${_sentRequests.length}');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔍 Total received requests after refresh: ${_receivedRequests.length}');
 
       final senderId = acceptData['senderId']?.toString();
       final requestId = acceptData['requestId']?.toString();
       final conversationId = acceptData['conversationId']?.toString();
 
-      print('🔑 KeyExchangeRequestProvider: 🔍 Extracted senderId: $senderId');
-      print(
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: 🔍 Extracted senderId: $senderId');
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔍 Extracted requestId: $requestId');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔍 Extracted conversationId: $conversationId');
 
       // Find the request in sent requests and update its status
       if (requestId != null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Looking for sent request with ID: $requestId');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Available sent request IDs: ${_sentRequests.map((req) => req.id).toList()}');
 
         final requestIndex =
@@ -1163,21 +1171,21 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           await _saveSentRequest(_sentRequests[requestIndex]);
 
           notifyListeners();
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Updated request $requestId status to accepted');
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: 🔔 notifyListeners() called - UI should rebuild');
         } else {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ❌ Request $requestId not found in sent requests');
         }
       }
 
       // If we have senderId, find and update any requests to that sender
       if (senderId != null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Looking for sent requests to sender: $senderId');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔍 Available sent requests: ${_sentRequests.map((req) => '${req.id}->${req.toSessionId}(${req.status})').toList()}');
 
         for (int i = 0; i < _sentRequests.length; i++) {
@@ -1190,7 +1198,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             // Save the updated status to local storage
             await _saveSentRequest(_sentRequests[i]);
 
-            print(
+            Logger.debug(
                 '🔑 KeyExchangeRequestProvider: ✅ Updated request to $senderId status to accepted');
           }
         }
@@ -1208,10 +1216,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         // Save the cleaned up requests
         await _saveAllRequests();
         notifyListeners();
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: 🔔 notifyListeners() called in fallback logic - UI should rebuild');
 
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Cleaned up duplicate requests for accepted sender: $senderId');
       }
 
@@ -1226,17 +1234,17 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             requestPhrase: 'Key exchange request accepted',
             conversationId: conversationId,
           );
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Local notification created for accepted KER');
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
 
       // Note: No snackbar needed since push notification handles this
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error handling key exchange accepted: $e');
     }
   }
@@ -1268,14 +1276,14 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Resend a key exchange request (for sent requests)
   Future<bool> resendKeyExchangeRequest(String requestId) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Resending key exchange request: $requestId');
 
       // Find the request in sent requests
       final requestIndex =
           _sentRequests.indexWhere((req) => req.id == requestId);
       if (requestIndex == -1) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Sent request not found: $requestId');
         return false;
       }
@@ -1313,22 +1321,25 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
               recipientId: request.toSessionId,
               requestPhrase: request.requestPhrase,
             );
-            print(
+            Logger.debug(
                 '🔑 KeyExchangeRequestProvider: ✅ Local notification created for resent KER');
           }
         } catch (e) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
         }
 
-        print('🔑 KeyExchangeRequestProvider: ✅ Request resent successfully');
+        Logger.debug(
+            '🔑 KeyExchangeRequestProvider: ✅ Request resent successfully');
         return true;
       } else {
-        print('🔑 KeyExchangeRequestProvider: ❌ Failed to resend request');
+        Logger.debug(
+            '🔑 KeyExchangeRequestProvider: ❌ Failed to resend request');
         return false;
       }
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error resending request: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error resending request: $e');
       return false;
     }
   }
@@ -1336,7 +1347,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Process key exchange acceptance notification
   Future<void> processKeyExchangeAccepted(Map<String, dynamic> data) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Processing key exchange acceptance');
 
       final requestId = data['request_id'] as String?;
@@ -1344,15 +1355,15 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       final acceptorPublicKey = data['acceptor_public_key'] as String?;
 
       if (requestId == null || recipientId == null) {
-        print('🔑 KeyExchangeRequestProvider: Invalid acceptance data');
+        Logger.debug('🔑 KeyExchangeRequestProvider: Invalid acceptance data');
         return;
       }
 
       // Check if we received the acceptor's public key
       if (acceptorPublicKey == null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Acceptor public key not included in acceptance notification');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Falling back to old retry mechanism');
 
         // Fall back to the old retry mechanism for backward compatibility
@@ -1360,15 +1371,15 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         return;
       }
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Received acceptor public key, storing it immediately');
 
       // Store the acceptor's public key immediately
       await _storeAcceptorPublicKey(recipientId, acceptorPublicKey);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Looking for sent request with ID: $requestId');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Current sent requests count: ${_sentRequests.length}');
 
       // Check if the request exists in sent requests
@@ -1376,9 +1387,9 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           _sentRequests.indexWhere((req) => req.id == requestId);
 
       if (requestIndex == -1) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in sent requests');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Available sent request IDs: ${_sentRequests.map((req) => req.id).toList()}');
 
         // Try to find the request in storage and add it if it exists
@@ -1395,16 +1406,17 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Save the updated request to storage
       await _saveSentRequest(request);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Key exchange request marked as accepted');
 
       // Now we can immediately send encrypted user data since we have Bob's public key!
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Acceptor public key stored, sending encrypted user data immediately');
       await _sendEncryptedUserData(recipientId);
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error processing acceptance: $e');
-      print(
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error processing acceptance: $e');
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Stack trace: ${StackTrace.current}');
     }
   }
@@ -1412,17 +1424,18 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Process key exchange declined notification
   Future<void> processKeyExchangeDeclined(Map<String, dynamic> data) async {
     try {
-      print('🔑 KeyExchangeRequestProvider: Processing key exchange decline');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Processing key exchange decline');
 
       final requestId = data['request_id'] as String?;
       final recipientId = data['recipient_id'] as String?;
 
       if (requestId == null || recipientId == null) {
-        print('🔑 KeyExchangeRequestProvider: Invalid decline data');
+        Logger.debug('🔑 KeyExchangeRequestProvider: Invalid decline data');
         return;
       }
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Looking for sent request with ID: $requestId');
 
       // Check if the request exists in sent requests
@@ -1430,7 +1443,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           _sentRequests.indexWhere((req) => req.id == requestId);
 
       if (requestIndex == -1) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in sent requests');
         return;
       }
@@ -1444,7 +1457,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Save the updated request to storage
       await _saveSentRequest(request);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Key exchange request marked as declined');
 
       // Create local notification for declined request (sender's perspective)
@@ -1457,15 +1470,16 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             recipientId: recipientId,
             requestPhrase: request.requestPhrase,
           );
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Local notification created for declined KER (sender)');
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Failed to create local notification: $e');
       }
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error processing decline: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error processing decline: $e');
     }
   }
 
@@ -1473,7 +1487,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<void> _loadAndAddMissingSentRequest(
       String requestId, String recipientId) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Attempting to load missing sent request from storage');
 
       final prefsService = SeSharedPreferenceService();
@@ -1489,13 +1503,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
               req['fromSessionId'] == SeSessionService().currentSessionId,
         );
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in storage');
         savedRequestData = null;
       }
 
       if (savedRequestData != null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Found missing request in storage, adding to sent requests');
 
         try {
@@ -1509,27 +1523,27 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           // Save the updated request
           await _saveSentRequest(request);
 
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Missing sent request loaded and marked as accepted');
 
           // Don't immediately send encrypted user data - wait for key exchange to complete
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Key exchange accepted, waiting for public key to be available...');
 
           // Schedule a check for when the key exchange is actually complete
           _scheduleKeyExchangeCompletionCheck(recipientId);
         } catch (parseError) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Error parsing saved request: $parseError');
         }
       } else {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in storage either');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: This might be a new request or storage issue');
       }
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error loading missing sent request: $e');
     }
   }
@@ -1538,7 +1552,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<void> _loadAndAddMissingSentRequestForDecline(
       String requestId, String recipientId) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Attempting to load missing sent request for decline from storage');
 
       final prefsService = SeSharedPreferenceService();
@@ -1554,13 +1568,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
               req['fromSessionId'] == SeSessionService().currentSessionId,
         );
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in storage');
         savedRequestData = null;
       }
 
       if (savedRequestData != null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Found missing request in storage, adding to sent requests as declined');
 
         try {
@@ -1574,20 +1588,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           // Save the updated request
           await _saveSentRequest(request);
 
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Missing sent request loaded and marked as declined');
         } catch (parseError) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Error parsing saved request: $parseError');
         }
       } else {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in storage either');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: This might be a new request or storage issue');
       }
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error loading missing sent request for decline: $e');
     }
   }
@@ -1600,16 +1614,16 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           await KeyExchangeService.instance.hasPublicKeyForUser(userId);
 
       if (hasPublicKey) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Key exchange complete for $userId - public key available');
         return true;
       }
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Key exchange not complete for $userId - public key not available');
       return false;
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error checking key exchange status: $e');
       return false;
     }
@@ -1644,14 +1658,14 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           recipientId: recipientId,
           encryptedData: encryptedData,
         );
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ User data exchange sent back to requester: $recipientId');
       } else {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Warning: Could not encrypt user data for exchange');
       }
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ⚠️ Warning: Could not send user data exchange: $e');
     }
   }
@@ -1662,20 +1676,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     // Key exchanges can take time to propagate and store keys
     Future.delayed(const Duration(seconds: 10), () async {
       try {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Retrying encrypted user data send to: $recipientId');
 
         // Check if the key exchange is now complete
         final isComplete = await _isKeyExchangeComplete(recipientId);
 
         if (isComplete) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Key exchange now complete, retrying encrypted data send');
           await _sendEncryptedUserData(recipientId);
         } else {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Key exchange still not complete, will retry again later');
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Key exchange may still be in progress');
 
           // Schedule another retry after 30 seconds for the second attempt
@@ -1684,7 +1698,8 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           });
         }
       } catch (e) {
-        print('🔑 KeyExchangeRequestProvider: Error during retry attempt: $e');
+        Logger.debug(
+            '🔑 KeyExchangeRequestProvider: Error during retry attempt: $e');
 
         // Schedule another retry after 30 seconds even if there's an error
         Future.delayed(const Duration(seconds: 30), () {
@@ -1700,9 +1715,9 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     // Limit retry attempts to prevent infinite loops
     if (attemptCount >= 12) {
       // 12 attempts * 5 seconds = 1 minute
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Key exchange completion check limit reached for $recipientId');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: The key exchange may not have completed properly');
 
       // Log the current state for debugging
@@ -1713,7 +1728,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
     // Schedule a check after a short delay to allow the key exchange to propagate
     Future.delayed(const Duration(seconds: 5), () async {
       try {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Checking if key exchange is complete for: $recipientId (attempt ${attemptCount + 1}/12)');
 
         // Check if we have the recipient's public key
@@ -1721,13 +1736,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             await KeyExchangeService.instance.hasPublicKeyForUser(recipientId);
 
         if (hasPublicKey) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Key exchange now complete, sending encrypted user data to: $recipientId');
           await _sendEncryptedUserData(recipientId);
         } else {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Key exchange still not complete, will check again in 5 seconds');
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Note: The recipient may need to complete their side of the key exchange first');
 
           // Log the current state for debugging
@@ -1737,7 +1752,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           _scheduleKeyExchangeCompletionCheck(recipientId, attemptCount + 1);
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Error during key exchange completion check: $e');
         // Schedule another check even if there's an error
         _scheduleKeyExchangeCompletionCheck(recipientId, attemptCount + 1);
@@ -1748,22 +1763,24 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Log the current key exchange state for debugging
   Future<void> _logKeyExchangeState(String recipientId) async {
     try {
-      print('🔑 KeyExchangeRequestProvider: === Key Exchange State Debug ===');
-      print('🔑 KeyExchangeRequestProvider: Recipient ID: $recipientId');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: === Key Exchange State Debug ===');
+      Logger.debug('🔑 KeyExchangeRequestProvider: Recipient ID: $recipientId');
 
       // Check if we have a public key
       final hasPublicKey =
           await KeyExchangeService.instance.hasPublicKeyForUser(recipientId);
-      print('🔑 KeyExchangeRequestProvider: Has public key: $hasPublicKey');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Has public key: $hasPublicKey');
 
       // Check if we have any sent requests to this recipient
       final sentRequests =
           _sentRequests.where((req) => req.toSessionId == recipientId).toList();
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Sent requests to recipient: ${sentRequests.length}');
 
       for (final request in sentRequests) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: - Request ${request.id}: ${request.status}');
       }
 
@@ -1771,17 +1788,17 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       final receivedRequests = _receivedRequests
           .where((req) => req.fromSessionId == recipientId)
           .toList();
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Received requests from recipient: ${receivedRequests.length}');
 
       for (final request in receivedRequests) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: - Request ${request.id}: ${request.status}');
       }
 
-      print('🔑 KeyExchangeRequestProvider: === End Debug ===');
+      Logger.debug('🔑 KeyExchangeRequestProvider: === End Debug ===');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error logging key exchange state: $e');
     }
   }
@@ -1798,7 +1815,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         existingRequests.add(request.toJson());
         await prefsService.setJsonList(
             'key_exchange_sent_requests', existingRequests);
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Sent request saved to local storage');
       } else {
         // Update existing request
@@ -1808,12 +1825,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           existingRequests[index] = request.toJson();
           await prefsService.setJsonList(
               'key_exchange_sent_requests', existingRequests);
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Sent request updated in local storage');
         }
       }
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error saving sent request: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error saving sent request: $e');
     }
   }
 
@@ -1830,7 +1848,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         existingRequests.add(request.toJson());
         await prefsService.setJsonList(
             'key_exchange_received_requests', existingRequests);
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Received request saved to local storage');
       } else {
         // Update existing request
@@ -1840,12 +1858,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           existingRequests[index] = request.toJson();
           await prefsService.setJsonList(
               'key_exchange_received_requests', existingRequests);
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Received request updated in local storage');
         }
       }
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error saving received request: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error saving received request: $e');
     }
   }
 
@@ -1870,14 +1889,14 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       if (index != -1) {
         existingRequests[index] = request.toJson();
         await prefsService.setJsonList(storageKey, existingRequests);
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Request updated in local storage');
       } else {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request not found in storage for update');
       }
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error updating request: $e');
+      Logger.debug('🔑 KeyExchangeRequestProvider: Error updating request: $e');
     }
   }
 
@@ -1905,7 +1924,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             _sentRequests.add(request);
           }
         } catch (e) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Error parsing saved sent request: $e');
         }
       }
@@ -1918,7 +1937,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             _receivedRequests.add(request);
           }
         } catch (e) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Error parsing saved received request: $e');
         }
       }
@@ -1928,13 +1947,14 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       _receivedRequests.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       notifyListeners();
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Loaded ${_sentRequests.length} sent and ${_receivedRequests.length} received requests');
 
       // Migrate old data format if needed
       await _migrateOldDataFormat();
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error loading saved requests: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error loading saved requests: $e');
     }
   }
 
@@ -1950,11 +1970,12 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         return; // No migration needed
       }
 
-      print('🔑 KeyExchangeRequestProvider: 🔄 Migrating old data format...');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: 🔄 Migrating old data format...');
 
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Cannot migrate - no current user ID');
         return;
       }
@@ -1975,7 +1996,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             newReceivedRequests.add(requestJson);
           }
         } catch (e) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Error parsing request during migration: $e');
         }
       }
@@ -1984,33 +2005,35 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       if (newSentRequests.isNotEmpty) {
         await prefsService.setJsonList(
             'key_exchange_sent_requests', newSentRequests);
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Migrated ${newSentRequests.length} sent requests');
       }
 
       if (newReceivedRequests.isNotEmpty) {
         await prefsService.setJsonList(
             'key_exchange_received_requests', newReceivedRequests);
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Migrated ${newReceivedRequests.length} received requests');
       }
 
       // Remove old data
       await prefsService.remove('key_exchange_requests');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Migration completed, old data removed');
 
       // Reload the data with the new format
       await _loadSavedRequests();
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error during data migration: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error during data migration: $e');
     }
   }
 
   /// Retry connection to socket service
   Future<void> _retryConnection(BuildContext context) async {
     try {
-      print('🔑 KeyExchangeRequestProvider: 🔄 Retrying socket connection...');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: 🔄 Retrying socket connection...');
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2048,7 +2071,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ❌ Error during reconnection retry: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2065,7 +2088,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Clear all data and reset provider state (used when account is deleted)
   void clearAllData() {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🗑️ Clearing all data and resetting state...');
 
       // Clear all requests
@@ -2076,10 +2099,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Notify listeners
       notifyListeners();
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ All data cleared and state reset');
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: ❌ Error clearing data: $e');
+      Logger.debug('🔑 KeyExchangeRequestProvider: ❌ Error clearing data: $e');
     }
   }
 
@@ -2097,10 +2120,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Clear in-memory data
       clearAllData();
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ All data cleared from storage and memory');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error clearing data from storage: $e');
     }
   }
@@ -2108,19 +2131,20 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Force refresh data from storage
   Future<void> forceRefreshFromStorage() async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔄 Force refreshing data from storage...');
       await _loadSavedRequests();
-      print('🔑 KeyExchangeRequestProvider: ✅ Force refresh completed');
+      Logger.debug('🔑 KeyExchangeRequestProvider: ✅ Force refresh completed');
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error during force refresh: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error during force refresh: $e');
     }
   }
 
   /// Reload data when user session changes
   Future<void> reloadDataForNewSession() async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 🔄 Reloading data for new user session...');
 
       // Clear current data
@@ -2131,9 +2155,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Load data for the new session
       await _loadSavedRequests();
 
-      print('🔑 KeyExchangeRequestProvider: ✅ Data reloaded for new session');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: ✅ Data reloaded for new session');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error reloading data for new session: $e');
     }
   }
@@ -2142,33 +2167,33 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<void> _storeAcceptorPublicKey(
       String recipientId, String publicKey) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Storing acceptor public key for: $recipientId');
 
       // Debug: Check key format and length
       final keyBytes = base64.decode(publicKey);
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Key length: ${keyBytes.length} bytes (${keyBytes.length * 8} bits)');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Key format: ${publicKey.substring(0, 20)}...');
 
       // Validate key length for AES encryption
       if (keyBytes.length != 16 &&
           keyBytes.length != 24 &&
           keyBytes.length != 32) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ⚠️ Warning: Key length ${keyBytes.length} bytes is not standard AES length (16/24/32 bytes)');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: This may cause encryption failures');
       }
 
       // Store the public key using the EncryptionService
       await EncryptionService.storeRecipientPublicKey(recipientId, publicKey);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Acceptor public key stored successfully');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ❌ Error storing acceptor public key: $e');
       rethrow;
     }
@@ -2178,20 +2203,21 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<void> _processKeyExchangeAcceptedLegacy(
       Map<String, dynamic> data) async {
     try {
-      print('🔑 KeyExchangeRequestProvider: Using legacy fallback mechanism');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Using legacy fallback mechanism');
 
       final requestId = data['request_id'] as String?;
       final recipientId = data['recipient_id'] as String?;
 
       if (requestId == null || recipientId == null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Invalid acceptance data in legacy mode');
         return;
       }
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Looking for sent request with ID: $requestId');
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Current sent requests count: ${_sentRequests.length}');
 
       // Check if the request exists in sent requests
@@ -2199,9 +2225,9 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           _sentRequests.indexWhere((req) => req.id == requestId);
 
       if (requestIndex == -1) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in sent requests');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Available sent request IDs: ${_sentRequests.map((req) => req.id).toList()}');
 
         // Try to find the request in storage and add it if it exists
@@ -2218,15 +2244,16 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Save the updated request to storage
       await _saveSentRequest(request);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Key exchange request marked as accepted (legacy mode)');
 
       // Use the old retry mechanism
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Key exchange accepted, waiting for public key to be available...');
       _scheduleKeyExchangeCompletionCheck(recipientId);
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error in legacy fallback: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error in legacy fallback: $e');
     }
   }
 
@@ -2234,7 +2261,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   Future<void> _loadAndAddMissingSentRequestLegacy(
       String requestId, String recipientId) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Attempting to load missing sent request from storage (legacy mode)');
 
       final prefsService = SeSharedPreferenceService();
@@ -2250,13 +2277,13 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
               req['fromSessionId'] == SeSessionService().currentSessionId,
         );
       } catch (e) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in storage');
         savedRequestData = null;
       }
 
       if (savedRequestData != null) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Found missing request in storage, adding to sent requests (legacy mode)');
 
         try {
@@ -2270,25 +2297,25 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
           // Save the updated request
           await _saveSentRequest(request);
 
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Missing sent request loaded and marked as accepted (legacy mode)');
 
           // Use the old retry mechanism
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Key exchange accepted, waiting for public key to be available...');
           _scheduleKeyExchangeCompletionCheck(recipientId);
         } catch (parseError) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Error parsing saved request: $parseError');
         }
       } else {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: Request $requestId not found in storage either');
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: This might be a new request or storage issue');
       }
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error loading missing sent request: $e');
     }
   }
@@ -2303,10 +2330,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       request.respondedAt = DateTime.now();
       notifyListeners();
       await _saveReceivedRequest(request);
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Received request status updated to $status');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error updating received request status: $e');
     }
   }
@@ -2334,7 +2361,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Fallback to session ID format if no display name found
       return 'User ${userId.substring(0, 8)}...';
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error getting display name for $userId: $e');
       return 'Unknown User';
     }
@@ -2354,7 +2381,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
       return false;
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error checking completion status: $e');
       return false;
     }
@@ -2369,7 +2396,8 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
       return completedExchanges[userId];
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error getting completion data: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error getting completion data: $e');
       return null;
     }
   }
@@ -2377,7 +2405,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Refresh UI when key exchange data is updated
   Future<void> refreshKeyExchangeData() async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Refreshing key exchange data for UI update');
 
       // Reload data from storage to get latest updates
@@ -2386,10 +2414,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Notify listeners to refresh UI
       notifyListeners();
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Key exchange data refreshed, UI updated');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error refreshing key exchange data: $e');
     }
   }
@@ -2397,7 +2425,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Update display name for a user and refresh UI
   Future<void> updateUserDisplayName(String userId, String displayName) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Updating display name for $userId to: $displayName');
 
       // Store the display name mapping
@@ -2407,7 +2435,8 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       displayNameMappings[userId] = displayName;
       await prefsService.setJson('ker_display_names', displayNameMappings);
 
-      print('🔑 KeyExchangeRequestProvider: ✅ Display name mapping stored');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: ✅ Display name mapping stored');
 
       // Update display names in all key exchange requests for this user
       bool hasUpdates = false;
@@ -2416,7 +2445,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       for (final request in _sentRequests) {
         if (request.toSessionId == userId &&
             request.displayName != displayName) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Updating sent request display name from "${request.displayName}" to "$displayName"');
           request.displayName = displayName;
           hasUpdates = true;
@@ -2427,7 +2456,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       for (final request in _receivedRequests) {
         if (request.fromSessionId == userId &&
             request.displayName != displayName) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Updating received request display name from "${request.displayName}" to "$displayName"');
           request.displayName = displayName;
           hasUpdates = true;
@@ -2438,28 +2467,30 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       for (final request in _pendingRequests) {
         if (request.fromSessionId == userId &&
             request.displayName != displayName) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: Updating pending request display name from "${request.displayName}" to "$displayName"');
           request.displayName = displayName;
           hasUpdates = true;
         }
       }
 
-      print('🔑 KeyExchangeRequestProvider: Has updates: $hasUpdates');
+      Logger.debug('🔑 KeyExchangeRequestProvider: Has updates: $hasUpdates');
 
       // Save updated requests to storage
       if (hasUpdates) {
         await _saveAllRequests();
-        print('🔑 KeyExchangeRequestProvider: ✅ All requests saved to storage');
+        Logger.debug(
+            '🔑 KeyExchangeRequestProvider: ✅ All requests saved to storage');
       }
 
       // Refresh the UI
       await refreshKeyExchangeData();
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Display name updated and UI refreshed');
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error updating display name: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error updating display name: $e');
     }
   }
 
@@ -2486,22 +2517,25 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       await prefsService.setJsonList(
           'key_exchange_pending_requests', pendingRequestsJson);
 
-      print('🔑 KeyExchangeRequestProvider: ✅ All requests saved to storage');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: ✅ All requests saved to storage');
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error saving all requests: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error saving all requests: $e');
     }
   }
 
   /// Delete/revoke a sent key exchange request
   Future<bool> deleteSentRequest(String requestId) async {
     try {
-      print('🔑 KeyExchangeRequestProvider: Deleting sent request: $requestId');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Deleting sent request: $requestId');
 
       // Find the request
       final requestIndex =
           _sentRequests.indexWhere((req) => req.id == requestId);
       if (requestIndex == -1) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Sent request not found: $requestId');
         return false;
       }
@@ -2515,24 +2549,24 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
             recipientId: request.toSessionId,
             requestId: request.id,
           );
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ✅ Revoke notification sent to server');
         } catch (e) {
-          print(
+          Logger.debug(
               '🔑 KeyExchangeRequestProvider: ⚠️ Failed to notify server about revocation: $e');
         }
       }
 
       // For now, we'll just log the revocation
       // In the future, this can be implemented to send revocation events via the channel socket
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: 📊 Key exchange request revoked: $requestId');
 
       // Update local request status
       request.status = 'revoked';
       notifyListeners();
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Key exchange request revoked locally: $requestId');
 
       // Remove from local list
@@ -2544,11 +2578,12 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
 
       // Note: Pending exchange cleanup is handled by KeyExchangeService internally
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Sent request deleted successfully');
       return true;
     } catch (e) {
-      print('🔑 KeyExchangeRequestProvider: Error deleting sent request: $e');
+      Logger.debug(
+          '🔑 KeyExchangeRequestProvider: Error deleting sent request: $e');
       return false;
     }
   }
@@ -2556,14 +2591,14 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Delete a received key exchange request
   Future<bool> deleteReceivedRequest(String requestId) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Deleting received request: $requestId');
 
       // Find the request
       final requestIndex =
           _receivedRequests.indexWhere((req) => req.id == requestId);
       if (requestIndex == -1) {
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ❌ Received request not found: $requestId');
         return false;
       }
@@ -2577,11 +2612,11 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       // Remove from storage
       await _removeReceivedRequestFromStorage(requestId);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Received request deleted successfully');
       return true;
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error deleting received request: $e');
       return false;
     }
@@ -2599,10 +2634,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       await prefsService.setJsonList(
           'key_exchange_sent_requests', updatedRequests);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Sent request removed from storage');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error removing sent request from storage: $e');
     }
   }
@@ -2620,10 +2655,10 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
       await prefsService.setJsonList(
           'key_exchange_received_requests', updatedRequests);
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Received request removed from storage');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error removing received request from storage: $e');
     }
   }
@@ -2631,7 +2666,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
   /// Handle key exchange request revoked by sender
   Future<void> handleRequestRevoked(String requestId, String senderId) async {
     try {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Handling revoked request: $requestId from $senderId');
 
       // Find and remove the received request
@@ -2641,7 +2676,7 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         _receivedRequests.removeAt(receivedIndex);
         notifyListeners();
         await _removeReceivedRequestFromStorage(requestId);
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Revoked request removed from received list');
       }
 
@@ -2651,14 +2686,14 @@ class KeyExchangeRequestProvider extends ChangeNotifier {
         _sentRequests.removeAt(sentIndex);
         notifyListeners();
         await _removeSentRequestFromStorage(requestId);
-        print(
+        Logger.debug(
             '🔑 KeyExchangeRequestProvider: ✅ Revoked request removed from sent list');
       }
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: ✅ Request revocation handled successfully');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔑 KeyExchangeRequestProvider: Error handling request revocation: $e');
     }
   }

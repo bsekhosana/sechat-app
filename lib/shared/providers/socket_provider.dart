@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
+import '/../core/utils/logger.dart';
 
 /// Socket Provider
 /// Manages socket service state and provides it to the app
@@ -35,7 +36,7 @@ class SocketProvider extends ChangeNotifier {
       _connectionError = null;
       notifyListeners();
 
-      print('🔌 SocketProvider: Initializing socket...');
+      Logger.debug(' SocketProvider: Initializing socket...');
 
       // For SeSocketService, we need to connect with a session ID
       final sessionId = SeSessionService().currentSessionId;
@@ -44,13 +45,13 @@ class SocketProvider extends ChangeNotifier {
         _isConnected = _socketService.isConnected;
         _currentSessionId = _socketService.currentSessionId;
         _reconnectAttempts = 0;
-        print('🔌 SocketProvider: ✅ Socket initialized successfully');
+        Logger.success(' SocketProvider:  Socket initialized successfully');
 
         // Listen to connection state changes from the socket service
         _setupConnectionStateListener();
       } else {
         _connectionError = 'No session ID available';
-        print('🔌 SocketProvider: ❌ No session ID available');
+        Logger.error(' SocketProvider:  No session ID available');
         _isConnecting = false;
         notifyListeners();
         return false;
@@ -62,7 +63,7 @@ class SocketProvider extends ChangeNotifier {
     } catch (e) {
       _isConnecting = false;
       _connectionError = 'Error: $e';
-      print('🔌 SocketProvider: ❌ Socket initialization error: $e');
+      Logger.error(' SocketProvider:  Socket initialization error: $e');
       notifyListeners();
       return false;
     }
@@ -70,13 +71,13 @@ class SocketProvider extends ChangeNotifier {
 
   /// Setup connection state listener
   void _setupConnectionStateListener() {
-    print('🔌 SocketProvider: Setting up connection state listener...');
+    Logger.debug(' SocketProvider: Setting up connection state listener...');
     _socketService.connectionStateStream.listen((isConnected) {
       // Throttle logging to prevent spam
       final now = DateTime.now();
       if (_lastConnectionStateLog == null ||
           now.difference(_lastConnectionStateLog!).inSeconds >= 2) {
-        print('🔌 SocketProvider: Connection state changed: $isConnected');
+        Logger.debug(' SocketProvider: Connection state changed: $isConnected');
         _lastConnectionStateLog = now;
       }
 
@@ -92,10 +93,11 @@ class SocketProvider extends ChangeNotifier {
       notifyListeners();
 
       // Log the final state after sync
-      print(
-          '🔌 SocketProvider: Final state after sync - Connected: $_isConnected, Connecting: $_isConnecting');
+      Logger.debug(
+          ' SocketProvider: Final state after sync - Connected: $_isConnected, Connecting: $_isConnecting');
     });
-    print('🔌 SocketProvider: Connection state listener set up successfully');
+    Logger.debug(
+        ' SocketProvider: Connection state listener set up successfully');
   }
 
   /// Sync all state from socket service to ensure consistency
@@ -118,8 +120,8 @@ class SocketProvider extends ChangeNotifier {
         now.difference(_lastConnectionStateLog!).inSeconds >= 2 ||
         wasConnected != _isConnected ||
         wasConnecting != _isConnecting) {
-      print(
-          '🔌 SocketProvider: State synced from socket service - Connected: $_isConnected, Connecting: $_isConnecting');
+      Logger.debug(
+          ' SocketProvider: State synced from socket service - Connected: $_isConnected, Connecting: $_isConnecting');
       _lastConnectionStateLog = now;
     }
   }
@@ -141,19 +143,19 @@ class SocketProvider extends ChangeNotifier {
     final actualConnected = _socketService.isConnected;
 
     if (_isConnected != actualConnected) {
-      print(
-          '🔌 SocketProvider: iOS state mismatch detected! Provider: $_isConnected, Socket: $actualConnected');
+      Logger.debug(
+          ' SocketProvider: iOS state mismatch detected! Provider: $_isConnected, Socket: $actualConnected');
       _isConnected = actualConnected;
     }
 
     _lastiOSValidation = now;
-    print('🔌 SocketProvider: iOS connection state validated');
+    Logger.debug(' SocketProvider: iOS connection state validated');
   }
 
   /// Disconnect socket
   Future<void> disconnect() async {
     try {
-      print('🔌 SocketProvider: Disconnecting socket...');
+      Logger.debug(' SocketProvider: Disconnecting socket...');
 
       await _socketService.disconnect();
 
@@ -163,10 +165,10 @@ class SocketProvider extends ChangeNotifier {
       _connectionError = null;
       _reconnectAttempts = 0;
 
-      print('🔌 SocketProvider: ✅ Socket disconnected');
+      Logger.success(' SocketProvider:  Socket disconnected');
       notifyListeners();
     } catch (e) {
-      print('🔌 SocketProvider: ❌ Error disconnecting socket: $e');
+      Logger.error(' SocketProvider:  Error disconnecting socket: $e');
       _connectionError = 'Error disconnecting: $e';
       notifyListeners();
     }
@@ -236,13 +238,13 @@ class SocketProvider extends ChangeNotifier {
     }
 
     notifyListeners();
-    print(
-        '🔌 SocketProvider: Synced connection state - Connected: $_isConnected, Connecting: $_isConnecting');
+    Logger.debug(
+        ' SocketProvider: Synced connection state - Connected: $_isConnected, Connecting: $_isConnecting');
   }
 
   /// Force refresh connection state
   void refreshConnectionState() {
-    print('🔌 SocketProvider: Refreshing connection state...');
+    Logger.debug(' SocketProvider: Refreshing connection state...');
 
     // Force the socket service to refresh its status first
     _socketService.refreshConnectionStatus();
@@ -252,7 +254,7 @@ class SocketProvider extends ChangeNotifier {
 
     // Also check if we need to set up the listener
     if (_isConnected) {
-      print('🔌 SocketProvider: Setting up connection state listener...');
+      Logger.debug(' SocketProvider: Setting up connection state listener...');
       _setupConnectionStateListener();
     }
   }
@@ -279,12 +281,12 @@ class SocketProvider extends ChangeNotifier {
   /// Manually test connection
   Future<bool> testConnection() async {
     try {
-      print('🔌 SocketProvider: Testing connection...');
+      Logger.debug(' SocketProvider: Testing connection...');
       final success = await _socketService.testConnection();
-      print('🔌 SocketProvider: Connection test result: $success');
+      Logger.debug(' SocketProvider: Connection test result: $success');
       return success;
     } catch (e) {
-      print('🔌 SocketProvider: ❌ Connection test error: $e');
+      Logger.error(' SocketProvider:  Connection test error: $e');
       return false;
     }
   }
@@ -292,18 +294,18 @@ class SocketProvider extends ChangeNotifier {
   /// Force manual connection
   Future<void> forceManualConnection() async {
     try {
-      print('🔌 SocketProvider: Force manual connection requested...');
+      Logger.debug(' SocketProvider: Force manual connection requested...');
       await _socketService.manualConnect();
       syncConnectionState();
     } catch (e) {
-      print('🔌 SocketProvider: ❌ Force manual connection error: $e');
+      Logger.error(' SocketProvider:  Force manual connection error: $e');
     }
   }
 
   /// Emergency reconnect
   Future<void> emergencyReconnect() async {
     try {
-      print('🔌 SocketProvider: Emergency reconnect requested...');
+      Logger.debug(' SocketProvider: Emergency reconnect requested...');
       await _socketService.emergencyReconnect();
 
       // Wait a bit for the socket to stabilize
@@ -314,25 +316,26 @@ class SocketProvider extends ChangeNotifier {
 
       // Double-check the state after a delay
       Future.delayed(const Duration(seconds: 1), () {
-        print('🔌 SocketProvider: Double-checking state after reconnect...');
+        Logger.debug(
+            ' SocketProvider: Double-checking state after reconnect...');
         syncConnectionState();
       });
 
       notifyListeners();
     } catch (e) {
-      print('🔌 SocketProvider: ❌ Emergency reconnect error: $e');
+      Logger.error(' SocketProvider:  Emergency reconnect error: $e');
     }
   }
 
   /// Debug print current state
   void debugPrintState() {
-    print('🔌 SocketProvider: === DEBUG STATE ===');
-    print('🔌 SocketProvider: isConnected: $_isConnected');
-    print('🔌 SocketProvider: isConnecting: $_isConnecting');
-    print('🔌 SocketProvider: currentSessionId: $_currentSessionId');
-    print('🔌 SocketProvider: connectionError: $_connectionError');
-    print('🔌 SocketProvider: reconnectAttempts: $_reconnectAttempts');
-    print('🔌 SocketProvider: === END DEBUG STATE ===');
+    Logger.debug(' SocketProvider: === DEBUG STATE ===');
+    Logger.debug(' SocketProvider: isConnected: $_isConnected');
+    Logger.debug(' SocketProvider: isConnecting: $_isConnecting');
+    Logger.debug(' SocketProvider: currentSessionId: $_currentSessionId');
+    Logger.debug(' SocketProvider: connectionError: $_connectionError');
+    Logger.debug(' SocketProvider: reconnectAttempts: $_reconnectAttempts');
+    Logger.debug(' SocketProvider: === END DEBUG STATE ===');
 
     // Also call the socket service debug method
     _socketService.debugPrintState();

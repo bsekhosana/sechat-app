@@ -4,6 +4,7 @@ import '../providers/chat_list_provider.dart';
 import '../models/message.dart';
 import '../services/message_status_tracking_service.dart';
 import '../models/message_status.dart' as msg_status;
+import '/../core/utils/logger.dart';
 
 /// Service to handle integration between UnifiedChatProvider and existing systems
 class UnifiedChatIntegrationService {
@@ -19,22 +20,22 @@ class UnifiedChatIntegrationService {
   void registerActiveProvider(
       String conversationId, UnifiedChatProvider provider) {
     _activeProviders[conversationId] = provider;
-    print(
-        'UnifiedChatIntegrationService: ✅ Registered provider for conversation: $conversationId');
+    Logger.success(
+        'UnifiedChatIntegrationService:  Registered provider for conversation: $conversationId');
   }
 
   /// Unregister an active chat provider
   void unregisterActiveProvider(String conversationId) {
     _activeProviders.remove(conversationId);
-    print(
-        'UnifiedChatIntegrationService: ❌ Unregistered provider for conversation: $conversationId');
+    Logger.error(
+        'UnifiedChatIntegrationService:  Unregistered provider for conversation: $conversationId');
   }
 
   /// Set the chat list provider for integration
   void setChatListProvider(ChatListProvider? provider) {
     _chatListProvider = provider;
-    print(
-        'UnifiedChatIntegrationService: ${provider != null ? '✅' : '❌'} Chat list provider ${provider != null ? 'set' : 'cleared'}');
+    Logger.success(
+        'UnifiedChatIntegrationService: ${provider != null ? '' : '❌'} Chat list provider ${provider != null ? 'set' : 'cleared'}');
   }
 
   /// Handle new message arrival
@@ -61,8 +62,8 @@ class UnifiedChatIntegrationService {
     // Notify active provider if it's for the current conversation
     final provider = _activeProviders[conversationId];
     if (provider != null) {
-      print(
-          'UnifiedChatIntegrationService: 🔄 Notifying active provider for conversation: $conversationId');
+      Logger.info(
+          'UnifiedChatIntegrationService:  Notifying active provider for conversation: $conversationId');
       // The provider will handle the message through its own socket callbacks
     }
   }
@@ -75,8 +76,8 @@ class UnifiedChatIntegrationService {
           provider.messages.any((msg) => msg.id == update.messageId);
       if (hasMessage) {
         provider.handleMessageStatusUpdate(update);
-        print(
-            'UnifiedChatIntegrationService: ✅ Status update forwarded to provider');
+        Logger.success(
+            'UnifiedChatIntegrationService:  Status update forwarded to provider');
         break;
       }
     }
@@ -91,8 +92,8 @@ class UnifiedChatIntegrationService {
     final provider = _activeProviders[conversationId];
     if (provider != null && provider.currentRecipientId == senderId) {
       // The provider will handle typing through its socket callbacks
-      print(
-          'UnifiedChatIntegrationService: ⌨️ Typing indicator for active conversation: $conversationId');
+      Logger.debug(
+          'UnifiedChatIntegrationService:  Typing indicator for active conversation: $conversationId');
     }
   }
 
@@ -106,7 +107,7 @@ class UnifiedChatIntegrationService {
     for (final provider in _activeProviders.values) {
       if (provider.currentRecipientId == userId) {
         provider.updateRecipientPresence(isOnline, lastSeen);
-        print(
+        Logger.debug(
             'UnifiedChatIntegrationService: 🟢 Presence update for active conversation');
       }
     }
@@ -135,6 +136,6 @@ class UnifiedChatIntegrationService {
   /// Clear all active providers (for cleanup)
   void clearAllProviders() {
     _activeProviders.clear();
-    print('UnifiedChatIntegrationService: 🧹 Cleared all active providers');
+    Logger.info('UnifiedChatIntegrationService:  Cleared all active providers');
   }
 }

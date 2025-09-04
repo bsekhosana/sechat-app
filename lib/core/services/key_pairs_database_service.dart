@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Database service for storing key pairs locally
 class KeyPairsDatabaseService {
@@ -58,14 +59,14 @@ class KeyPairsDatabaseService {
       CREATE INDEX idx_key_pairs_active ON $_tableName (isActive)
     ''');
 
-    print('🔑 KeyPairsDatabaseService: ✅ Database table created');
+    Logger.success(' KeyPairsDatabaseService:  Database table created');
   }
 
   /// Handle database upgrades
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // Handle future database schema changes here
-    print(
-        '🔑 KeyPairsDatabaseService: 🔄 Database upgraded from $oldVersion to $newVersion');
+    Logger.info(
+        ' KeyPairsDatabaseService:  Database upgraded from $oldVersion to $newVersion');
   }
 
   /// Store a key pair
@@ -101,10 +102,10 @@ class KeyPairsDatabaseService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      print(
-          '🔑 KeyPairsDatabaseService: ✅ Stored $keyType key for user: $userId');
+      Logger.success(
+          ' KeyPairsDatabaseService:  Stored $keyType key for user: $userId');
     } catch (e) {
-      print('🔑 KeyPairsDatabaseService: ❌ Error storing key pair: $e');
+      Logger.error(' KeyPairsDatabaseService:  Error storing key pair: $e');
       rethrow;
     }
   }
@@ -128,16 +129,16 @@ class KeyPairsDatabaseService {
 
       if (result.isNotEmpty) {
         final keyData = result.first['keyData'] as String;
-        print(
-            '🔑 KeyPairsDatabaseService: ✅ Retrieved $keyType key for user: $userId');
+        Logger.success(
+            ' KeyPairsDatabaseService:  Retrieved $keyType key for user: $userId');
         return keyData;
       } else {
-        print(
-            '🔑 KeyPairsDatabaseService: ❌ No $keyType key found for user: $userId');
+        Logger.error(
+            ' KeyPairsDatabaseService:  No $keyType key found for user: $userId');
         return null;
       }
     } catch (e) {
-      print('🔑 KeyPairsDatabaseService: ❌ Error getting key pair: $e');
+      Logger.error(' KeyPairsDatabaseService:  Error getting key pair: $e');
       return null;
     }
   }
@@ -162,11 +163,12 @@ class KeyPairsDatabaseService {
         keyPairs[keyType] = keyData;
       }
 
-      print(
-          '🔑 KeyPairsDatabaseService: ✅ Retrieved ${keyPairs.length} key pairs for user: $userId');
+      Logger.success(
+          ' KeyPairsDatabaseService:  Retrieved ${keyPairs.length} key pairs for user: $userId');
       return keyPairs;
     } catch (e) {
-      print('🔑 KeyPairsDatabaseService: ❌ Error getting all key pairs: $e');
+      Logger.error(
+          ' KeyPairsDatabaseService:  Error getting all key pairs: $e');
       return {};
     }
   }
@@ -186,10 +188,10 @@ class KeyPairsDatabaseService {
         whereArgs: [userId, keyType],
       );
 
-      print(
-          '🔑 KeyPairsDatabaseService: ✅ Deleted $keyType key for user: $userId');
+      Logger.success(
+          ' KeyPairsDatabaseService:  Deleted $keyType key for user: $userId');
     } catch (e) {
-      print('🔑 KeyPairsDatabaseService: ❌ Error deleting key pair: $e');
+      Logger.error(' KeyPairsDatabaseService:  Error deleting key pair: $e');
       rethrow;
     }
   }
@@ -206,10 +208,11 @@ class KeyPairsDatabaseService {
         whereArgs: [userId],
       );
 
-      print(
-          '🔑 KeyPairsDatabaseService: ✅ Deleted all key pairs for user: $userId');
+      Logger.success(
+          ' KeyPairsDatabaseService:  Deleted all key pairs for user: $userId');
     } catch (e) {
-      print('🔑 KeyPairsDatabaseService: ❌ Error deleting all key pairs: $e');
+      Logger.error(
+          ' KeyPairsDatabaseService:  Error deleting all key pairs: $e');
       rethrow;
     }
   }
@@ -231,12 +234,12 @@ class KeyPairsDatabaseService {
       );
 
       final exists = result.isNotEmpty;
-      print(
-          '🔑 KeyPairsDatabaseService: 🔍 Key pair exists check - User: $userId, Type: $keyType, Exists: $exists');
+      Logger.info(
+          ' KeyPairsDatabaseService:  Key pair exists check - User: $userId, Type: $keyType, Exists: $exists');
       return exists;
     } catch (e) {
-      print(
-          '🔑 KeyPairsDatabaseService: ❌ Error checking key pair existence: $e');
+      Logger.error(
+          ' KeyPairsDatabaseService:  Error checking key pair existence: $e');
       return false;
     }
   }
@@ -252,11 +255,12 @@ class KeyPairsDatabaseService {
       );
 
       final count = result.first['count'] as int;
-      print(
-          '🔑 KeyPairsDatabaseService: 📊 Key pair count for user $userId: $count');
+      Logger.debug(
+          ' KeyPairsDatabaseService: 📊 Key pair count for user $userId: $count');
       return count;
     } catch (e) {
-      print('🔑 KeyPairsDatabaseService: ❌ Error getting key pair count: $e');
+      Logger.error(
+          ' KeyPairsDatabaseService:  Error getting key pair count: $e');
       return 0;
     }
   }
@@ -266,7 +270,7 @@ class KeyPairsDatabaseService {
     if (_database != null) {
       await _database!.close();
       _database = null;
-      print('🔑 KeyPairsDatabaseService: 🔒 Database connection closed');
+      Logger.debug(' KeyPairsDatabaseService: 🔒 Database connection closed');
     }
   }
 }

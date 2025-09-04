@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'dart:io';
 import '../models/local_notification_item.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Database service for local notification items
 class LocalNotificationDatabaseService {
@@ -61,15 +62,15 @@ class LocalNotificationDatabaseService {
     await db
         .execute('CREATE INDEX idx_recipientId ON $_tableName(recipientId)');
 
-    print(
-        '📱 LocalNotificationDatabaseService: ✅ Database created successfully');
+    Logger.success(
+        '📱 LocalNotificationDatabaseService:  Database created successfully');
   }
 
   /// Handle database upgrades
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     // Handle future database schema changes here
-    print(
-        '📱 LocalNotificationDatabaseService: 🔄 Database upgraded from $oldVersion to $newVersion');
+    Logger.info(
+        '📱 LocalNotificationDatabaseService:  Database upgraded from $oldVersion to $newVersion');
   }
 
   /// Insert a new notification item
@@ -80,8 +81,8 @@ class LocalNotificationDatabaseService {
       notification.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    print(
-        '📱 LocalNotificationDatabaseService: ✅ Notification inserted: ${notification.id}');
+    Logger.success(
+        '📱 LocalNotificationDatabaseService:  Notification inserted: ${notification.id}');
   }
 
   /// Get all notifications ordered by date (newest first)
@@ -97,8 +98,8 @@ class LocalNotificationDatabaseService {
         try {
           return LocalNotificationItem.fromMap(maps[i]);
         } catch (e) {
-          print(
-              '❌ LocalNotificationDatabaseService: Error parsing notification ${maps[i]['id']}: $e');
+          Logger.error(
+              ' LocalNotificationDatabaseService: Error parsing notification ${maps[i]['id']}: $e');
           // Return a default notification if parsing fails
           return LocalNotificationItem(
             type: 'error',
@@ -111,8 +112,8 @@ class LocalNotificationDatabaseService {
         }
       });
     } catch (e) {
-      print(
-          '❌ LocalNotificationDatabaseService: Error getting notifications: $e');
+      Logger.error(
+          ' LocalNotificationDatabaseService: Error getting notifications: $e');
       rethrow;
     }
   }
@@ -167,8 +168,8 @@ class LocalNotificationDatabaseService {
       where: 'id = ?',
       whereArgs: [notificationId],
     );
-    print(
-        '📱 LocalNotificationDatabaseService: ✅ Notification marked as read: $notificationId');
+    Logger.success(
+        '📱 LocalNotificationDatabaseService:  Notification marked as read: $notificationId');
   }
 
   /// Mark notification as archived
@@ -180,8 +181,8 @@ class LocalNotificationDatabaseService {
       where: 'id = ?',
       whereArgs: [notificationId],
     );
-    print(
-        '📱 LocalNotificationDatabaseService: ✅ Notification archived: $notificationId');
+    Logger.success(
+        '📱 LocalNotificationDatabaseService:  Notification archived: $notificationId');
   }
 
   /// Delete notification by ID
@@ -192,15 +193,16 @@ class LocalNotificationDatabaseService {
       where: 'id = ?',
       whereArgs: [notificationId],
     );
-    print(
-        '📱 LocalNotificationDatabaseService: ✅ Notification deleted: $notificationId');
+    Logger.success(
+        '📱 LocalNotificationDatabaseService:  Notification deleted: $notificationId');
   }
 
   /// Clear all notifications
   Future<void> clearAllNotifications() async {
     final db = await database;
     await db.delete(_tableName);
-    print('📱 LocalNotificationDatabaseService: ✅ All notifications cleared');
+    Logger.success(
+        '📱 LocalNotificationDatabaseService:  All notifications cleared');
   }
 
   /// Reset database (delete and recreate)
@@ -216,16 +218,17 @@ class LocalNotificationDatabaseService {
       final file = File(path);
       if (await file.exists()) {
         await file.delete();
-        print('📱 LocalNotificationDatabaseService: ✅ Database file deleted');
+        Logger.success(
+            '📱 LocalNotificationDatabaseService:  Database file deleted');
       }
 
       // Reinitialize
       await database;
-      print(
-          '📱 LocalNotificationDatabaseService: ✅ Database reset successfully');
+      Logger.success(
+          '📱 LocalNotificationDatabaseService:  Database reset successfully');
     } catch (e) {
-      print(
-          '📱 LocalNotificationDatabaseService: ❌ Failed to reset database: $e');
+      Logger.error(
+          '📱 LocalNotificationDatabaseService:  Failed to reset database: $e');
       rethrow;
     }
   }
@@ -247,7 +250,7 @@ class LocalNotificationDatabaseService {
       [cutoffDateString],
     );
 
-    print(
+    Logger.debug(
         '📱 LocalNotificationDatabaseService: ✅ Old notifications cleared (older than $daysOld days)');
   }
 
@@ -283,7 +286,7 @@ class LocalNotificationDatabaseService {
     if (_database != null) {
       await _database!.close();
       _database = null;
-      print('📱 LocalNotificationDatabaseService: ✅ Database closed');
+      Logger.success('📱 LocalNotificationDatabaseService:  Database closed');
     }
   }
 }

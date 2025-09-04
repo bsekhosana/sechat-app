@@ -10,6 +10,7 @@ import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_
 import 'package:sechat_app/core/services/indicator_service.dart';
 import 'package:provider/provider.dart';
 import 'package:sechat_app/shared/providers/socket_status_provider.dart';
+import '/../core/utils/logger.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -140,11 +141,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       try {
         final socketService = SeSocketService.instance;
         socketService.dispose();
-        print(
-            '🔌 ProfileScreen: ✅ Channel socket disposed before account deletion');
+        Logger.success(
+            ' ProfileScreen:  Channel socket disposed before account deletion');
       } catch (e) {
-        print(
-            '🔌 ProfileScreen: ⚠️ Error disposing channel socket: $e, but continuing with account deletion');
+        Logger.warning(
+            ' ProfileScreen:  Error disposing channel socket: $e, but continuing with account deletion');
       }
 
       // Note: Session deletion on server is now handled by ChannelSocketService
@@ -155,36 +156,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       // CRITICAL: Clear all provider data to prevent old conversations from showing
       try {
-        print('🗑️ ProfileScreen: 🧹 Clearing all provider data...');
+        Logger.info(' ProfileScreen: 🧹 Clearing all provider data...');
 
         // Clear ChatListProvider
         final chatListProvider =
             Provider.of<ChatListProvider>(navigatorContext, listen: false);
         chatListProvider.clearAllData();
-        print('🗑️ ProfileScreen: ✅ ChatListProvider cleared');
+        Logger.success('🗑️ ProfileScreen:  ChatListProvider cleared');
 
         // Clear KeyExchangeRequestProvider
         final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
             navigatorContext,
             listen: false);
         keyExchangeProvider.clearAllData();
-        print('🗑️ ProfileScreen: ✅ KeyExchangeRequestProvider cleared');
+        Logger.success(
+            '🗑️ ProfileScreen:  KeyExchangeRequestProvider cleared');
 
         // Clear IndicatorService
         final indicatorService =
             Provider.of<IndicatorService>(navigatorContext, listen: false);
         indicatorService.clearAllIndicators();
-        print('🗑️ ProfileScreen: ✅ IndicatorService cleared');
+        Logger.success('🗑️ ProfileScreen:  IndicatorService cleared');
 
         // Clear SocketStatusProvider
         final socketStatusProvider =
             Provider.of<SocketStatusProvider>(navigatorContext, listen: false);
         socketStatusProvider.resetState();
-        print('🗑️ ProfileScreen: ✅ SocketStatusProvider reset');
+        Logger.success('🗑️ ProfileScreen:  SocketStatusProvider reset');
 
-        print('🗑️ ProfileScreen: ✅ All provider data cleared');
+        Logger.success('🗑️ ProfileScreen:  All provider data cleared');
       } catch (e) {
-        print('🗑️ ProfileScreen: ⚠️ Warning - provider cleanup failed: $e');
+        Logger.warning(
+            '🗑️ ProfileScreen:  Warning - provider cleanup failed: $e');
         // Don't fail the account deletion if provider cleanup fails
       }
 
@@ -244,39 +247,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
       try {
         final socketService = SeSocketService.instance;
         socketService.dispose();
-        print(
-            '🔌 ProfileScreen: ✅ Channel socket disposed before clearing chats');
+        Logger.success(
+            ' ProfileScreen:  Channel socket disposed before clearing chats');
       } catch (e) {
-        print(
-            '🔌 ProfileScreen: ⚠️ Error disposing channel socket: $e, but continuing with chat clearing');
+        Logger.warning(
+            ' ProfileScreen:  Error disposing channel socket: $e, but continuing with chat clearing');
       }
 
       // Clear ChatListProvider
       final chatListProvider =
           Provider.of<ChatListProvider>(navigatorContext, listen: false);
       chatListProvider.clearAllData();
-      print('🗑️ ProfileScreen: ✅ ChatListProvider cleared');
+      Logger.success('🗑️ ProfileScreen:  ChatListProvider cleared');
 
       // Clear KeyExchangeRequestProvider
       final keyExchangeProvider = Provider.of<KeyExchangeRequestProvider>(
           navigatorContext,
           listen: false);
       keyExchangeProvider.clearAllData();
-      print('🗑️ ProfileScreen: ✅ KeyExchangeRequestProvider cleared');
+      Logger.success('🗑️ ProfileScreen:  KeyExchangeRequestProvider cleared');
 
       // Clear IndicatorService
       final indicatorService =
           Provider.of<IndicatorService>(navigatorContext, listen: false);
       indicatorService.clearAllIndicators();
-      print('🗑️ ProfileScreen: ✅ IndicatorService cleared');
+      Logger.success('🗑️ ProfileScreen:  IndicatorService cleared');
 
       // Clear SocketStatusProvider
       final socketStatusProvider =
           Provider.of<SocketStatusProvider>(navigatorContext, listen: false);
       socketStatusProvider.resetState();
-      print('🗑️ ProfileScreen: ✅ SocketStatusProvider reset');
+      Logger.success('🗑️ ProfileScreen:  SocketStatusProvider reset');
 
-      print('🗑️ ProfileScreen: ✅ All chat data cleared');
+      Logger.success('🗑️ ProfileScreen:  All chat data cleared');
 
       // Close loading dialog
       Navigator.of(navigatorContext).pop();
@@ -323,19 +326,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   } else {
                     // This part of the logic needs to be updated to use ChannelSocketService
                     // For now, we'll just print a message as the original SeSocketService is removed.
-                    print(
-                        '🔌 ProfileScreen: RealtimeServiceManager not initialized, cannot send offline status.');
+                    Logger.debug(
+                        ' ProfileScreen: RealtimeServiceManager not initialized, cannot send offline status.');
                   }
                 } catch (e) {
                   // This part of the logic needs to be updated to use ChannelSocketService
-                  print('🔌 ProfileScreen: Error sending offline status: $e');
+                  Logger.debug(
+                      ' ProfileScreen: Error sending offline status: $e');
                 }
                 socketService.dispose(); // Disconnect the channel socket
-                print(
-                    '🔌 ProfileScreen: ✅ Channel socket disconnected during logout');
+                Logger.success(
+                    ' ProfileScreen:  Channel socket disconnected during logout');
               } catch (e) {
-                print(
-                    '🔌 ProfileScreen: ⚠️ Error handling socket during logout: $e');
+                Logger.warning(
+                    ' ProfileScreen:  Error handling socket during logout: $e');
               }
 
               await SeSessionService().logout();

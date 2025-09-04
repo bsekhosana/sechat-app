@@ -10,6 +10,7 @@ import '../widgets/unified_virtualized_message_list.dart';
 import '../widgets/unified_chat_input_area.dart';
 import '../widgets/unified_chat_header.dart';
 import '../widgets/unified_typing_indicator.dart';
+import '/../core/utils/logger.dart';
 
 /// Modern, unified chat screen with WhatsApp-like design and improved performance
 class UnifiedChatScreen extends StatefulWidget {
@@ -430,7 +431,7 @@ class _UnifiedChatScreenState extends State<UnifiedChatScreen>
           messageType: MessageType.text,
         );
       } catch (e) {
-        print('UnifiedChatScreen: ⚠️ Could not update chat list: $e');
+        Logger.warning('UnifiedChatScreen:  Could not update chat list: $e');
       }
 
       // Auto-scroll to bottom
@@ -572,7 +573,7 @@ class _UnifiedChatScreenState extends State<UnifiedChatScreen>
                 prefixIcon: const Icon(Icons.search),
               ),
               onChanged: (value) {
-                print('🔍 Searching for: $value');
+                Logger.info(' Searching for: $value');
               },
             ),
             const SizedBox(height: 16),
@@ -623,7 +624,7 @@ class _UnifiedChatScreenState extends State<UnifiedChatScreen>
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              print('🗑️ Delete chat confirmed');
+              Logger.info(' Delete chat confirmed');
               Navigator.pop(context);
             },
             child: Text(

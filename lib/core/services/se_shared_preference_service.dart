@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '/..//../core/utils/logger.dart';
 
 class SeSharedPreferenceService {
   static final SeSharedPreferenceService _instance =
@@ -15,13 +16,13 @@ class SeSharedPreferenceService {
   Future<void> initialize() async {
     if (_prefs != null) return;
     if (_isInitializing) return;
-    
+
     _isInitializing = true;
     try {
       _prefs = await SharedPreferences.getInstance();
-      print('🔍 SeSharedPreferenceService: Initialized successfully');
+      Logger.info(' SeSharedPreferenceService: Initialized successfully');
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error initializing: $e');
+      Logger.info(' SeSharedPreferenceService: Error initializing: $e');
     } finally {
       _isInitializing = false;
     }
@@ -34,7 +35,8 @@ class SeSharedPreferenceService {
       final result = await _prefs!.setString(key, value);
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error setting string for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error setting string for key "$key": $e');
       return false;
     }
   }
@@ -44,7 +46,8 @@ class SeSharedPreferenceService {
       await _ensureInitialized();
       return _prefs!.getString(key);
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting string for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error getting string for key "$key": $e');
       return null;
     }
   }
@@ -55,7 +58,8 @@ class SeSharedPreferenceService {
       final result = await _prefs!.setBool(key, value);
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error setting bool for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error setting bool for key "$key": $e');
       return false;
     }
   }
@@ -65,7 +69,8 @@ class SeSharedPreferenceService {
       await _ensureInitialized();
       return _prefs!.getBool(key);
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting bool for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error getting bool for key "$key": $e');
       return null;
     }
   }
@@ -76,7 +81,8 @@ class SeSharedPreferenceService {
       final result = await _prefs!.setInt(key, value);
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error setting int for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error setting int for key "$key": $e');
       return false;
     }
   }
@@ -86,7 +92,8 @@ class SeSharedPreferenceService {
       await _ensureInitialized();
       return _prefs!.getInt(key);
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting int for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error getting int for key "$key": $e');
       return null;
     }
   }
@@ -97,7 +104,8 @@ class SeSharedPreferenceService {
       final result = await _prefs!.setDouble(key, value);
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error setting double for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error setting double for key "$key": $e');
       return false;
     }
   }
@@ -107,7 +115,8 @@ class SeSharedPreferenceService {
       await _ensureInitialized();
       return _prefs!.getDouble(key);
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting double for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error getting double for key "$key": $e');
       return null;
     }
   }
@@ -118,7 +127,8 @@ class SeSharedPreferenceService {
       final result = await _prefs!.setStringList(key, value);
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error setting string list for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error setting string list for key "$key": $e');
       return false;
     }
   }
@@ -128,7 +138,8 @@ class SeSharedPreferenceService {
       await _ensureInitialized();
       return _prefs!.getStringList(key);
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting string list for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error getting string list for key "$key": $e');
       return null;
     }
   }
@@ -140,7 +151,8 @@ class SeSharedPreferenceService {
       final result = await setString(key, jsonString);
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error setting JSON for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error setting JSON for key "$key": $e');
       return false;
     }
   }
@@ -154,7 +166,8 @@ class SeSharedPreferenceService {
       }
       return null;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting JSON for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error getting JSON for key "$key": $e');
       return null;
     }
   }
@@ -167,7 +180,8 @@ class SeSharedPreferenceService {
       final result = await setString(key, jsonString);
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error setting JSON list for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error setting JSON list for key "$key": $e');
       return false;
     }
   }
@@ -182,7 +196,8 @@ class SeSharedPreferenceService {
       }
       return null;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting JSON list for key "$key": $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error getting JSON list for key "$key": $e');
       return null;
     }
   }
@@ -194,7 +209,7 @@ class SeSharedPreferenceService {
       final result = await _prefs!.remove(key);
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error removing key "$key": $e');
+      Logger.info(' SeSharedPreferenceService: Error removing key "$key": $e');
       return false;
     }
   }
@@ -209,7 +224,8 @@ class SeSharedPreferenceService {
       }
       return allSuccess;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error removing multiple keys: $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error removing multiple keys: $e');
       return false;
     }
   }
@@ -221,7 +237,7 @@ class SeSharedPreferenceService {
       final result = await _prefs!.clear();
       return result;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error clearing all data: $e');
+      Logger.info(' SeSharedPreferenceService: Error clearing all data: $e');
       return false;
     }
   }
@@ -233,7 +249,7 @@ class SeSharedPreferenceService {
       final exists = _prefs!.containsKey(key);
       return exists;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error checking key "$key": $e');
+      Logger.info(' SeSharedPreferenceService: Error checking key "$key": $e');
       return false;
     }
   }
@@ -245,7 +261,7 @@ class SeSharedPreferenceService {
       final keys = _prefs!.getKeys();
       return keys;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting all keys: $e');
+      Logger.info(' SeSharedPreferenceService: Error getting all keys: $e');
       return <String>{};
     }
   }
@@ -264,7 +280,7 @@ class SeSharedPreferenceService {
 
       return data;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error getting all data: $e');
+      Logger.info(' SeSharedPreferenceService: Error getting all data: $e');
       return <String, dynamic>{};
     }
   }
@@ -298,7 +314,8 @@ class SeSharedPreferenceService {
 
       return validation;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error validating data integrity: $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error validating data integrity: $e');
       return <String, dynamic>{};
     }
   }
@@ -323,7 +340,7 @@ class SeSharedPreferenceService {
 
       return backupData;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error creating backup: $e');
+      Logger.info(' SeSharedPreferenceService: Error creating backup: $e');
       return <String, dynamic>{};
     }
   }
@@ -353,7 +370,8 @@ class SeSharedPreferenceService {
 
       return true;
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: Error restoring from backup: $e');
+      Logger.info(
+          ' SeSharedPreferenceService: Error restoring from backup: $e');
       return false;
     }
   }
@@ -362,22 +380,25 @@ class SeSharedPreferenceService {
   Future<void> clearAllContacts() async {
     try {
       await _ensureInitialized();
-      
+
       // Remove contacts list
       await _prefs!.remove('contacts');
-      
+
       // Remove any other contact-related keys
       final keys = _prefs!.getKeys();
-      final contactKeys = keys.where((key) => key.startsWith('contact_') || key.contains('contact'));
-      
+      final contactKeys = keys.where(
+          (key) => key.startsWith('contact_') || key.contains('contact'));
+
       for (final key in contactKeys) {
         await _prefs!.remove(key);
-        print('🔍 SeSharedPreferenceService: ✅ Removed contact key: $key');
+        Logger.success(
+            '🔍 SeSharedPreferenceService:  Removed contact key: $key');
       }
-      
-      print('🔍 SeSharedPreferenceService: 🗑️ All contacts cleared');
+
+      Logger.info(' SeSharedPreferenceService: 🗑️ All contacts cleared');
     } catch (e) {
-      print('🔍 SeSharedPreferenceService: ❌ Error clearing contacts: $e');
+      Logger.error(
+          '🔍 SeSharedPreferenceService:  Error clearing contacts: $e');
       rethrow;
     }
   }

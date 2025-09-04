@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Local notification item for in-app notifications
 class LocalNotificationItem {
@@ -101,7 +102,8 @@ class LocalNotificationItem {
                 map['metadata'] as Map<String, dynamic>);
           }
         } catch (e) {
-          print('⚠️ LocalNotificationItem: Failed to parse metadata: $e');
+          Logger.warning(
+              ' LocalNotificationItem: Failed to parse metadata: $e');
           parsedMetadata = null;
         }
       }
@@ -126,8 +128,8 @@ class LocalNotificationItem {
             : DateTime.now(),
       );
     } catch (e) {
-      print('❌ LocalNotificationItem: Error creating from map: $e');
-      print('❌ LocalNotificationItem: Map data: $map');
+      Logger.error(' LocalNotificationItem: Error creating from map: $e');
+      Logger.error(' LocalNotificationItem: Map data: $map');
       rethrow;
     }
   }

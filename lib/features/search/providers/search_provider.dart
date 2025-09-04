@@ -9,6 +9,7 @@ import '../../../core/services/se_session_service.dart';
 import '../../../core/services/network_service.dart';
 import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/global_user_service.dart';
+import '/../core/utils/logger.dart';
 
 // Search state enum
 enum SearchState { idle, loading, success, error, noResults }
@@ -39,7 +40,7 @@ class SearchProvider extends ChangeNotifier {
       _lastSearchQuery = sessionId;
       notifyListeners();
 
-      print('🔍 SearchProvider: Searching for Session ID: $sessionId');
+      Logger.info(' SearchProvider: Searching for Session ID: $sessionId');
 
       // Validate Session ID format
       if (!_isValidSessionId(sessionId)) {
@@ -71,9 +72,10 @@ class SearchProvider extends ChangeNotifier {
       // Add to recent searches
       _addToRecentSearches(user);
 
-      print('🔍 SearchProvider: Search completed for Session ID: $sessionId');
+      Logger.info(
+          ' SearchProvider: Search completed for Session ID: $sessionId');
     } catch (e) {
-      print('🔍 SearchProvider: Error searching by Session ID: $e');
+      Logger.info(' SearchProvider: Error searching by Session ID: $e');
       _error = 'Search failed: $e';
       _searchResults = [];
     } finally {
@@ -90,7 +92,7 @@ class SearchProvider extends ChangeNotifier {
       _lastSearchQuery = displayName;
       notifyListeners();
 
-      print('🔍 SearchProvider: Searching for display name: $displayName');
+      Logger.info(' SearchProvider: Searching for display name: $displayName');
 
       // For now, we'll just create a mock user since we don't have a user directory
       // In a real implementation, this would search a user directory
@@ -108,10 +110,10 @@ class SearchProvider extends ChangeNotifier {
       // Add to recent searches
       _addToRecentSearches(user);
 
-      print(
-          '🔍 SearchProvider: Found ${_searchResults.length} users with display name: $displayName');
+      Logger.info(
+          ' SearchProvider: Found ${_searchResults.length} users with display name: $displayName');
     } catch (e) {
-      print('🔍 SearchProvider: Error searching by display name: $e');
+      Logger.info(' SearchProvider: Error searching by display name: $e');
       _error = 'Search failed: $e';
       _searchResults = [];
     } finally {
@@ -123,14 +125,14 @@ class SearchProvider extends ChangeNotifier {
   // Add contact (send invitation)
   Future<bool> addContact(String sessionId) async {
     try {
-      print('🔍 SearchProvider: Adding contact: $sessionId');
+      Logger.info(' SearchProvider: Adding contact: $sessionId');
 
       // This would be handled by the invitation system
       // For now, we'll just return success
-      print('🔍 SearchProvider: Contact added successfully: $sessionId');
+      Logger.info(' SearchProvider: Contact added successfully: $sessionId');
       return true;
     } catch (e) {
-      print('🔍 SearchProvider: Error adding contact: $e');
+      Logger.info(' SearchProvider: Error adding contact: $e');
       return false;
     }
   }
@@ -138,14 +140,14 @@ class SearchProvider extends ChangeNotifier {
   // Remove contact
   Future<bool> removeContact(String sessionId) async {
     try {
-      print('🔍 SearchProvider: Removing contact: $sessionId');
+      Logger.info(' SearchProvider: Removing contact: $sessionId');
 
       // This would be handled by the invitation system
       // For now, we'll just return success
-      print('🔍 SearchProvider: Contact removed successfully: $sessionId');
+      Logger.info(' SearchProvider: Contact removed successfully: $sessionId');
       return true;
     } catch (e) {
-      print('🔍 SearchProvider: Error removing contact: $e');
+      Logger.info(' SearchProvider: Error removing contact: $e');
       return false;
     }
   }
@@ -176,7 +178,7 @@ class SearchProvider extends ChangeNotifier {
           searches.map((search) => User.fromJson(search)).toList();
       notifyListeners();
     } catch (e) {
-      print('🔍 SearchProvider: Error loading recent searches: $e');
+      Logger.info(' SearchProvider: Error loading recent searches: $e');
     }
   }
 
@@ -204,7 +206,7 @@ class SearchProvider extends ChangeNotifier {
           json.encode(_recentSearches.map((user) => user.toJson()).toList());
       await _prefsService.setString('recent_searches', searchesJson);
     } catch (e) {
-      print('🔍 SearchProvider: Error saving recent searches: $e');
+      Logger.info(' SearchProvider: Error saving recent searches: $e');
     }
   }
 
@@ -215,7 +217,7 @@ class SearchProvider extends ChangeNotifier {
       _recentSearches.clear();
       notifyListeners();
     } catch (e) {
-      print('🔍 SearchProvider: Error clearing recent searches: $e');
+      Logger.info(' SearchProvider: Error clearing recent searches: $e');
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'presence_manager.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Manager for handling app lifecycle events and updating presence accordingly
 class AppLifecycleManager extends StatefulWidget {
@@ -23,13 +24,13 @@ class _AppLifecycleManagerState extends State<AppLifecycleManager>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    print('📱 AppLifecycleManager: 🔧 Initialized');
+    Logger.debug('📱 AppLifecycleManager: 🔧 Initialized');
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    print('📱 AppLifecycleManager: 🗑️ Disposed');
+    Logger.info('📱 AppLifecycleManager:  Disposed');
     super.dispose();
   }
 
@@ -58,57 +59,61 @@ class _AppLifecycleManagerState extends State<AppLifecycleManager>
 
   /// Called when app comes to foreground
   void _onAppResumed() {
-    print(
-        '📱 AppLifecycleManager: 🚀 App resumed - updating presence to online');
+    Logger.info(
+        '📱 AppLifecycleManager:  App resumed - updating presence to online');
     try {
       widget.presenceManager.onUserComingOnline();
     } catch (e) {
-      print('📱 AppLifecycleManager: ❌ Error updating presence on resume: $e');
+      Logger.error(
+          '📱 AppLifecycleManager:  Error updating presence on resume: $e');
     }
   }
 
   /// Called when app goes to background
   void _onAppPaused() {
-    print(
+    Logger.debug(
         '📱 AppLifecycleManager: ⏸️ App paused - updating presence to offline');
     try {
       widget.presenceManager.onUserGoingOffline();
     } catch (e) {
-      print('📱 AppLifecycleManager: ❌ Error updating presence on pause: $e');
+      Logger.error(
+          '📱 AppLifecycleManager:  Error updating presence on pause: $e');
     }
   }
 
   /// Called when app is about to be terminated
   void _onAppDetached() {
-    print(
+    Logger.debug(
         '📱 AppLifecycleManager: 🚨 App detached - updating presence to offline');
     try {
       widget.presenceManager.onUserGoingOffline();
     } catch (e) {
-      print('📱 AppLifecycleManager: ❌ Error updating presence on detach: $e');
+      Logger.error(
+          '📱 AppLifecycleManager:  Error updating presence on detach: $e');
     }
   }
 
   /// Called when app is hidden (e.g., app switcher)
   void _onAppHidden() {
-    print(
+    Logger.debug(
         '📱 AppLifecycleManager: 🙈 App hidden - updating presence to offline');
     try {
       widget.presenceManager.onUserGoingOffline();
     } catch (e) {
-      print('📱 AppLifecycleManager: ❌ Error updating presence on hide: $e');
+      Logger.error(
+          '📱 AppLifecycleManager:  Error updating presence on hide: $e');
     }
   }
 
   /// Called when app becomes inactive (e.g., incoming call)
   void _onAppInactive() {
-    print(
-        '📱 AppLifecycleManager: ⚠️ App inactive - updating presence to offline');
+    Logger.warning(
+        '📱 AppLifecycleManager:  App inactive - updating presence to offline');
     try {
       widget.presenceManager.onUserGoingOffline();
     } catch (e) {
-      print(
-          '📱 AppLifecycleManager: ❌ Error updating presence on inactive: $e');
+      Logger.error(
+          '📱 AppLifecycleManager:  Error updating presence on inactive: $e');
     }
   }
 

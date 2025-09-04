@@ -4,6 +4,7 @@ import 'dart:convert';
 import '../../shared/models/contact.dart';
 import 'se_socket_service.dart';
 import '../../features/chat/services/message_storage_service.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Service for managing user contacts and their presence status
 class ContactService extends ChangeNotifier {
@@ -23,17 +24,17 @@ class ContactService extends ChangeNotifier {
   /// Get a specific contact by session ID
   Contact? getContact(String sessionId) {
     try {
-      print(
-          '📱 ContactService: 🔍 Looking for contact: $sessionId in ${_contacts.length} contacts');
-      print(
+      Logger.info(
+          '📱 ContactService:  Looking for contact: $sessionId in ${_contacts.length} contacts');
+      Logger.debug(
           '📱 ContactService: 🔍 Available contacts: ${_contacts.map((c) => c.sessionId).join(', ')}');
       final contact =
           _contacts.firstWhere((contact) => contact.sessionId == sessionId);
-      print(
+      Logger.debug(
           '📱 ContactService: ✅ Found contact: ${contact.sessionId} (${contact.isOnline ? 'online' : 'offline'})');
       return contact;
     } catch (e) {
-      print('📱 ContactService: ⚠️ Contact not found: $sessionId');
+      Logger.warning('📱 ContactService:  Contact not found: $sessionId');
       return null;
     }
   }
@@ -48,7 +49,7 @@ class ContactService extends ChangeNotifier {
     try {
       // Check if contact already exists
       if (_contacts.any((c) => c.sessionId == sessionId)) {
-        print(
+        Logger.debug(
             '📱 ContactService: ℹ️ Contact already exists: $displayName ($sessionId)');
         return;
       }
@@ -72,10 +73,11 @@ class ContactService extends ChangeNotifier {
       // Broadcast presence to the new contact
       _socketService.broadcastPresenceToContacts();
 
-      print('📱 ContactService: ✅ Contact added: $displayName ($sessionId)');
+      Logger.debug(
+          '📱 ContactService: ✅ Contact added: $displayName ($sessionId)');
       notifyListeners();
     } catch (e) {
-      print('📱 ContactService: ❌ Error adding contact: $e');
+      Logger.error('📱 ContactService:  Error adding contact: $e');
       rethrow;
     }
   }
@@ -92,10 +94,10 @@ class ContactService extends ChangeNotifier {
       // Notify server about contact removal
       _socketService.removeContact(sessionId);
 
-      print('📱 ContactService: ✅ Contact removed: $sessionId');
+      Logger.success('📱 ContactService:  Contact removed: $sessionId');
       notifyListeners();
     } catch (e) {
-      print('📱 ContactService: ❌ Error removing contact: $e');
+      Logger.error('📱 ContactService:  Error removing contact: $e');
       rethrow;
     }
   }
@@ -104,9 +106,9 @@ class ContactService extends ChangeNotifier {
   void updateContactPresence(
       String sessionId, bool isOnline, DateTime lastSeen) {
     try {
-      print(
+      Logger.debug(
           '📱 ContactService: 🔍 Attempting to update presence for: $sessionId (${isOnline ? 'online' : 'offline'})');
-      print(
+      Logger.debug(
           '📱 ContactService: 🔍 Current contacts: ${_contacts.map((c) => '${c.sessionId}:${c.isOnline}').join(', ')}');
 
       final index = _contacts.indexWhere((c) => c.sessionId == sessionId);
@@ -117,20 +119,21 @@ class ContactService extends ChangeNotifier {
           lastSeen: lastSeen,
         );
 
-        print(
-            '📱 ContactService: ✅ Presence updated for $sessionId: ${oldContact.isOnline} -> $isOnline');
+        Logger.success(
+            '📱 ContactService:  Presence updated for $sessionId: ${oldContact.isOnline} -> $isOnline');
         notifyListeners();
-        print(
+        Logger.debug(
             '📱 ContactService: 🔔 notifyListeners() called for presence update');
       } else {
-        print(
-            '📱 ContactService: ⚠️ Contact not found for presence update: $sessionId');
-        print(
+        Logger.warning(
+            '📱 ContactService:  Contact not found for presence update: $sessionId');
+        Logger.debug(
             '📱 ContactService: 🔍 Available contacts: ${_contacts.map((c) => c.sessionId).join(', ')}');
 
         // Auto-add contact if it doesn't exist but we're receiving presence updates
         // This can happen when conversations exist but contacts weren't properly added
-        print('📱 ContactService: 🔧 Auto-adding contact for presence update');
+        Logger.debug(
+            '📱 ContactService: 🔧 Auto-adding contact for presence update');
         final newContact = Contact(
           sessionId: sessionId,
           displayName:
@@ -142,13 +145,14 @@ class ContactService extends ChangeNotifier {
         _contacts.add(newContact);
         _saveContacts(); // Save to persistence
 
-        print(
-            '📱 ContactService: ✅ Auto-added contact for presence: $sessionId');
+        Logger.success(
+            '📱 ContactService:  Auto-added contact for presence: $sessionId');
         notifyListeners();
-        print('📱 ContactService: 🔔 notifyListeners() called for auto-add');
+        Logger.debug(
+            '📱 ContactService: 🔔 notifyListeners() called for auto-add');
       }
     } catch (e) {
-      print('📱 ContactService: ❌ Error updating contact presence: $e');
+      Logger.error('📱 ContactService:  Error updating contact presence: $e');
     }
   }
 
@@ -166,15 +170,16 @@ class ContactService extends ChangeNotifier {
         // Save to storage
         await _saveContacts();
 
-        print(
-            '📱 ContactService: ✅ Display name updated for $sessionId: $newDisplayName');
+        Logger.success(
+            '📱 ContactService:  Display name updated for $sessionId: $newDisplayName');
         notifyListeners();
       } else {
-        print(
-            '📱 ContactService: ⚠️ Contact not found for name update: $sessionId');
+        Logger.warning(
+            '📱 ContactService:  Contact not found for name update: $sessionId');
       }
     } catch (e) {
-      print('📱 ContactService: ❌ Error updating contact display name: $e');
+      Logger.error(
+          '📱 ContactService:  Error updating contact display name: $e');
       rethrow;
     }
   }
@@ -192,15 +197,15 @@ class ContactService extends ChangeNotifier {
           final contact = Contact.fromJson(contactData);
           _contacts.add(contact);
         } catch (e) {
-          print('📱 ContactService: ⚠️ Error parsing contact: $e');
+          Logger.warning('📱 ContactService:  Error parsing contact: $e');
         }
       }
 
-      print(
-          '📱 ContactService: ✅ Loaded ${_contacts.length} contacts from storage');
+      Logger.success(
+          '📱 ContactService:  Loaded ${_contacts.length} contacts from storage');
       notifyListeners();
     } catch (e) {
-      print('📱 ContactService: ❌ Error loading contacts: $e');
+      Logger.error('📱 ContactService:  Error loading contacts: $e');
     }
   }
 
@@ -212,10 +217,10 @@ class ContactService extends ChangeNotifier {
           _contacts.map((contact) => json.encode(contact.toJson())).toList();
 
       await prefs.setStringList(_storageKey, contactsJson);
-      print(
-          '📱 ContactService: ✅ Saved ${_contacts.length} contacts to storage');
+      Logger.success(
+          '📱 ContactService:  Saved ${_contacts.length} contacts to storage');
     } catch (e) {
-      print('📱 ContactService: ❌ Error saving contacts: $e');
+      Logger.error('📱 ContactService:  Error saving contacts: $e');
     }
   }
 
@@ -224,10 +229,10 @@ class ContactService extends ChangeNotifier {
     try {
       _contacts.clear();
       await _saveContacts();
-      print('📱 ContactService: ✅ All contacts cleared');
+      Logger.success('📱 ContactService:  All contacts cleared');
       notifyListeners();
     } catch (e) {
-      print('📱 ContactService: ❌ Error clearing contacts: $e');
+      Logger.error('📱 ContactService:  Error clearing contacts: $e');
     }
   }
 
@@ -246,7 +251,7 @@ class ContactService extends ChangeNotifier {
   /// Initialize the service
   Future<void> initialize() async {
     try {
-      print('📱 ContactService: 🔧 Initializing...');
+      Logger.debug('📱 ContactService: 🔧 Initializing...');
 
       // Load existing contacts from storage
       await loadContacts();
@@ -255,18 +260,18 @@ class ContactService extends ChangeNotifier {
       // This ensures we have contacts for presence requests even on fresh login
       await _syncContactsFromConversations();
 
-      print(
-          '📱 ContactService: ✅ Initialized successfully with ${_contacts.length} contacts');
+      Logger.success(
+          '📱 ContactService:  Initialized successfully with ${_contacts.length} contacts');
     } catch (e) {
-      print('📱 ContactService: ❌ Failed to initialize: $e');
+      Logger.error('📱 ContactService:  Failed to initialize: $e');
     }
   }
 
   /// Sync contacts from existing conversations to ensure presence works
   Future<void> _syncContactsFromConversations() async {
     try {
-      print(
-          '📱 ContactService: 🔄 Syncing contacts from existing conversations...');
+      Logger.info(
+          '📱 ContactService:  Syncing contacts from existing conversations...');
 
       // Import MessageStorageService to get existing conversations
       // This ensures we have contacts even if they weren't properly added before
@@ -276,8 +281,8 @@ class ContactService extends ChangeNotifier {
         final messageStorageService = MessageStorageService.instance;
         final conversations = await messageStorageService.getConversations();
 
-        print(
-            '📱 ContactService: 🔍 Found ${conversations.length} existing conversations');
+        Logger.info(
+            '📱 ContactService:  Found ${conversations.length} existing conversations');
 
         for (final conversation in conversations) {
           final conversationId = conversation.id;
@@ -288,7 +293,7 @@ class ContactService extends ChangeNotifier {
 
           // Create contact for participant1 if not exists
           if (participant1Id.isNotEmpty && !isContact(participant1Id)) {
-            print(
+            Logger.debug(
                 '📱 ContactService: 🔧 Creating contact for participant1: $participant1Id');
 
             final contact1 = Contact(
@@ -300,13 +305,13 @@ class ContactService extends ChangeNotifier {
             );
 
             _contacts.add(contact1);
-            print(
-                '📱 ContactService: ✅ Contact created for participant1: ${contact1.displayName}');
+            Logger.success(
+                '📱 ContactService:  Contact created for participant1: ${contact1.displayName}');
           }
 
           // Create contact for participant2 if not exists
           if (participant2Id.isNotEmpty && !isContact(participant2Id)) {
-            print(
+            Logger.debug(
                 '📱 ContactService: 🔧 Creating contact for participant2: $participant2Id');
 
             final contact2 = Contact(
@@ -318,31 +323,32 @@ class ContactService extends ChangeNotifier {
             );
 
             _contacts.add(contact2);
-            print(
-                '📱 ContactService: ✅ Contact created for participant2: ${contact2.displayName}');
+            Logger.success(
+                '📱 ContactService:  Contact created for participant2: ${contact2.displayName}');
           }
         }
 
         // Save the new contacts
         if (conversations.isNotEmpty) {
           await _saveContacts();
-          print(
-              '📱 ContactService: ✅ Synced ${conversations.length} contacts from conversations');
+          Logger.success(
+              '📱 ContactService:  Synced ${conversations.length} contacts from conversations');
         }
       } catch (e) {
-        print('📱 ContactService: ⚠️ Could not sync from conversations: $e');
+        Logger.warning(
+            '📱 ContactService:  Could not sync from conversations: $e');
         // This is not critical - we can still function without it
       }
     } catch (e) {
-      print(
-          '📱 ContactService: ❌ Error syncing contacts from conversations: $e');
+      Logger.error(
+          '📱 ContactService:  Error syncing contacts from conversations: $e');
     }
   }
 
   /// Dispose the service
   @override
   void dispose() {
-    print('📱 ContactService: 🗑️ Disposing service...');
+    Logger.info('📱 ContactService:  Disposing service...');
     super.dispose();
   }
 }

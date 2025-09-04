@@ -12,6 +12,7 @@ import '../../../core/services/channel_socket_service.dart';
 import '../../../shared/widgets/custom_elevated_button.dart';
 import '../../../shared/widgets/custom_textfield.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
+import '/../core/utils/logger.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -50,13 +51,14 @@ class _AccountCreatedActionSheetState
   void _copySessionIdToClipboard() {
     if (widget.sessionId != null) {
       Clipboard.setData(ClipboardData(text: widget.sessionId!));
-      print('🔐 Debug: Copying Session ID to clipboard');
+      Logger.debug(' Debug: Copying Session ID to clipboard');
 
       // Force UI rebuild
       setState(() {
         _showSessionIdCopied = true;
       });
-      print('🔐 Debug: _showSessionIdCopied set to: $_showSessionIdCopied');
+      Logger.debug(
+          ' Debug: _showSessionIdCopied set to: $_showSessionIdCopied');
 
       // Hide the copied message after 5 seconds
       Future.delayed(const Duration(seconds: 5), () {
@@ -64,8 +66,8 @@ class _AccountCreatedActionSheetState
           setState(() {
             _showSessionIdCopied = false;
           });
-          print(
-              '🔐 Debug: _showSessionIdCopied reset to: $_showSessionIdCopied');
+          Logger.debug(
+              ' Debug: _showSessionIdCopied reset to: $_showSessionIdCopied');
         }
       });
     }
@@ -74,13 +76,13 @@ class _AccountCreatedActionSheetState
   void _copyPasswordToClipboard() {
     if (widget.privateKey != null) {
       Clipboard.setData(ClipboardData(text: widget.privateKey!));
-      print('🔐 Debug: Copying Password to clipboard');
+      Logger.debug(' Debug: Copying Password to clipboard');
 
       // Force UI rebuild
       setState(() {
         _showPasswordCopied = true;
       });
-      print('🔐 Debug: _showPasswordCopied set to: $_showPasswordCopied');
+      Logger.debug(' Debug: _showPasswordCopied set to: $_showPasswordCopied');
 
       // Hide the copied message after 5 seconds
       Future.delayed(const Duration(seconds: 5), () {
@@ -88,7 +90,8 @@ class _AccountCreatedActionSheetState
           setState(() {
             _showPasswordCopied = false;
           });
-          print('🔐 Debug: _showPasswordCopied reset to: $_showPasswordCopied');
+          Logger.debug(
+              ' Debug: _showPasswordCopied reset to: $_showPasswordCopied');
         }
       });
     }
@@ -177,8 +180,8 @@ class _AccountCreatedActionSheetState
 
   Widget _buildDetailRowWithCopyFeedback(String label, String value,
       IconData? copyIcon, VoidCallback? onCopy, bool showCopied) {
-    print(
-        '🔐 Debug: Building detail row for $label with showCopied: $showCopied');
+    Logger.debug(
+        ' Debug: Building detail row for $label with showCopied: $showCopied');
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -496,11 +499,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
 
       // Debug: Check if session was created successfully
-      print('🔐 Debug: Session ID: ${sessionData.sessionId}');
-      print('🔐 Debug: Public Key: ${sessionData.publicKey}');
-      print('🔐 Debug: Display Name: ${sessionData.displayName}');
-      print('🔐 Debug: Password: $password');
-      print('🔐 Debug: Created At: ${sessionData.createdAt}');
+      Logger.debug(' Debug: Session ID: ${sessionData.sessionId}');
+      Logger.debug(' Debug: Public Key: ${sessionData.publicKey}');
+      Logger.debug(' Debug: Display Name: ${sessionData.displayName}');
+      Logger.debug(' Debug: Password: $password');
+      Logger.debug(' Debug: Created At: ${sessionData.createdAt}');
 
       // Show success dialog with Session details
       await _showSuccessDialog();
@@ -540,22 +543,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
               // CRITICAL: Use connect() instead of initialize() for SeSocketService
               try {
                 await socketService.connect(_sessionId!);
-                print(
-                    '🔌 RegisterScreen: ✅ Socket connection initiated for session: $_sessionId');
+                Logger.success(
+                    ' RegisterScreen:  Socket connection initiated for session: $_sessionId');
 
                 // Wait a moment for connection to establish
                 await Future.delayed(const Duration(seconds: 2));
 
                 // Check if socket is connected
                 if (socketService.isConnected) {
-                  print(
-                      '🔌 RegisterScreen: ✅ Socket connected successfully with session: $_sessionId');
+                  Logger.success(
+                      ' RegisterScreen:  Socket connected successfully with session: $_sessionId');
                 } else {
-                  print(
-                      '🔌 RegisterScreen: ⚠️ Socket connection failed, but continuing with registration');
+                  Logger.warning(
+                      ' RegisterScreen:  Socket connection failed, but continuing with registration');
                 }
               } catch (e) {
-                print('🔌 RegisterScreen: ❌ Error connecting socket: $e');
+                Logger.error(' RegisterScreen:  Error connecting socket: $e');
                 // Continue with registration even if socket fails
               }
             }
@@ -939,10 +942,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // Mark that welcome notification has been shown to prevent it from appearing again
       await prefsService.setBool('has_shown_welcome_notification', true);
 
-      print(
-          '🔍 RegisterScreen: ✅ Welcome notification added to SharedPreferences');
+      Logger.success(
+          '🔍 RegisterScreen:  Welcome notification added to SharedPreferences');
     } catch (e) {
-      print('🔍 RegisterScreen: ❌ Error adding welcome notification: $e');
+      Logger.error('🔍 RegisterScreen:  Error adding welcome notification: $e');
     }
   }
 }

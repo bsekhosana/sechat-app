@@ -17,6 +17,7 @@ import '../services/unified_chat_integration_service.dart';
 import 'chat_list_provider.dart';
 import '../../../core/utils/conversation_id_generator.dart';
 import 'dart:async';
+import '/../core/utils/logger.dart';
 
 /// Modern, unified chat provider with improved state management and performance
 class UnifiedChatProvider extends ChangeNotifier {
@@ -135,8 +136,8 @@ class UnifiedChatProvider extends ChangeNotifier {
       if (_isInitialized &&
           _lastInitializedConversationId == generatedConversationId &&
           _currentRecipientId == recipientId) {
-        print(
-            'UnifiedChatProvider: ⚠️ Already initialized for conversation: $generatedConversationId, skipping...');
+        Logger.warning(
+            'UnifiedChatProvider:  Already initialized for conversation: $generatedConversationId, skipping...');
         return;
       }
 
@@ -175,15 +176,15 @@ class UnifiedChatProvider extends ChangeNotifier {
       _lastInitializedConversationId = _currentConversationId;
       notifyListeners();
 
-      print(
-          'UnifiedChatProvider: ✅ Initialized for conversation: $_currentConversationId');
+      Logger.success(
+          'UnifiedChatProvider:  Initialized for conversation: $_currentConversationId');
     } catch (e) {
       _error = 'Failed to initialize chat: $e';
       _isLoading = false;
       _isInitialized = false;
       _lastInitializedConversationId = null;
       notifyListeners();
-      print('UnifiedChatProvider: ❌ Failed to initialize: $e');
+      Logger.error('UnifiedChatProvider:  Failed to initialize: $e');
     }
   }
 
@@ -192,7 +193,7 @@ class UnifiedChatProvider extends ChangeNotifier {
     try {
       if (_currentConversationId == null) return;
 
-      print('UnifiedChatProvider: 🔄 Loading initial messages...');
+      Logger.info('UnifiedChatProvider:  Loading initial messages...');
 
       final loadedMessages = await _messageStorage.getMessages(
         _currentConversationId!,
@@ -209,10 +210,10 @@ class UnifiedChatProvider extends ChangeNotifier {
       // Check if there are more messages to load
       _hasMoreMessages = loadedMessages.length >= _initialLoadLimit;
 
-      print(
-          'UnifiedChatProvider: ✅ Loaded ${loadedMessages.length} initial messages');
+      Logger.success(
+          'UnifiedChatProvider:  Loaded ${loadedMessages.length} initial messages');
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error loading initial messages: $e');
+      Logger.error('UnifiedChatProvider:  Error loading initial messages: $e');
     }
   }
 
@@ -238,8 +239,8 @@ class UnifiedChatProvider extends ChangeNotifier {
         // Check if there are more messages
         _hasMoreMessages = loadedMessages.length >= _lazyLoadLimit;
 
-        print(
-            'UnifiedChatProvider: ✅ Loaded ${loadedMessages.length} more messages');
+        Logger.success(
+            'UnifiedChatProvider:  Loaded ${loadedMessages.length} more messages');
       } else {
         _hasMoreMessages = false;
       }
@@ -249,7 +250,7 @@ class UnifiedChatProvider extends ChangeNotifier {
     } catch (e) {
       _isLoadingMore = false;
       notifyListeners();
-      print('UnifiedChatProvider: ❌ Error loading more messages: $e');
+      Logger.error('UnifiedChatProvider:  Error loading more messages: $e');
     }
   }
 
@@ -276,12 +277,14 @@ class UnifiedChatProvider extends ChangeNotifier {
           _recipientLastSeen = contact.lastSeen;
         }
       } catch (e) {
-        print('UnifiedChatProvider: ⚠️ ContactService not available: $e');
+        Logger.warning(
+            'UnifiedChatProvider:  ContactService not available: $e');
       }
 
-      print('UnifiedChatProvider: ✅ Loaded recipient data for: $recipientId');
+      Logger.success(
+          'UnifiedChatProvider:  Loaded recipient data for: $recipientId');
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error loading recipient data: $e');
+      Logger.error('UnifiedChatProvider:  Error loading recipient data: $e');
     }
   }
 
@@ -290,7 +293,7 @@ class UnifiedChatProvider extends ChangeNotifier {
     try {
       if (_typingService != null && _typingStreamSubscription != null) return;
 
-      print('UnifiedChatProvider: 🔧 Setting up typing service...');
+      Logger.debug('UnifiedChatProvider: 🔧 Setting up typing service...');
       _typingService = RealtimeServiceManager().typing;
 
       // Cancel existing subscription if any
@@ -306,9 +309,9 @@ class UnifiedChatProvider extends ChangeNotifier {
         }
       });
 
-      print('UnifiedChatProvider: ✅ Typing service setup complete');
+      Logger.success('UnifiedChatProvider:  Typing service setup complete');
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Failed to setup typing service: $e');
+      Logger.error('UnifiedChatProvider:  Failed to setup typing service: $e');
     }
   }
 
@@ -317,7 +320,7 @@ class UnifiedChatProvider extends ChangeNotifier {
     // Remove existing listener first to prevent duplicates
     _messageService.removeListener(_onMessageServiceUpdate);
     _messageService.addListener(_onMessageServiceUpdate);
-    print('UnifiedChatProvider: ✅ Message service listener setup');
+    Logger.success('UnifiedChatProvider:  Message service listener setup');
   }
 
   /// Handle message service updates
@@ -355,30 +358,31 @@ class UnifiedChatProvider extends ChangeNotifier {
         _messages.addAll(newMessages);
         _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
         notifyListeners();
-        print(
-            'UnifiedChatProvider: ✅ Added ${newMessages.length} new messages');
+        Logger.success(
+            'UnifiedChatProvider:  Added ${newMessages.length} new messages');
       }
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error refreshing messages: $e');
+      Logger.error('UnifiedChatProvider:  Error refreshing messages: $e');
     }
   }
 
   /// Setup socket callbacks
   void _setupSocketCallbacks() {
     try {
-      print('UnifiedChatProvider: 🔧 Setting up socket callbacks...');
+      Logger.debug('UnifiedChatProvider: 🔧 Setting up socket callbacks...');
 
       // Message acknowledgment callback
       _socketService.setOnMessageAcked((messageId) {
-        print('UnifiedChatProvider: ✅ Message acknowledged: $messageId');
+        Logger.success(
+            'UnifiedChatProvider:  Message acknowledged: $messageId');
         _updateMessageStatus(messageId, MessageStatus.sent);
       });
 
       // Message received callback
       _socketService.setOnMessageReceived(
           (senderId, senderName, message, conversationId, messageId) {
-        print(
-            'UnifiedChatProvider: 📨 Message received: $messageId from $senderId');
+        Logger.debug(
+            'UnifiedChatProvider:  Message received: $messageId from $senderId');
         _handleIncomingMessage(messageId, senderId, conversationId, message);
       });
 
@@ -396,13 +400,14 @@ class UnifiedChatProvider extends ChangeNotifier {
         if (senderId == _currentRecipientId) {
           _isRecipientTyping = isTyping;
           _notifyListenersDebounced();
-          print('UnifiedChatProvider: ⌨️ Typing indicator: $isTyping');
+          Logger.debug('UnifiedChatProvider:  Typing indicator: $isTyping');
         }
       });
 
-      print('UnifiedChatProvider: ✅ Socket callbacks setup complete');
+      Logger.success('UnifiedChatProvider:  Socket callbacks setup complete');
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Failed to setup socket callbacks: $e');
+      Logger.error(
+          'UnifiedChatProvider:  Failed to setup socket callbacks: $e');
     }
   }
 
@@ -417,8 +422,8 @@ class UnifiedChatProvider extends ChangeNotifier {
       if (_isConnected != isConnected) {
         _isConnected = isConnected;
         notifyListeners();
-        print(
-            'UnifiedChatProvider: 🔌 Connection status changed: $isConnected');
+        Logger.debug(
+            'UnifiedChatProvider:  Connection status changed: $isConnected');
       }
     });
   }
@@ -487,7 +492,7 @@ class UnifiedChatProvider extends ChangeNotifier {
           notifyListeners();
         }
 
-        print('UnifiedChatProvider: ✅ Message sent successfully');
+        Logger.success('UnifiedChatProvider:  Message sent successfully');
       } else {
         throw Exception('Message send failed: ${sendResult.error}');
       }
@@ -498,7 +503,7 @@ class UnifiedChatProvider extends ChangeNotifier {
       _error = 'Failed to send message: $e';
       _isLoading = false;
       notifyListeners();
-      print('UnifiedChatProvider: ❌ Failed to send message: $e');
+      Logger.error('UnifiedChatProvider:  Failed to send message: $e');
       rethrow;
     }
   }
@@ -515,9 +520,9 @@ class UnifiedChatProvider extends ChangeNotifier {
         _typingService!.stopTyping(_currentConversationId!);
       }
 
-      print('UnifiedChatProvider: ✅ Typing indicator sent: $isTyping');
+      Logger.success('UnifiedChatProvider:  Typing indicator sent: $isTyping');
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error updating typing indicator: $e');
+      Logger.error('UnifiedChatProvider:  Error updating typing indicator: $e');
     }
   }
 
@@ -529,8 +534,8 @@ class UnifiedChatProvider extends ChangeNotifier {
     _isRecipientOnline = isOnline;
     _recipientLastSeen = lastSeen;
     notifyListeners();
-    print(
-        'UnifiedChatProvider: ✅ Recipient presence updated: online=$isOnline');
+    Logger.success(
+        'UnifiedChatProvider:  Recipient presence updated: online=$isOnline');
   }
 
   /// Mark conversation as read
@@ -556,9 +561,10 @@ class UnifiedChatProvider extends ChangeNotifier {
         }
       }
 
-      print('UnifiedChatProvider: ✅ Conversation marked as read');
+      Logger.success('UnifiedChatProvider:  Conversation marked as read');
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error marking conversation as read: $e');
+      Logger.error(
+          'UnifiedChatProvider:  Error marking conversation as read: $e');
     }
   }
 
@@ -567,9 +573,9 @@ class UnifiedChatProvider extends ChangeNotifier {
     try {
       await _loadInitialMessages();
       notifyListeners();
-      print('UnifiedChatProvider: ✅ Messages refreshed');
+      Logger.success('UnifiedChatProvider:  Messages refreshed');
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error refreshing messages: $e');
+      Logger.error('UnifiedChatProvider:  Error refreshing messages: $e');
     }
   }
 
@@ -577,40 +583,41 @@ class UnifiedChatProvider extends ChangeNotifier {
   Future<void> toggleMuteNotifications() async {
     _isMuted = !_isMuted;
     notifyListeners();
-    print('UnifiedChatProvider: ✅ Mute notifications toggled: $_isMuted');
+    Logger.success(
+        'UnifiedChatProvider:  Mute notifications toggled: $_isMuted');
   }
 
   /// Mark user entered chat screen
   void markUserEnteredChatScreen() {
     _isUserOnChatScreen = true;
-    print('UnifiedChatProvider: ✅ User entered chat screen');
+    Logger.success('UnifiedChatProvider:  User entered chat screen');
   }
 
   /// Mark user left chat screen
   void markUserLeftChatScreen() {
     _isUserOnChatScreen = false;
-    print('UnifiedChatProvider: ❌ User left chat screen');
+    Logger.error('UnifiedChatProvider:  User left chat screen');
   }
 
   /// Reset initialization state (for testing or manual reset)
   void resetInitializationState() {
     _isInitialized = false;
     _lastInitializedConversationId = null;
-    print('UnifiedChatProvider: 🔄 Initialization state reset');
+    Logger.info('UnifiedChatProvider:  Initialization state reset');
   }
 
   /// Register with chat list provider
   void registerWithChatListProvider(ChatListProvider chatListProvider) {
     _integrationService.setChatListProvider(chatListProvider);
-    print(
-        'UnifiedChatProvider: ✅ Registered with ChatListProvider via integration service');
+    Logger.success(
+        'UnifiedChatProvider:  Registered with ChatListProvider via integration service');
   }
 
   /// Unregister from chat list provider
   void unregisterFromChatListProvider(ChatListProvider chatListProvider) {
     _integrationService.setChatListProvider(null);
-    print(
-        'UnifiedChatProvider: ❌ Unregistered from ChatListProvider via integration service');
+    Logger.error(
+        'UnifiedChatProvider:  Unregistered from ChatListProvider via integration service');
   }
 
   /// Handle incoming message from socket - API Compliant
@@ -631,8 +638,8 @@ class UnifiedChatProvider extends ChangeNotifier {
 
         // Check if this looks like encrypted content
         if (body.length > 100 && body.contains('eyJ')) {
-          print(
-              'UnifiedChatProvider: 🔓 Detected encrypted message, attempting decryption...');
+          Logger.debug(
+              'UnifiedChatProvider:  Detected encrypted message, attempting decryption...');
           try {
             // Use EncryptionService to decrypt the message (first layer)
             final decryptedData =
@@ -640,14 +647,14 @@ class UnifiedChatProvider extends ChangeNotifier {
 
             if (decryptedData != null && decryptedData.containsKey('text')) {
               final firstLayerDecrypted = decryptedData['text'] as String;
-              print(
-                  'UnifiedChatProvider: ✅ First layer decrypted: $firstLayerDecrypted');
+              Logger.success(
+                  'UnifiedChatProvider:  First layer decrypted: $firstLayerDecrypted');
 
               // Check if the decrypted text is still encrypted (double encryption scenario)
               if (firstLayerDecrypted.length > 100 &&
                   firstLayerDecrypted.contains('eyJ')) {
-                print(
-                    'UnifiedChatProvider: 🔍 Detected double encryption, decrypting inner layer...');
+                Logger.info(
+                    'UnifiedChatProvider:  Detected double encryption, decrypting inner layer...');
                 try {
                   // Decrypt the inner encrypted content
                   final innerDecryptedData =
@@ -658,37 +665,37 @@ class UnifiedChatProvider extends ChangeNotifier {
                       innerDecryptedData.containsKey('text')) {
                     final finalDecryptedText =
                         innerDecryptedData['text'] as String;
-                    print(
-                        'UnifiedChatProvider: ✅ Inner layer decrypted successfully');
+                    Logger.success(
+                        'UnifiedChatProvider:  Inner layer decrypted successfully');
                     decryptedText = finalDecryptedText;
                   } else {
-                    print(
-                        'UnifiedChatProvider: ⚠️ Inner layer decryption failed, using first layer');
+                    Logger.warning(
+                        'UnifiedChatProvider:  Inner layer decryption failed, using first layer');
                     decryptedText = firstLayerDecrypted;
                   }
                 } catch (e) {
-                  print(
-                      'UnifiedChatProvider: ❌ Inner layer decryption error: $e, using first layer');
+                  Logger.error(
+                      'UnifiedChatProvider:  Inner layer decryption error: $e, using first layer');
                   decryptedText = firstLayerDecrypted;
                 }
               } else {
                 // Single layer encryption, use as is
-                print(
-                    'UnifiedChatProvider: ✅ Single layer decryption completed');
+                Logger.success(
+                    'UnifiedChatProvider:  Single layer decryption completed');
                 decryptedText = firstLayerDecrypted;
               }
             } else {
-              print(
-                  'UnifiedChatProvider: ⚠️ Decryption failed - invalid format, using encrypted text');
+              Logger.warning(
+                  'UnifiedChatProvider:  Decryption failed - invalid format, using encrypted text');
               decryptedText = '[Encrypted Message]';
             }
           } catch (e) {
-            print('UnifiedChatProvider: ❌ Decryption failed: $e');
+            Logger.error('UnifiedChatProvider:  Decryption failed: $e');
             decryptedText = '[Encrypted Message]';
           }
         } else {
-          print(
-              'UnifiedChatProvider: ℹ️ Message appears to be plain text, using as-is');
+          Logger.info(
+              'UnifiedChatProvider:  Message appears to be plain text, using as-is');
         }
 
         // Create message object with proper API compliance and decrypted content
@@ -724,11 +731,11 @@ class UnifiedChatProvider extends ChangeNotifier {
         }
 
         notifyListeners();
-        print(
+        Logger.debug(
             'UnifiedChatProvider: ✅ Incoming message added (API compliant): $messageId');
       }
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error handling incoming message: $e');
+      Logger.error('UnifiedChatProvider:  Error handling incoming message: $e');
     }
   }
 
@@ -740,11 +747,11 @@ class UnifiedChatProvider extends ChangeNotifier {
         _messages[messageIndex] =
             _messages[messageIndex].copyWith(status: status);
         notifyListeners();
-        print(
-            'UnifiedChatProvider: ✅ Message status updated: $messageId -> $status');
+        Logger.success(
+            'UnifiedChatProvider:  Message status updated: $messageId -> $status');
       }
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error updating message status: $e');
+      Logger.error('UnifiedChatProvider:  Error updating message status: $e');
     }
   }
 
@@ -753,10 +760,10 @@ class UnifiedChatProvider extends ChangeNotifier {
     try {
       if (_isRecipientOnline) {
         await _socketService.sendReadReceipt(senderId, messageId);
-        print('UnifiedChatProvider: ✅ Read receipt sent: $messageId');
+        Logger.success('UnifiedChatProvider:  Read receipt sent: $messageId');
       }
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error sending read receipt: $e');
+      Logger.error('UnifiedChatProvider:  Error sending read receipt: $e');
     }
   }
 
@@ -778,11 +785,12 @@ class UnifiedChatProvider extends ChangeNotifier {
         await _messageStorage.updateMessageStatus(update.messageId, newStatus);
 
         notifyListeners();
-        print(
-            'UnifiedChatProvider: ✅ Message status updated: ${update.messageId} -> $newStatus');
+        Logger.success(
+            'UnifiedChatProvider:  Message status updated: ${update.messageId} -> $newStatus');
       }
     } catch (e) {
-      print('UnifiedChatProvider: ❌ Error handling message status update: $e');
+      Logger.error(
+          'UnifiedChatProvider:  Error handling message status update: $e');
     }
   }
 

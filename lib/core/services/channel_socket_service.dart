@@ -12,6 +12,7 @@ import 'package:sechat_app/core/services/app_state_service.dart';
 import 'package:sechat_app/features/notifications/services/local_notification_badge_service.dart';
 import 'package:sechat_app/core/services/ui_service.dart';
 import 'package:sechat_app/realtime/realtime_service_manager.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Channel-based Socket Service
 /// Replaces global event broadcasting with targeted channel communication
@@ -87,13 +88,13 @@ class ChannelSocketService {
   /// Initialize and connect to SeChat socket with channel-based communication
   Future<bool> initialize() async {
     try {
-      print(
-          '🔌 ChannelSocketService: Initializing channel-based socket connection...');
+      Logger.debug(
+          ' ChannelSocketService: Initializing channel-based socket connection...');
 
       // Get current session ID
       _currentSessionId = SeSessionService().currentSessionId;
       if (_currentSessionId == null) {
-        print('🔌 ChannelSocketService: ❌ No session ID available');
+        Logger.error(' ChannelSocketService:  No session ID available');
         return false;
       }
 
@@ -112,11 +113,11 @@ class ChannelSocketService {
       // Send user online status to server
       await sendUserOnlineStatus(true);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Channel-based socket initialized successfully');
+      Logger.success(
+          ' ChannelSocketService:  Channel-based socket initialized successfully');
       return true;
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Failed to initialize: $e');
+      Logger.error(' ChannelSocketService:  Failed to initialize: $e');
       return false;
     }
   }
@@ -144,11 +145,11 @@ class ChannelSocketService {
 
       // Connect to server
       await _socket!.connect();
-      print('🔌 ChannelSocketService: 🔌 Socket connection initiated');
+      Logger.debug(' ChannelSocketService: 🔌 Socket connection initiated');
     } catch (e) {
       _isConnecting = false;
-      print(
-          '🔌 ChannelSocketService: ❌ Failed to create socket connection: $e');
+      Logger.error(
+          ' ChannelSocketService:  Failed to create socket connection: $e');
       rethrow;
     }
   }
@@ -159,7 +160,7 @@ class ChannelSocketService {
 
     // Connection events
     _socket!.on('connect', (data) {
-      print('🔌 ChannelSocketService: ✅ Connected to socket server');
+      Logger.success(' ChannelSocketService:  Connected to socket server');
       _isConnected = _socket?.connected ?? true;
       _isConnecting = false;
       _reconnectAttempts = 0;
@@ -167,7 +168,7 @@ class ChannelSocketService {
     });
 
     _socket!.on('disconnect', (data) {
-      print('🔌 ChannelSocketService: ❌ Disconnected from socket server');
+      Logger.error(' ChannelSocketService:  Disconnected from socket server');
       _isConnected = false;
       _connectionStateController.add(false);
 
@@ -178,7 +179,7 @@ class ChannelSocketService {
     });
 
     _socket!.on('connect_error', (error) {
-      print('🔌 ChannelSocketService: ❌ Connection error: $error');
+      Logger.error(' ChannelSocketService:  Connection error: $error');
       _isConnected = false;
       _isConnecting = false;
       _connectionStateController.add(false);
@@ -191,12 +192,12 @@ class ChannelSocketService {
 
     // Session events
     _socket!.on('session_expired', (data) {
-      print('🔌 ChannelSocketService: ⚠️ Session expired');
+      Logger.warning(' ChannelSocketService:  Session expired');
       _handleSessionExpired();
     });
 
     _socket!.on('session_invalid', (data) {
-      print('🔌 ChannelSocketService: ❌ Session invalid');
+      Logger.error(' ChannelSocketService:  Session invalid');
       _handleSessionInvalid();
     });
   }
@@ -207,9 +208,11 @@ class ChannelSocketService {
     if (sessionId != null && _socket != null) {
       try {
         _socket!.emit('join_session', sessionId);
-        print('🔌 ChannelSocketService: ✅ Joined session channel: $sessionId');
+        Logger.success(
+            ' ChannelSocketService:  Joined session channel: $sessionId');
       } catch (e) {
-        print('🔌 ChannelSocketService: ❌ Failed to join session channel: $e');
+        Logger.error(
+            ' ChannelSocketService:  Failed to join session channel: $e');
       }
     }
   }
@@ -217,8 +220,8 @@ class ChannelSocketService {
   /// Set up dynamic event listeners for specific contacts
   /// This replaces the old global event broadcasting
   void setupContactListeners(List<String> contactSessionIds) {
-    print(
-        '🔌 ChannelSocketService: 🔧 Setting up listeners for ${contactSessionIds.length} contacts');
+    Logger.debug(
+        ' ChannelSocketService: 🔧 Setting up listeners for ${contactSessionIds.length} contacts');
 
     // Clean up existing listeners first
     _cleanupAllListeners();
@@ -253,21 +256,21 @@ class ChannelSocketService {
       });
     }
 
-    print(
-        '🔌 ChannelSocketService: ✅ Set up listeners for contact: $contactSessionId');
+    Logger.success(
+        ' ChannelSocketService:  Set up listeners for contact: $contactSessionId');
   }
 
   /// Handle channel-based events
   void _handleChannelEvent(
       String event, String contactSessionId, dynamic data) {
     try {
-      print(
-          '🔌 ChannelSocketService: 🔔 Channel event received: $event from $contactSessionId');
+      Logger.debug(
+          ' ChannelSocketService: 🔔 Channel event received: $event from $contactSessionId');
 
       // Parse event type from event name (e.g., "typing:session_123:start" -> "typing")
       final eventParts = event.split(':');
       if (eventParts.length != 3) {
-        print('🔌 ChannelSocketService: ⚠️ Invalid event format: $event');
+        Logger.warning(' ChannelSocketService:  Invalid event format: $event');
         return;
       }
 
@@ -285,7 +288,7 @@ class ChannelSocketService {
         _handleEncryptedEvent(eventType, contactSessionId, action, data);
       }
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Error handling channel event: $e');
+      Logger.error(' ChannelSocketService:  Error handling channel event: $e');
     }
   }
 
@@ -293,13 +296,14 @@ class ChannelSocketService {
   void _handleEncryptedEvent(String eventType, String contactSessionId,
       String action, dynamic data) async {
     try {
-      print(
-          '🔌 ChannelSocketService: 🔐 Handling encrypted event: $eventType from $contactSessionId');
+      Logger.debug(
+          ' ChannelSocketService: 🔐 Handling encrypted event: $eventType from $contactSessionId');
 
       // Extract encrypted data from payload
       final encryptedData = data['encrypted_data'] as String?;
       if (encryptedData == null) {
-        print('🔌 ChannelSocketService: ⚠️ No encrypted data found in event');
+        Logger.warning(
+            ' ChannelSocketService:  No encrypted data found in event');
         return;
       }
 
@@ -307,11 +311,12 @@ class ChannelSocketService {
       final decryptedData =
           await EncryptionService.decryptAesCbcPkcs7(encryptedData);
       if (decryptedData == null) {
-        print('🔌 ChannelSocketService: ❌ Failed to decrypt event data');
+        Logger.error(' ChannelSocketService:  Failed to decrypt event data');
         return;
       }
 
-      print('🔌 ChannelSocketService: ✅ Event data decrypted successfully');
+      Logger.success(
+          ' ChannelSocketService:  Event data decrypted successfully');
 
       // Now handle the decrypted event based on type
       switch (eventType) {
@@ -333,19 +338,20 @@ class ChannelSocketService {
           _handleConversationCreated(contactSessionId, decryptedData);
           break;
         default:
-          print(
-              '🔌 ChannelSocketService: ⚠️ Unknown encrypted event type: $eventType');
+          Logger.warning(
+              ' ChannelSocketService:  Unknown encrypted event type: $eventType');
       }
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Error handling encrypted event: $e');
+      Logger.error(
+          ' ChannelSocketService:  Error handling encrypted event: $e');
     }
   }
 
   /// Handle typing events (from decrypted data)
   void _handleTypingEvent(String contactSessionId, bool isTyping,
       Map<String, dynamic> decryptedData) {
-    print(
-        '🔌 ChannelSocketService: ⌨️ Typing event: $contactSessionId -> $isTyping');
+    Logger.debug(
+        ' ChannelSocketService: ⌨️ Typing event: $contactSessionId -> $isTyping');
 
     // Forward to realtime typing service
     try {
@@ -361,14 +367,14 @@ class ChannelSocketService {
         }
       }
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Error forwarding typing event: $e');
+      Logger.error(' ChannelSocketService:  Error forwarding typing event: $e');
     }
   }
 
   /// Handle chat events (from decrypted data)
   Future<void> _handleChatEvent(
       String contactSessionId, Map<String, dynamic> decryptedData) async {
-    print('🔌 ChannelSocketService: 💬 Chat event: $contactSessionId');
+    Logger.debug(' ChannelSocketService: 💬 Chat event: $contactSessionId');
 
     // Forward to realtime message service
     try {
@@ -400,20 +406,20 @@ class ChannelSocketService {
               'timestamp': DateTime.now().toIso8601String(),
             },
           );
-          print(
-              '🔌 ChannelSocketService: ✅ Push notification shown for message: $messageId');
+          Logger.success(
+              ' ChannelSocketService:  Push notification shown for message: $messageId');
         }
       }
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Error forwarding chat event: $e');
+      Logger.error(' ChannelSocketService:  Error forwarding chat event: $e');
     }
   }
 
   /// Handle presence events (from decrypted data)
   void _handlePresenceEvent(String contactSessionId, bool isOnline,
       Map<String, dynamic> decryptedData) {
-    print(
-        '🔌 ChannelSocketService: 🟢 Presence event: $contactSessionId -> ${isOnline ? 'online' : 'offline'}');
+    Logger.debug(
+        ' ChannelSocketService: 🟢 Presence event: $contactSessionId -> ${isOnline ? 'online' : 'offline'}');
 
     // Forward to realtime presence service
     try {
@@ -426,50 +432,53 @@ class ChannelSocketService {
         }
       }
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Error forwarding presence event: $e');
+      Logger.error(
+          ' ChannelSocketService:  Error forwarding presence event: $e');
     }
   }
 
   /// Handle user data exchange events (from decrypted data)
   void _handleUserDataExchange(
       String contactSessionId, Map<String, dynamic> decryptedData) {
-    print('🔌 ChannelSocketService: 🔑 User data exchange: $contactSessionId');
+    Logger.debug(
+        ' ChannelSocketService: 🔑 User data exchange: $contactSessionId');
 
     // Forward to key exchange service for user data processing
     try {
       final keyExchangeService = KeyExchangeService.instance;
       // This will handle the encrypted user data exchange
       // The service should decrypt the data and process the display name
-      print(
-          '🔌 ChannelSocketService: ✅ User data exchange forwarded to key exchange service');
+      Logger.success(
+          ' ChannelSocketService:  User data exchange forwarded to key exchange service');
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Error forwarding user data exchange: $e');
+      Logger.error(
+          ' ChannelSocketService:  Error forwarding user data exchange: $e');
     }
   }
 
   /// Handle conversation created events (from decrypted data)
   void _handleConversationCreated(
       String contactSessionId, Map<String, dynamic> decryptedData) {
-    print(
-        '🔌 ChannelSocketService: 💬 Conversation created: $contactSessionId');
+    Logger.debug(
+        ' ChannelSocketService: 💬 Conversation created: $contactSessionId');
 
     // Forward to appropriate service for conversation creation
     try {
       // This event indicates a conversation was created on the other side
       // The local app should also create the conversation if it doesn't exist
-      print('🔌 ChannelSocketService: ✅ Conversation created event processed');
+      Logger.success(
+          ' ChannelSocketService:  Conversation created event processed');
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Error processing conversation created: $e');
+      Logger.error(
+          ' ChannelSocketService:  Error processing conversation created: $e');
     }
   }
 
   /// Handle key exchange events (unencrypted - KER handshake)
   void _handleKeyExchangeEvent(
       String contactSessionId, String action, dynamic data) {
-    print(
-        '🔌 ChannelSocketService: 🔑 Key exchange event: $contactSessionId -> $action');
+    Logger.debug(
+        ' ChannelSocketService: 🔑 Key exchange event: $contactSessionId -> $action');
 
     // Forward to key exchange service (KER events are unencrypted)
     try {
@@ -480,12 +489,12 @@ class ChannelSocketService {
         keyExchangeService.processKeyExchangeResponse(data);
       } else if (action == 'revoked') {
         // Handle revoked event - use available method or log
-        print(
-            '🔌 ChannelSocketService: ⚠️ Key exchange revoked event not implemented yet');
+        Logger.warning(
+            ' ChannelSocketService:  Key exchange revoked event not implemented yet');
       }
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Error forwarding key exchange event: $e');
+      Logger.error(
+          ' ChannelSocketService:  Error forwarding key exchange event: $e');
     }
   }
 
@@ -503,7 +512,7 @@ class ChannelSocketService {
     }
 
     _activeListeners.clear();
-    print('🔌 ChannelSocketService: 🧹 Cleaned up all listeners');
+    Logger.info(' ChannelSocketService:  Cleaned up all listeners');
   }
 
   /// Remove listeners for a specific contact
@@ -516,16 +525,16 @@ class ChannelSocketService {
         _socket!.off(event);
       }
       _activeListeners.remove(contactSessionId);
-      print(
-          '🔌 ChannelSocketService: 🧹 Removed listeners for contact: $contactSessionId');
+      Logger.info(
+          ' ChannelSocketService:  Removed listeners for contact: $contactSessionId');
     }
   }
 
   /// Send typing indicator to specific recipient (encrypted)
   void sendTypingIndicator(String recipientSessionId, bool isTyping) async {
     if (_socket == null || !_isConnected) {
-      print(
-          '🔌 ChannelSocketService: ⚠️ Socket not connected, cannot send typing indicator');
+      Logger.warning(
+          ' ChannelSocketService:  Socket not connected, cannot send typing indicator');
       return;
     }
 
@@ -555,11 +564,11 @@ class ChannelSocketService {
       final eventName = isTyping ? 'typing:start' : 'typing:stop';
       _socket!.emit(eventName, socketPayload);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Encrypted typing indicator sent: $eventName to $recipientSessionId');
+      Logger.success(
+          ' ChannelSocketService:  Encrypted typing indicator sent: $eventName to $recipientSessionId');
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Failed to send encrypted typing indicator: $e');
+      Logger.error(
+          ' ChannelSocketService:  Failed to send encrypted typing indicator: $e');
     }
   }
 
@@ -567,8 +576,8 @@ class ChannelSocketService {
   void sendMessage(String recipientSessionId, String content,
       {String? messageId}) async {
     if (_socket == null || !_isConnected) {
-      print(
-          '🔌 ChannelSocketService: ⚠️ Socket not connected, cannot send message');
+      Logger.warning(
+          ' ChannelSocketService:  Socket not connected, cannot send message');
       return;
     }
 
@@ -598,18 +607,19 @@ class ChannelSocketService {
 
       _socket!.emit('message:send', socketPayload);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Encrypted message sent to $recipientSessionId');
+      Logger.success(
+          ' ChannelSocketService:  Encrypted message sent to $recipientSessionId');
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Failed to send encrypted message: $e');
+      Logger.error(
+          ' ChannelSocketService:  Failed to send encrypted message: $e');
     }
   }
 
   /// Send presence update to specific recipient (encrypted)
   void sendPresenceUpdate(String recipientSessionId, bool isOnline) async {
     if (_socket == null || !_isConnected) {
-      print(
-          '🔌 ChannelSocketService: ⚠️ Socket not connected, cannot send presence update');
+      Logger.warning(
+          ' ChannelSocketService:  Socket not connected, cannot send presence update');
       return;
     }
 
@@ -637,11 +647,11 @@ class ChannelSocketService {
 
       _socket!.emit('presence:update', socketPayload);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Encrypted presence update sent: ${isOnline ? 'online' : 'offline'} to $recipientSessionId');
+      Logger.success(
+          ' ChannelSocketService:  Encrypted presence update sent: ${isOnline ? 'online' : 'offline'} to $recipientSessionId');
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Failed to send encrypted presence update: $e');
+      Logger.error(
+          ' ChannelSocketService:  Failed to send encrypted presence update: $e');
     }
   }
 
@@ -649,8 +659,8 @@ class ChannelSocketService {
   void sendKeyExchangeRequest(
       String recipientSessionId, Map<String, dynamic> requestData) {
     if (_socket == null || !_isConnected) {
-      print(
-          '🔌 ChannelSocketService: ⚠️ Socket not connected, cannot send key exchange request');
+      Logger.warning(
+          ' ChannelSocketService:  Socket not connected, cannot send key exchange request');
       return;
     }
 
@@ -667,11 +677,11 @@ class ChannelSocketService {
       // Use channel-based event naming: key_exchange:recipientId:request
       _socket!.emit('key_exchange:${recipientSessionId}:request', kerData);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Unencrypted key exchange request sent to $recipientSessionId using channel format');
+      Logger.success(
+          ' ChannelSocketService:  Unencrypted key exchange request sent to $recipientSessionId using channel format');
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Failed to send key exchange request: $e');
+      Logger.error(
+          ' ChannelSocketService:  Failed to send key exchange request: $e');
     }
   }
 
@@ -679,8 +689,8 @@ class ChannelSocketService {
   void sendKeyExchangeResponse(
       String recipientSessionId, Map<String, dynamic> responseData) {
     if (_socket == null || !_isConnected) {
-      print(
-          '🔌 ChannelSocketService: ⚠️ Socket not connected, cannot send key exchange response');
+      Logger.warning(
+          ' ChannelSocketService:  Socket not connected, cannot send key exchange response');
       return;
     }
 
@@ -697,11 +707,11 @@ class ChannelSocketService {
       // Use channel-based event naming: key_exchange:recipientId:response
       _socket!.emit('key_exchange:${recipientSessionId}:response', kerData);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Unencrypted key exchange response sent to $recipientSessionId using channel format');
+      Logger.success(
+          ' ChannelSocketService:  Unencrypted key exchange response sent to $recipientSessionId using channel format');
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Failed to send key exchange response: $e');
+      Logger.error(
+          ' ChannelSocketService:  Failed to send key exchange response: $e');
     }
   }
 
@@ -709,8 +719,8 @@ class ChannelSocketService {
   void sendUserDataExchange(
       String recipientSessionId, Map<String, dynamic> userData) async {
     if (_socket == null || !_isConnected) {
-      print(
-          '🔌 ChannelSocketService: ⚠️ Socket not connected, cannot send user data exchange');
+      Logger.warning(
+          ' ChannelSocketService:  Socket not connected, cannot send user data exchange');
       return;
     }
 
@@ -741,11 +751,11 @@ class ChannelSocketService {
       _socket!
           .emit('user_data_exchange:${recipientSessionId}:data', socketPayload);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Encrypted user data exchange sent to $recipientSessionId using channel format');
+      Logger.success(
+          ' ChannelSocketService:  Encrypted user data exchange sent to $recipientSessionId using channel format');
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Failed to send encrypted user data exchange: $e');
+      Logger.error(
+          ' ChannelSocketService:  Failed to send encrypted user data exchange: $e');
     }
   }
 
@@ -753,8 +763,8 @@ class ChannelSocketService {
   void sendConversationCreated(
       String recipientSessionId, Map<String, dynamic> conversationData) async {
     if (_socket == null || !_isConnected) {
-      print(
-          '🔌 ChannelSocketService: ⚠️ Socket not connected, cannot send conversation created');
+      Logger.warning(
+          ' ChannelSocketService:  Socket not connected, cannot send conversation created');
       return;
     }
 
@@ -785,19 +795,19 @@ class ChannelSocketService {
       _socket!.emit('conversation_created:${recipientSessionId}:confirmation',
           socketPayload);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Encrypted conversation created confirmation sent to $recipientSessionId using channel format');
+      Logger.success(
+          ' ChannelSocketService:  Encrypted conversation created confirmation sent to $recipientSessionId using channel format');
     } catch (e) {
-      print(
-          '🔌 ChannelSocketService: ❌ Failed to send encrypted conversation created: $e');
+      Logger.error(
+          ' ChannelSocketService:  Failed to send encrypted conversation created: $e');
     }
   }
 
   /// Send user online status
   Future<void> sendUserOnlineStatus(bool isOnline) async {
     if (_socket == null || !_isConnected) {
-      print(
-          '🔌 ChannelSocketService: ⚠️ Socket not connected, cannot send online status');
+      Logger.warning(
+          ' ChannelSocketService:  Socket not connected, cannot send online status');
       return;
     }
 
@@ -810,10 +820,10 @@ class ChannelSocketService {
 
       _socket!.emit('user:online_status', statusData);
 
-      print(
-          '🔌 ChannelSocketService: ✅ Online status sent: ${isOnline ? 'online' : 'offline'}');
+      Logger.success(
+          ' ChannelSocketService:  Online status sent: ${isOnline ? 'online' : 'offline'}');
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Failed to send online status: $e');
+      Logger.error(' ChannelSocketService:  Failed to send online status: $e');
     }
   }
 
@@ -828,7 +838,7 @@ class ChannelSocketService {
   /// Schedule reconnection
   void _scheduleReconnect() {
     if (_reconnectAttempts >= _maxReconnectAttempts) {
-      print('🔌 ChannelSocketService: ❌ Max reconnection attempts reached');
+      Logger.error(' ChannelSocketService:  Max reconnection attempts reached');
       return;
     }
 
@@ -841,7 +851,7 @@ class ChannelSocketService {
 
     _reconnectTimer = Timer(delay, () async {
       _reconnectAttempts++;
-      print(
+      Logger.debug(
           '🔌 ChannelSocketService: 🔄 Attempting reconnection (${_reconnectAttempts}/$_maxReconnectAttempts)');
 
       try {
@@ -851,7 +861,7 @@ class ChannelSocketService {
           _reconnectAttempts = 0;
         }
       } catch (e) {
-        print('🔌 ChannelSocketService: ❌ Reconnection failed: $e');
+        Logger.error(' ChannelSocketService:  Reconnection failed: $e');
         _scheduleReconnect();
       }
     });
@@ -872,7 +882,7 @@ class ChannelSocketService {
 
   /// Handle session expired
   void _handleSessionExpired() {
-    print('🔌 ChannelSocketService: ⚠️ Session expired, disconnecting...');
+    Logger.warning(' ChannelSocketService:  Session expired, disconnecting...');
     disconnect();
 
     // Notify UI about session expiration
@@ -889,7 +899,7 @@ class ChannelSocketService {
 
   /// Handle session invalid
   void _handleSessionInvalid() {
-    print('🔌 ChannelSocketService: ❌ Session invalid, disconnecting...');
+    Logger.error(' ChannelSocketService:  Session invalid, disconnecting...');
     disconnect();
 
     // Notify UI about invalid session
@@ -920,9 +930,9 @@ class ChannelSocketService {
       _isConnecting = false;
       _connectionStateController.add(false);
 
-      print('🔌 ChannelSocketService: ✅ Disconnected from socket server');
+      Logger.success(' ChannelSocketService:  Disconnected from socket server');
     } catch (e) {
-      print('🔌 ChannelSocketService: ❌ Error during disconnect: $e');
+      Logger.error(' ChannelSocketService:  Error during disconnect: $e');
     }
   }
 

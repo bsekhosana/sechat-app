@@ -1,3 +1,5 @@
+import 'package:sechat_app//../core/utils/logger.dart';
+
 /// Model for key exchange requests
 class KeyExchangeRequest {
   final String id;
@@ -39,12 +41,12 @@ class KeyExchangeRequest {
           final intValue = int.parse(timestampValue);
           return DateTime.fromMillisecondsSinceEpoch(intValue);
         } catch (e) {
-          print(
+          Logger.debug(
               'KeyExchangeRequest: Invalid timestamp string: $timestampValue, using current time');
           return DateTime.now();
         }
       } else {
-        print(
+        Logger.debug(
             'KeyExchangeRequest: Invalid timestamp type: ${timestampValue.runtimeType}, using current time');
         return DateTime.now();
       }

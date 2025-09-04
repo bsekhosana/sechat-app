@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import '../models/message.dart';
+import '/../core/utils/logger.dart';
 
 /// Simplified encryption service for text-based chat messages only
 class ChatEncryptionService {
@@ -16,7 +17,8 @@ class ChatEncryptionService {
   /// Encrypt a text message
   Future<Map<String, dynamic>> encryptTextMessage(Message message) async {
     try {
-      print('🔐 ChatEncryptionService: Encrypting text message: ${message.id}');
+      Logger.debug(
+          ' ChatEncryptionService: Encrypting text message: ${message.id}');
 
       // Extract text content
       final textContent = message.content['text'] as String? ?? '';
@@ -49,10 +51,12 @@ class ChatEncryptionService {
         'timestamp': message.timestamp.millisecondsSinceEpoch,
       };
 
-      print('🔐 ChatEncryptionService: ✅ Text message encrypted successfully');
+      Logger.success(
+          ' ChatEncryptionService:  Text message encrypted successfully');
       return result;
     } catch (e) {
-      print('🔐 ChatEncryptionService: ❌ Failed to encrypt text message: $e');
+      Logger.error(
+          ' ChatEncryptionService:  Failed to encrypt text message: $e');
       rethrow;
     }
   }
@@ -61,7 +65,7 @@ class ChatEncryptionService {
   Future<Map<String, dynamic>> decryptTextMessage(
       Map<String, dynamic> encryptedData) async {
     try {
-      print('🔐 ChatEncryptionService: Decrypting text message');
+      Logger.debug(' ChatEncryptionService: Decrypting text message');
 
       final encryptedContent = encryptedData['encrypted_data'] as String;
       final checksum = encryptedData['checksum'] as String;
@@ -79,10 +83,12 @@ class ChatEncryptionService {
       // Parse the decrypted content
       final payload = _parseDecryptedPayload(decryptedContent);
 
-      print('🔐 ChatEncryptionService: ✅ Text message decrypted successfully');
+      Logger.success(
+          ' ChatEncryptionService:  Text message decrypted successfully');
       return payload;
     } catch (e) {
-      print('🔐 ChatEncryptionService: ❌ Failed to decrypt text message: $e');
+      Logger.error(
+          ' ChatEncryptionService:  Failed to decrypt text message: $e');
       rethrow;
     }
   }
@@ -110,8 +116,8 @@ class ChatEncryptionService {
 
       return content;
     } catch (e) {
-      print(
-          '🔐 ChatEncryptionService: ❌ Failed to parse decrypted payload: $e');
+      Logger.error(
+          ' ChatEncryptionService:  Failed to parse decrypted payload: $e');
       return {'type': 'text', 'text': 'Decryption failed'};
     }
   }
@@ -123,12 +129,12 @@ class ChatEncryptionService {
       final random = Random();
       final key = 'conv_${conversationId}_${random.nextInt(999999)}';
 
-      print(
-          '🔐 ChatEncryptionService: ✅ Conversation key generated: $conversationId');
+      Logger.success(
+          ' ChatEncryptionService:  Conversation key generated: $conversationId');
       return key;
     } catch (e) {
-      print(
-          '🔐 ChatEncryptionService: ❌ Failed to generate conversation key: $e');
+      Logger.error(
+          ' ChatEncryptionService:  Failed to generate conversation key: $e');
       rethrow;
     }
   }
@@ -139,11 +145,12 @@ class ChatEncryptionService {
       final expectedChecksum = _generateChecksum(message.content.toString());
 
       final isValid = checksum == expectedChecksum;
-      print('🔐 ChatEncryptionService: ✅ Message integrity verified: $isValid');
+      Logger.success(
+          ' ChatEncryptionService:  Message integrity verified: $isValid');
       return isValid;
     } catch (e) {
-      print(
-          '🔐 ChatEncryptionService: ❌ Failed to verify message integrity: $e');
+      Logger.error(
+          ' ChatEncryptionService:  Failed to verify message integrity: $e');
       return false;
     }
   }

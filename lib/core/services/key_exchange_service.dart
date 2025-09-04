@@ -14,6 +14,7 @@ import 'package:sechat_app/features/key_exchange/providers/key_exchange_request_
 import 'package:sechat_app/core/services/presence_manager.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 import 'package:sechat_app/main.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Service to handle secure key exchange between users
 class KeyExchangeService {
@@ -63,7 +64,7 @@ class KeyExchangeService {
         final privateKey = await EncryptionService.getPrivateKey();
         final version = await EncryptionService.getKeyPairVersion();
 
-        print('🔑 KeyExchangeService: Using existing keys from session');
+        Logger.debug(' KeyExchangeService: Using existing keys from session');
         return {
           'publicKey': publicKey,
           'privateKey': privateKey ?? '',
@@ -72,8 +73,8 @@ class KeyExchangeService {
       }
 
       // No keys exist, generate them via session service
-      print(
-          '🔑 KeyExchangeService: No keys found, generating new keys via session service');
+      Logger.debug(
+          ' KeyExchangeService: No keys found, generating new keys via session service');
       await sessionService.regenerateProperKeys();
 
       // Get the newly generated keys
@@ -83,7 +84,7 @@ class KeyExchangeService {
         final privateKey = await EncryptionService.getPrivateKey();
         final version = await EncryptionService.getKeyPairVersion();
 
-        print('🔑 KeyExchangeService: New keys generated successfully');
+        Logger.debug(' KeyExchangeService: New keys generated successfully');
         return {
           'publicKey': publicKey,
           'privateKey': privateKey ?? '',
@@ -93,7 +94,7 @@ class KeyExchangeService {
         throw Exception('Failed to generate new keys');
       }
     } catch (e) {
-      print('🔑 KeyExchangeService: Error ensuring keys exist: $e');
+      Logger.debug(' KeyExchangeService: Error ensuring keys exist: $e');
       throw Exception('Failed to ensure keys exist: $e');
     }
   }
@@ -102,7 +103,8 @@ class KeyExchangeService {
   Future<bool> requestKeyExchange(String recipientId,
       {String? requestPhrase}) async {
     try {
-      print('🔑 KeyExchangeService: Requesting key exchange with $recipientId');
+      Logger.debug(
+          ' KeyExchangeService: Requesting key exchange with $recipientId');
 
       // Ensure we have our own keys
       final ourKeys = await ensureKeysExist();
@@ -138,8 +140,8 @@ class KeyExchangeService {
           requestPhrase: requestPhrase ?? 'New encryption key exchange request',
         );
 
-        print(
-            '🔑 KeyExchangeService: ✅ Key exchange request sent successfully to $recipientId');
+        Logger.success(
+            ' KeyExchangeService:  Key exchange request sent successfully to $recipientId');
 
         // CRITICAL FIX: Automatically set up ChannelSocketService listeners for the recipient
         // This ensures we can receive responses and future events from this user
@@ -148,11 +150,11 @@ class KeyExchangeService {
 
           // Set up listeners for this specific recipient
           channelSocketService.setupContactListeners([recipientId]);
-          print(
-              '🔑 KeyExchangeService: ✅ Set up ChannelSocketService listeners for recipient: $recipientId');
+          Logger.success(
+              ' KeyExchangeService:  Set up ChannelSocketService listeners for recipient: $recipientId');
         } catch (e) {
-          print(
-              '🔑 KeyExchangeService: ⚠️ Warning: Could not set up ChannelSocketService listeners: $e');
+          Logger.warning(
+              ' KeyExchangeService:  Warning: Could not set up ChannelSocketService listeners: $e');
           // Don't fail the entire request if listener setup fails
         }
 
@@ -168,11 +170,12 @@ class KeyExchangeService {
 
         return true;
       } catch (e) {
-        print('🔑 KeyExchangeService: Error sending key exchange request: $e');
+        Logger.debug(
+            ' KeyExchangeService: Error sending key exchange request: $e');
         return false;
       }
     } catch (e) {
-      print('🔑 KeyExchangeService: Error requesting key exchange: $e');
+      Logger.debug(' KeyExchangeService: Error requesting key exchange: $e');
       return false;
     }
   }
@@ -181,8 +184,8 @@ class KeyExchangeService {
   Future<bool> resendKeyExchangeRequest(String recipientId,
       {String? requestPhrase}) async {
     try {
-      print(
-          '🔑 KeyExchangeService: Resending key exchange request to $recipientId');
+      Logger.debug(
+          ' KeyExchangeService: Resending key exchange request to $recipientId');
 
       // Remove any existing pending exchange first
       await _removePendingExchange(recipientId);
@@ -191,7 +194,8 @@ class KeyExchangeService {
       return await requestKeyExchange(recipientId,
           requestPhrase: requestPhrase);
     } catch (e) {
-      print('🔑 KeyExchangeService: Error resending key exchange request: $e');
+      Logger.debug(
+          ' KeyExchangeService: Error resending key exchange request: $e');
       return false;
     }
   }
@@ -217,9 +221,10 @@ class KeyExchangeService {
       existingRequests.add(sentRequest);
       await prefsService.setJsonList('key_exchange_requests', existingRequests);
 
-      print('🔑 KeyExchangeService: ✅ Local sent request record created');
+      Logger.success(' KeyExchangeService:  Local sent request record created');
     } catch (e) {
-      print('🔑 KeyExchangeService: Error creating local sent request: $e');
+      Logger.debug(
+          ' KeyExchangeService: Error creating local sent request: $e');
     }
   }
 
@@ -227,19 +232,19 @@ class KeyExchangeService {
   /// It should only store the request and let the user manually accept/decline
   Future<bool> processKeyExchangeRequest(Map<String, dynamic> request) async {
     try {
-      print('🔑 KeyExchangeService: Processing key exchange request');
-      print('🔑 KeyExchangeService: 📋 Incoming request data: $request');
-      print(
+      Logger.debug(' KeyExchangeService: Processing key exchange request');
+      Logger.debug(' KeyExchangeService: 📋 Incoming request data: $request');
+      Logger.debug(
           '🔑 KeyExchangeService: 🔍 Available keys: ${request.keys.toList()}');
 
       final senderId = request['senderId'] as String?;
       final senderPublicKey = request['publicKey'] as String?;
       final keyVersion = request['version']?.toString();
 
-      print('🔑 KeyExchangeService: 🔍 Extracted senderId: $senderId');
-      print(
-          '🔑 KeyExchangeService: 🔍 Extracted senderPublicKey: $senderPublicKey');
-      print('🔑 KeyExchangeService: 🔍 Extracted keyVersion: $keyVersion');
+      Logger.info(' KeyExchangeService:  Extracted senderId: $senderId');
+      Logger.info(
+          ' KeyExchangeService:  Extracted senderPublicKey: $senderPublicKey');
+      Logger.info(' KeyExchangeService:  Extracted keyVersion: $keyVersion');
 
       if (senderId == null || senderPublicKey == null) {
         throw Exception('Invalid key exchange request');
@@ -248,7 +253,7 @@ class KeyExchangeService {
       // Store sender's public key
       await EncryptionService.storeRecipientPublicKey(
           senderId, senderPublicKey);
-      print('🔑 KeyExchangeService: Stored public key for $senderId');
+      Logger.debug(' KeyExchangeService: Stored public key for $senderId');
 
       // CRITICAL FIX: Ensure SeSocketService is initialized and listening for incoming events
       // This is needed because the recipient must be able to receive KER responses
@@ -257,14 +262,15 @@ class KeyExchangeService {
 
         // Check if SeSocketService is already connected
         if (!seSocketService.isConnected) {
-          print(
-              '🔑 KeyExchangeService: 🔌 SeSocketService not connected, cannot receive incoming events');
+          Logger.debug(
+              ' KeyExchangeService: 🔌 SeSocketService not connected, cannot receive incoming events');
         } else {
-          print('🔑 KeyExchangeService: ✅ SeSocketService already connected');
+          Logger.success(
+              ' KeyExchangeService:  SeSocketService already connected');
         }
       } catch (e) {
-        print(
-            '🔑 KeyExchangeService: ⚠️ Warning: Could not initialize SeSocketService: $e');
+        Logger.warning(
+            ' KeyExchangeService:  Warning: Could not initialize SeSocketService: $e');
         // Don't fail the entire request if SeSocketService initialization fails
       }
 
@@ -275,24 +281,25 @@ class KeyExchangeService {
 
         // Set up listeners for this specific sender
         channelSocketService.setupContactListeners([senderId]);
-        print(
-            '🔑 KeyExchangeService: ✅ Set up ChannelSocketService listeners for sender: $senderId');
+        Logger.success(
+            ' KeyExchangeService:  Set up ChannelSocketService listeners for sender: $senderId');
       } catch (e) {
-        print(
-            '🔑 KeyExchangeService: ⚠️ Warning: Could not set up ChannelSocketService listeners: $e');
+        Logger.warning(
+            ' KeyExchangeService:  Warning: Could not set up ChannelSocketService listeners: $e');
         // Don't fail the entire request if listener setup fails
       }
 
       // IMPORTANT: Do NOT automatically send a response
       // The user should manually accept/decline the request
-      print(
-          '🔑 KeyExchangeService: ✅ Key exchange request stored successfully');
-      print(
-          '🔑 KeyExchangeService: ℹ️ User must manually accept/decline the request');
+      Logger.success(
+          ' KeyExchangeService:  Key exchange request stored successfully');
+      Logger.info(
+          ' KeyExchangeService:  User must manually accept/decline the request');
 
       return true;
     } catch (e) {
-      print('🔑 KeyExchangeService: Error processing key exchange request: $e');
+      Logger.debug(
+          ' KeyExchangeService: Error processing key exchange request: $e');
       return false;
     }
   }
@@ -300,7 +307,7 @@ class KeyExchangeService {
   /// Decline key exchange request from another user
   Future<bool> declineKeyExchangeRequest(Map<String, dynamic> request) async {
     try {
-      print('🔑 KeyExchangeService: Declining key exchange request');
+      Logger.debug(' KeyExchangeService: Declining key exchange request');
 
       final senderId = request['senderId'] as String?;
       final keyVersion = request['version']?.toString();
@@ -321,8 +328,8 @@ class KeyExchangeService {
         responseId: const Uuid().v4(),
       );
 
-      print(
-          '🔑 KeyExchangeService: ✅ Key exchange decline sent successfully to $senderId');
+      Logger.success(
+          ' KeyExchangeService:  Key exchange decline sent successfully to $senderId');
 
       // CRITICAL FIX: Automatically set up ChannelSocketService listeners for the sender
       // This ensures we can receive future events from this user
@@ -331,17 +338,18 @@ class KeyExchangeService {
 
         // Set up listeners for this specific sender
         channelSocketService.setupContactListeners([senderId]);
-        print(
-            '🔑 KeyExchangeService: ✅ Set up ChannelSocketService listeners for sender: $senderId');
+        Logger.success(
+            ' KeyExchangeService:  Set up ChannelSocketService listeners for sender: $senderId');
       } catch (e) {
-        print(
-            '🔑 KeyExchangeService: ⚠️ Warning: Could not set up ChannelSocketService listeners: $e');
+        Logger.warning(
+            ' KeyExchangeService:  Warning: Could not set up ChannelSocketService listeners: $e');
         // Don't fail the entire decline if listener setup fails
       }
 
       return true;
     } catch (e) {
-      print('🔑 KeyExchangeService: Error declining key exchange request: $e');
+      Logger.debug(
+          ' KeyExchangeService: Error declining key exchange request: $e');
       return false;
     }
   }
@@ -349,9 +357,9 @@ class KeyExchangeService {
   /// Process key exchange response from another user
   Future<bool> processKeyExchangeResponse(Map<String, dynamic> response) async {
     try {
-      print('🔑 KeyExchangeService: Processing key exchange response');
-      print('🔑 KeyExchangeService: 📋 Response data: $response');
-      print(
+      Logger.debug(' KeyExchangeService: Processing key exchange response');
+      Logger.debug(' KeyExchangeService: 📋 Response data: $response');
+      Logger.debug(
           '🔑 KeyExchangeService: 🔍 Available keys: ${response.keys.toList()}');
 
       final senderId = response['senderId'] as String?;
@@ -360,12 +368,13 @@ class KeyExchangeService {
       final responseStatus =
           response['response'] as String?; // Add response status check
 
-      print('🔑 KeyExchangeService: 🔍 Extracted senderId: $senderId');
-      print(
-          '🔑 KeyExchangeService: 🔍 Extracted senderPublicKey: $senderPublicKey');
-      print('🔑 KeyExchangeService: 🔍 Extracted responseType: $responseType');
-      print(
-          '🔑 KeyExchangeService: 🔍 Extracted responseStatus: $responseStatus');
+      Logger.info(' KeyExchangeService:  Extracted senderId: $senderId');
+      Logger.info(
+          ' KeyExchangeService:  Extracted senderPublicKey: $senderPublicKey');
+      Logger.info(
+          ' KeyExchangeService:  Extracted responseType: $responseType');
+      Logger.info(
+          ' KeyExchangeService:  Extracted responseStatus: $responseStatus');
 
       if (senderId == null || senderPublicKey == null) {
         throw Exception('Invalid key exchange response');
@@ -374,7 +383,7 @@ class KeyExchangeService {
       // Store sender's public key
       await EncryptionService.storeRecipientPublicKey(
           senderId, senderPublicKey);
-      print('🔑 KeyExchangeService: ✅ Stored public key for $senderId');
+      Logger.success(' KeyExchangeService:  Stored public key for $senderId');
 
       // CRITICAL FIX: Ensure SeSocketService is initialized and listening for incoming events
       // This is needed because the recipient must be able to receive future events
@@ -383,14 +392,15 @@ class KeyExchangeService {
 
         // Check if SeSocketService is already connected
         if (!seSocketService.isConnected) {
-          print(
-              '🔑 KeyExchangeService: 🔌 SeSocketService not connected, cannot receive incoming events');
+          Logger.debug(
+              ' KeyExchangeService: 🔌 SeSocketService not connected, cannot receive incoming events');
         } else {
-          print('🔑 KeyExchangeService: ✅ SeSocketService already connected');
+          Logger.success(
+              ' KeyExchangeService:  SeSocketService already connected');
         }
       } catch (e) {
-        print(
-            '🔑 KeyExchangeService: ⚠️ Warning: Could not initialize SeSocketService: $e');
+        Logger.warning(
+            ' KeyExchangeService:  Warning: Could not initialize SeSocketService: $e');
         // Don't fail the entire response processing if SeSocketService initialization fails
       }
 
@@ -401,11 +411,11 @@ class KeyExchangeService {
 
         // Set up listeners for this specific sender
         channelSocketService.setupContactListeners([senderId]);
-        print(
-            '🔑 KeyExchangeService: ✅ Set up ChannelSocketService listeners for sender: $senderId');
+        Logger.success(
+            ' KeyExchangeService:  Set up ChannelSocketService listeners for sender: $senderId');
       } catch (e) {
-        print(
-            '🔑 KeyExchangeService: ⚠️ Warning: Could not set up ChannelSocketService listeners: $e');
+        Logger.warning(
+            ' KeyExchangeService:  Warning: Could not set up ChannelSocketService listeners: $e');
         // Don't fail the entire response processing if listener setup fails
       }
 
@@ -419,58 +429,58 @@ class KeyExchangeService {
           responseStatus == 'accepted');
 
       if (isAccepted) {
-        print(
-            '🔑 KeyExchangeService: ✅ Key exchange accepted, processing encrypted user data');
-        print(
-            '🔑 KeyExchangeService: 🔍 Response type: $responseType, Response status: $responseStatus');
+        Logger.success(
+            ' KeyExchangeService:  Key exchange accepted, processing encrypted user data');
+        Logger.info(
+            ' KeyExchangeService:  Response type: $responseType, Response status: $responseStatus');
 
         // Check if the response includes encrypted user data
         final encryptedUserData = response['encryptedUserData'] as String?;
         final receivedConversationId = response['conversationId'] as String?;
 
-        print(
-            '🔑 KeyExchangeService: 🔍 Encrypted user data present: ${encryptedUserData != null}');
-        print(
-            '🔑 KeyExchangeService: 🔍 Received conversation ID: $receivedConversationId');
+        Logger.info(
+            ' KeyExchangeService:  Encrypted user data present: ${encryptedUserData != null}');
+        Logger.info(
+            ' KeyExchangeService:  Received conversation ID: $receivedConversationId');
 
         if (encryptedUserData != null) {
-          print(
-              '🔑 KeyExchangeService: 🔍 Found encrypted user data, processing...');
+          Logger.info(
+              ' KeyExchangeService:  Found encrypted user data, processing...');
 
           // Generate conversation ID locally if not provided by server
           final conversationId = receivedConversationId ??
               _generateConsistentConversationId(
                   SeSessionService().currentSessionId!, senderId);
 
-          print(
-              '🔑 KeyExchangeService: 🔍 Using conversation ID: $conversationId');
+          Logger.info(
+              ' KeyExchangeService:  Using conversation ID: $conversationId');
 
           // Process the encrypted user data to create conversation
-          print(
-              '🔑 KeyExchangeService: 🚀 About to call processUserDataExchange...');
-          print(
+          Logger.info(
+              ' KeyExchangeService:  About to call processUserDataExchange...');
+          Logger.debug(
               '🔑 KeyExchangeService: 🔍 Parameters - senderId: $senderId, encryptedData: ${encryptedUserData.substring(0, 50)}..., conversationId: $conversationId');
           final success = await processUserDataExchange(
             senderId: senderId,
             encryptedData: encryptedUserData,
             conversationId: conversationId,
           );
-          print(
-              '🔑 KeyExchangeService: 🔍 processUserDataExchange returned: $success');
+          Logger.info(
+              ' KeyExchangeService:  processUserDataExchange returned: $success');
 
           if (success) {
-            print(
-                '🔑 KeyExchangeService: ✅ Conversation created from accept event');
+            Logger.success(
+                ' KeyExchangeService:  Conversation created from accept event');
 
             // Send back our user data to complete the exchange
             await _sendInitialUserData(senderId);
           } else {
-            print(
-                '🔑 KeyExchangeService: ❌ Failed to create conversation from accept event');
+            Logger.error(
+                ' KeyExchangeService:  Failed to create conversation from accept event');
           }
         } else {
-          print(
-              '🔑 KeyExchangeService: ℹ️ No encrypted user data in accept event, using fallback');
+          Logger.info(
+              ' KeyExchangeService:  No encrypted user data in accept event, using fallback');
           // Fallback to old method
           await _sendInitialUserData(senderId);
         }
@@ -481,24 +491,24 @@ class KeyExchangeService {
           final provider = Provider.of<KeyExchangeRequestProvider>(
               navigatorKey.currentContext!,
               listen: false);
-          print(
-              '🔑 KeyExchangeService: 🔍 Got provider instance from context: ${provider.hashCode}');
+          Logger.info(
+              ' KeyExchangeService:  Got provider instance from context: ${provider.hashCode}');
           await provider.handleKeyExchangeAccepted(response);
-          print(
-              '🔑 KeyExchangeService: ✅ Notified KeyExchangeRequestProvider about acceptance');
+          Logger.success(
+              ' KeyExchangeService:  Notified KeyExchangeRequestProvider about acceptance');
         } catch (e) {
-          print(
-              '🔑 KeyExchangeService: ❌ Error notifying KeyExchangeRequestProvider: $e');
+          Logger.error(
+              ' KeyExchangeService:  Error notifying KeyExchangeRequestProvider: $e');
         }
       } else {
-        print(
-            '🔑 KeyExchangeService: ℹ️ Response is not acceptance - Type: $responseType, Status: $responseStatus');
+        Logger.info(
+            ' KeyExchangeService:  Response is not acceptance - Type: $responseType, Status: $responseStatus');
       }
 
       return true;
     } catch (e) {
-      print(
-          '🔑 KeyExchangeService: ❌ Error processing key exchange response: $e');
+      Logger.error(
+          ' KeyExchangeService:  Error processing key exchange response: $e');
       return false;
     }
   }
@@ -506,8 +516,8 @@ class KeyExchangeService {
   /// Handle key exchange error events
   Future<void> handleKeyExchangeError(Map<String, dynamic> errorData) async {
     try {
-      print('🔑 KeyExchangeService: Handling key exchange error');
-      print('🔑 KeyExchangeService: Error data: $errorData');
+      Logger.debug(' KeyExchangeService: Handling key exchange error');
+      Logger.debug(' KeyExchangeService: Error data: $errorData');
 
       final errorCode = errorData['errorCode']?.toString();
       final requestId = errorData['requestId']?.toString();
@@ -516,15 +526,15 @@ class KeyExchangeService {
       // Remove from pending exchanges if it was a request we sent
       if (recipientId != null) {
         await _removePendingExchange(recipientId);
-        print(
-            '🔑 KeyExchangeService: Removed pending exchange for $recipientId due to error');
+        Logger.debug(
+            ' KeyExchangeService: Removed pending exchange for $recipientId due to error');
       }
 
       // Update local request status to failed
       if (requestId != null) {
         await _updateRequestStatus(requestId, 'failed');
-        print(
-            '🔑 KeyExchangeService: Updated request $requestId status to failed');
+        Logger.debug(
+            ' KeyExchangeService: Updated request $requestId status to failed');
       }
 
       // Notify KeyExchangeRequestProvider about the error
@@ -532,18 +542,19 @@ class KeyExchangeService {
         // Import the provider to handle UI updates
         final provider = KeyExchangeRequestProvider();
         provider.handleKeyExchangeError(errorData);
-        print(
-            '🔑 KeyExchangeService: Notified KeyExchangeRequestProvider about error');
+        Logger.debug(
+            ' KeyExchangeService: Notified KeyExchangeRequestProvider about error');
       } catch (e) {
-        print(
-            '🔑 KeyExchangeService: Error notifying KeyExchangeRequestProvider: $e');
+        Logger.debug(
+            ' KeyExchangeService: Error notifying KeyExchangeRequestProvider: $e');
       }
 
       // Log the error for debugging
-      print(
-          '🔑 KeyExchangeService: Key exchange failed with error: $errorCode');
+      Logger.debug(
+          ' KeyExchangeService: Key exchange failed with error: $errorCode');
     } catch (e) {
-      print('🔑 KeyExchangeService: Error handling key exchange error: $e');
+      Logger.debug(
+          ' KeyExchangeService: Error handling key exchange error: $e');
     }
   }
 
@@ -551,8 +562,8 @@ class KeyExchangeService {
   Future<void> handleKeyExchangeDeclined(
       Map<String, dynamic> declineData) async {
     try {
-      print('🔑 KeyExchangeService: Handling key exchange declined');
-      print('🔑 KeyExchangeService: Decline data: $declineData');
+      Logger.debug(' KeyExchangeService: Handling key exchange declined');
+      Logger.debug(' KeyExchangeService: Decline data: $declineData');
 
       final senderId = declineData['senderId']?.toString();
       final requestId = declineData['requestId']?.toString();
@@ -561,33 +572,34 @@ class KeyExchangeService {
       // Remove from pending exchanges if it was a request we sent
       if (senderId != null) {
         await _removePendingExchange(senderId);
-        print(
-            '🔑 KeyExchangeService: Removed pending exchange for $senderId due to decline');
+        Logger.debug(
+            ' KeyExchangeService: Removed pending exchange for $senderId due to decline');
       }
 
       // Update local request status to declined
       if (requestId != null) {
         await _updateRequestStatus(requestId, 'declined');
-        print(
-            '🔑 KeyExchangeService: Updated request $requestId status to declined');
+        Logger.debug(
+            ' KeyExchangeService: Updated request $requestId status to declined');
       }
 
       // Notify KeyExchangeRequestProvider about the decline
       try {
         final provider = KeyExchangeRequestProvider();
         await provider.handleKeyExchangeDeclined(declineData);
-        print(
-            '🔑 KeyExchangeService: Notified KeyExchangeRequestProvider about decline');
+        Logger.debug(
+            ' KeyExchangeService: Notified KeyExchangeRequestProvider about decline');
       } catch (e) {
-        print(
-            '🔑 KeyExchangeService: Error notifying KeyExchangeRequestProvider: $e');
+        Logger.debug(
+            ' KeyExchangeService: Error notifying KeyExchangeRequestProvider: $e');
       }
 
       // Log the decline for debugging
-      print(
-          '🔑 KeyExchangeService: Key exchange declined by $senderId: $reason');
+      Logger.debug(
+          ' KeyExchangeService: Key exchange declined by $senderId: $reason');
     } catch (e) {
-      print('🔑 KeyExchangeService: Error handling key exchange decline: $e');
+      Logger.debug(
+          ' KeyExchangeService: Error handling key exchange decline: $e');
     }
   }
 
@@ -610,15 +622,15 @@ class KeyExchangeService {
       // Check if exchange is pending
       final isPending = await _isExchangePending(userId);
       if (isPending) {
-        print(
-            '🔑 KeyExchangeService: Key exchange with $userId already pending');
+        Logger.debug(
+            ' KeyExchangeService: Key exchange with $userId already pending');
         return true;
       }
 
       // Request new key exchange
       return await requestKeyExchange(userId);
     } catch (e) {
-      print('🔑 KeyExchangeService: Error ensuring key exchange: $e');
+      Logger.debug(' KeyExchangeService: Error ensuring key exchange: $e');
       return false;
     }
   }
@@ -629,15 +641,15 @@ class KeyExchangeService {
       final pendingExchanges = await _getPendingExchanges();
 
       for (final userId in pendingExchanges) {
-        print('🔑 KeyExchangeService: Generating test key for $userId');
+        Logger.debug(' KeyExchangeService: Generating test key for $userId');
         await EncryptionService.generateTestKey(userId);
         await _removePendingExchange(userId);
       }
 
-      print(
-          '🔑 KeyExchangeService: Generated test keys for ${pendingExchanges.length} pending exchanges');
+      Logger.debug(
+          ' KeyExchangeService: Generated test keys for ${pendingExchanges.length} pending exchanges');
     } catch (e) {
-      print('🔑 KeyExchangeService: Error generating test keys: $e');
+      Logger.debug(' KeyExchangeService: Error generating test keys: $e');
     }
   }
 
@@ -666,13 +678,13 @@ class KeyExchangeService {
     try {
       // This would typically update the status in the KeyExchangeRequestProvider
       // For now, we'll just log the status update
-      print(
-          '🔑 KeyExchangeService: Updating request $requestId status to $status');
+      Logger.debug(
+          ' KeyExchangeService: Updating request $requestId status to $status');
 
       // TODO: Implement actual status update in KeyExchangeRequestProvider
       // This could involve notifying the provider to update the request status
     } catch (e) {
-      print('🔑 KeyExchangeService: Error updating request status: $e');
+      Logger.debug(' KeyExchangeService: Error updating request status: $e');
     }
   }
 
@@ -695,7 +707,7 @@ class KeyExchangeService {
       final List<dynamic> decoded = jsonDecode(pendingExchangesJson);
       return decoded.map((e) => e.toString()).toList();
     } catch (e) {
-      print('🔑 KeyExchangeService: Error getting pending exchanges: $e');
+      Logger.debug(' KeyExchangeService: Error getting pending exchanges: $e');
       return [];
     }
   }
@@ -706,7 +718,7 @@ class KeyExchangeService {
       final json = jsonEncode(exchanges);
       await _storage.write(key: _pendingExchangesKey, value: json);
     } catch (e) {
-      print('🔑 KeyExchangeService: Error saving pending exchanges: $e');
+      Logger.debug(' KeyExchangeService: Error saving pending exchanges: $e');
     }
   }
 
@@ -715,7 +727,7 @@ class KeyExchangeService {
     try {
       await _storage.delete(key: _pendingExchangesKey);
     } catch (e) {
-      print('🔑 KeyExchangeService: Error clearing pending exchanges: $e');
+      Logger.debug(' KeyExchangeService: Error clearing pending exchanges: $e');
     }
   }
 
@@ -733,16 +745,16 @@ class KeyExchangeService {
 
       // Get the new key version
       final version = await EncryptionService.getKeyPairVersion();
-      print('🔑 KeyExchangeService: Rotated keys to version $version');
+      Logger.debug(' KeyExchangeService: Rotated keys to version $version');
 
       // TODO: In a real implementation, you would get the list of contacts
       // and notify each one about the key change. For now, we'll just log it.
-      print(
-          '🔑 KeyExchangeService: Key rotation completed. Contacts will need to re-exchange keys on next communication.');
+      Logger.debug(
+          ' KeyExchangeService: Key rotation completed. Contacts will need to re-exchange keys on next communication.');
 
       return true;
     } catch (e) {
-      print('🔑 KeyExchangeService: Error rotating keys: $e');
+      Logger.debug(' KeyExchangeService: Error rotating keys: $e');
       return false;
     }
   }
@@ -764,11 +776,12 @@ class KeyExchangeService {
             contactId, // CRITICAL: Use recipient's sessionId as conversationId
       );
 
-      print('🔑 KeyExchangeService: ✅ Key rotation notice sent to $contactId');
+      Logger.success(
+          ' KeyExchangeService:  Key rotation notice sent to $contactId');
 
       return true;
     } catch (e) {
-      print('🔑 KeyExchangeService: Error notifying key rotation: $e');
+      Logger.debug(' KeyExchangeService: Error notifying key rotation: $e');
       return false;
     }
   }
@@ -780,70 +793,72 @@ class KeyExchangeService {
     String? conversationId,
   }) async {
     try {
-      print('🔑 KeyExchangeService: 🚀 Starting to process user data exchange');
-      print('🔑 KeyExchangeService: 🔍 Sender ID: $senderId');
-      print(
-          '🔑 KeyExchangeService: 🔍 Encrypted data length: ${encryptedData.length}');
-      print('🔑 KeyExchangeService: 🔍 Conversation ID: $conversationId');
-      print(
+      Logger.info(
+          ' KeyExchangeService:  Starting to process user data exchange');
+      Logger.info(' KeyExchangeService:  Sender ID: $senderId');
+      Logger.info(
+          ' KeyExchangeService:  Encrypted data length: ${encryptedData.length}');
+      Logger.info(' KeyExchangeService:  Conversation ID: $conversationId');
+      Logger.debug(
           '🔑 KeyExchangeService: 🔍 Current session ID: ${SeSessionService().currentSessionId}');
-      print(
-          '🔑 KeyExchangeService: 🔍 Method parameters validated successfully');
-      print(
-          '🔑 KeyExchangeService: 🔍 Method entry point reached successfully');
+      Logger.info(
+          ' KeyExchangeService:  Method parameters validated successfully');
+      Logger.info(
+          ' KeyExchangeService:  Method entry point reached successfully');
 
       // Decrypt the user data
-      print('🔑 KeyExchangeService: 🔐 Attempting to decrypt user data...');
-      print('🔑 KeyExchangeService: 🔐 Encrypted data: $encryptedData');
-      print(
-          '🔑 KeyExchangeService: 🔐 Calling EncryptionService.decryptData...');
+      Logger.debug(
+          ' KeyExchangeService: 🔐 Attempting to decrypt user data...');
+      Logger.debug(' KeyExchangeService: 🔐 Encrypted data: $encryptedData');
+      Logger.debug(
+          ' KeyExchangeService: 🔐 Calling EncryptionService.decryptData...');
       final decryptedData = await EncryptionService.decryptData(encryptedData);
-      print('🔑 KeyExchangeService: 🔐 Decryption result: $decryptedData');
-      print(
-          '🔑 KeyExchangeService: 🔐 Decryption completed, checking result...');
+      Logger.debug(' KeyExchangeService: 🔐 Decryption result: $decryptedData');
+      Logger.debug(
+          ' KeyExchangeService: 🔐 Decryption completed, checking result...');
 
       if (decryptedData == null) {
-        print('🔑 KeyExchangeService: ❌ Failed to decrypt user data');
+        Logger.error(' KeyExchangeService:  Failed to decrypt user data');
         return false;
       }
 
-      print('🔑 KeyExchangeService: 🔐 User data decrypted successfully');
-      print('🔑 KeyExchangeService: 🔐 Decrypted data: $decryptedData');
+      Logger.debug(' KeyExchangeService: 🔐 User data decrypted successfully');
+      Logger.debug(' KeyExchangeService: 🔐 Decrypted data: $decryptedData');
 
       // Parse the decrypted data
       final userData = Map<String, dynamic>.from(decryptedData);
-      print('🔑 KeyExchangeService: 🔐 Parsed user data: $userData');
+      Logger.debug(' KeyExchangeService: 🔐 Parsed user data: $userData');
 
       final userName = userData['userName'] as String?;
       final userSessionId = userData['sessionId'] as String?;
       final receivedConversationId = userData['conversationId'] as String?;
 
-      print('🔑 KeyExchangeService: 🔐 Extracted userName: $userName');
-      print(
-          '🔑 KeyExchangeService: 🔐 Extracted userSessionId: $userSessionId');
-      print(
-          '🔑 KeyExchangeService: 🔐 Extracted receivedConversationId: $receivedConversationId');
+      Logger.debug(' KeyExchangeService: 🔐 Extracted userName: $userName');
+      Logger.debug(
+          ' KeyExchangeService: 🔐 Extracted userSessionId: $userSessionId');
+      Logger.debug(
+          ' KeyExchangeService: 🔐 Extracted receivedConversationId: $receivedConversationId');
 
       if (userName == null || userSessionId == null) {
-        print('🔑 KeyExchangeService: ❌ Invalid user data format');
+        Logger.error(' KeyExchangeService:  Invalid user data format');
         return false;
       }
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeService: ✅ Decrypted user data: $userName ($userSessionId)');
 
       // Store decrypted data for conversation creation
-      print(
-          '🔑 KeyExchangeService: 💾 Storing decrypted user data for conversation creation...');
+      Logger.debug(
+          ' KeyExchangeService: 💾 Storing decrypted user data for conversation creation...');
       _decryptedUserData = decryptedData;
-      print(
-          '🔑 KeyExchangeService: 💾 _decryptedUserData set to: $_decryptedUserData');
+      Logger.debug(
+          ' KeyExchangeService: 💾 _decryptedUserData set to: $_decryptedUserData');
 
       // If we received a conversation ID, this is the final response from the recipient
       // Create a matching conversation using their ID
       if (receivedConversationId != null) {
-        print(
-            '🔑 KeyExchangeService: 📋 Received conversation ID: $receivedConversationId');
+        Logger.debug(
+            ' KeyExchangeService: 📋 Received conversation ID: $receivedConversationId');
 
         await _createConversation(
           recipientId:
@@ -852,7 +867,7 @@ class KeyExchangeService {
               receivedConversationId, // ✅ Pass the conversation ID separately
         );
 
-        print('🔑 KeyExchangeService: ✅ Matching conversation created');
+        Logger.success(' KeyExchangeService:  Matching conversation created');
         return true;
       } else {
         // This is the initial user data from the sender, create conversation and send response
@@ -860,7 +875,7 @@ class KeyExchangeService {
           recipientId: userSessionId,
         );
 
-        print('🔑 KeyExchangeService: ✅ Conversation created');
+        Logger.success(' KeyExchangeService:  Conversation created');
 
         // Send our user data back to complete the exchange
         await _sendUserDataResponse(senderId, userSessionId);
@@ -868,7 +883,8 @@ class KeyExchangeService {
         return true;
       }
     } catch (e) {
-      print('🔑 KeyExchangeService: Error processing user data exchange: $e');
+      Logger.debug(
+          ' KeyExchangeService: Error processing user data exchange: $e');
       return false;
     }
   }
@@ -877,25 +893,25 @@ class KeyExchangeService {
   Future<void> _createConversation(
       {required String recipientId, String? conversationId}) async {
     try {
-      print('🔑 KeyExchangeService: Creating conversation: $recipientId');
+      Logger.debug(' KeyExchangeService: Creating conversation: $recipientId');
 
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) {
-        print('🔑 KeyExchangeService: ❌ No current session ID');
+        Logger.error(' KeyExchangeService:  No current session ID');
         return;
       }
 
       // Get display name from decrypted user data if available
       String? displayName;
-      print(
-          '🔑 KeyExchangeService: 🔍 _decryptedUserData: $_decryptedUserData');
+      Logger.info(
+          ' KeyExchangeService:  _decryptedUserData: $_decryptedUserData');
       if (_decryptedUserData != null) {
         displayName = _decryptedUserData!['userName'] as String?;
-        print(
-            '🔑 KeyExchangeService: 🔍 Using display name from user data: $displayName');
+        Logger.info(
+            ' KeyExchangeService:  Using display name from user data: $displayName');
       } else {
-        print(
-            '🔑 KeyExchangeService: ⚠️ _decryptedUserData is null, will use fallback display name');
+        Logger.warning(
+            ' KeyExchangeService:  _decryptedUserData is null, will use fallback display name');
         displayName = 'User $recipientId';
       }
 
@@ -903,10 +919,10 @@ class KeyExchangeService {
       final finalConversationId = conversationId ??
           _generateConsistentConversationId(currentUserId, recipientId);
 
-      print(
-          '🔑 KeyExchangeService: 🔍 Using conversation ID: $finalConversationId');
-      print('🔑 KeyExchangeService: 🔍 Current user ID: $currentUserId');
-      print('🔑 KeyExchangeService: 🔍 Recipient ID: $recipientId');
+      Logger.info(
+          ' KeyExchangeService:  Using conversation ID: $finalConversationId');
+      Logger.info(' KeyExchangeService:  Current user ID: $currentUserId');
+      Logger.info(' KeyExchangeService:  Recipient ID: $recipientId');
 
       // Create conversation with proper display name and consistent ID
       final conversation = ChatConversation(
@@ -925,47 +941,48 @@ class KeyExchangeService {
         },
       );
 
-      print(
-          '🔑 KeyExchangeService: 🔍 Created conversation object: ${conversation.id}');
-      print(
-          '🔑 KeyExchangeService: 🔍 Conversation participants: ${conversation.participant1Id} <-> ${conversation.participant2Id}');
+      Logger.info(
+          ' KeyExchangeService:  Created conversation object: ${conversation.id}');
+      Logger.info(
+          ' KeyExchangeService:  Conversation participants: ${conversation.participant1Id} <-> ${conversation.participant2Id}');
 
       // Save to storage
-      print(
-          '🔑 KeyExchangeService: 💾 Saving conversation to MessageStorageService...');
+      Logger.debug(
+          ' KeyExchangeService: 💾 Saving conversation to MessageStorageService...');
       await MessageStorageService.instance.saveConversation(conversation);
-      print(
-          '🔑 KeyExchangeService: ✅ Conversation saved to storage: ${conversation.id}');
+      Logger.success(
+          ' KeyExchangeService:  Conversation saved to storage: ${conversation.id}');
 
       // Notify UI that conversation was created
-      print(
-          '🔑 KeyExchangeService: 🔔 Checking conversation creation callback...');
+      Logger.debug(
+          ' KeyExchangeService: 🔔 Checking conversation creation callback...');
       if (_onConversationCreated != null) {
-        print(
-            '🔑 KeyExchangeService: 🔔 Calling conversation creation callback...');
+        Logger.debug(
+            ' KeyExchangeService: 🔔 Calling conversation creation callback...');
         _onConversationCreated!(conversation);
-        print('🔑 KeyExchangeService: ✅ UI notified of conversation creation');
+        Logger.success(
+            ' KeyExchangeService:  UI notified of conversation creation');
       } else {
-        print(
-            '🔑 KeyExchangeService: ⚠️ No conversation creation callback set');
+        Logger.warning(
+            ' KeyExchangeService:  No conversation creation callback set');
       }
 
-      print(
-          '🔑 KeyExchangeService: ✅ Conversation created and saved to storage');
+      Logger.success(
+          ' KeyExchangeService:  Conversation created and saved to storage');
     } catch (e) {
-      print('🔑 KeyExchangeService: ❌ Error creating conversation: $e');
+      Logger.error(' KeyExchangeService:  Error creating conversation: $e');
     }
   }
 
   /// Send initial user data after key exchange acceptance (from initial sender)
   Future<void> _sendInitialUserData(String recipientId) async {
     try {
-      print(
-          '🔑 KeyExchangeService: 🚀 Starting to send initial user data to $recipientId');
+      Logger.info(
+          ' KeyExchangeService:  Starting to send initial user data to $recipientId');
 
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) {
-        print('🔑 KeyExchangeService: ❌ Current user ID is null');
+        Logger.error(' KeyExchangeService:  Current user ID is null');
         return;
       }
 
@@ -973,7 +990,7 @@ class KeyExchangeService {
       final currentSession = SeSessionService().currentSession;
       final userName = currentSession?.displayName ?? 'User $currentUserId';
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeService: 🔍 Current user: $userName ($currentUserId)');
 
       // CRITICAL: Generate consistent conversation ID for both users
@@ -989,7 +1006,7 @@ class KeyExchangeService {
             consistentConversationId, // Include conversation ID for matching
       };
 
-      print('🔑 KeyExchangeService: 📋 User data payload: $userData');
+      Logger.debug(' KeyExchangeService: 📋 User data payload: $userData');
 
       // Encrypt the user data
       final encryptedData = await EncryptionService.encryptData(
@@ -1005,12 +1022,13 @@ class KeyExchangeService {
           'timestamp': DateTime.now().toIso8601String(),
         };
 
-        print('🔑 KeyExchangeService: 📤 Sending payload via socket: $payload');
+        Logger.debug(
+            ' KeyExchangeService: 📤 Sending payload via socket: $payload');
 
         // Check if socket is ready before sending
         if (SeSocketService.instance.isConnected) {
-          print(
-              '🔑 KeyExchangeService: 🔍 Socket connected, sending user_data_exchange event');
+          Logger.info(
+              ' KeyExchangeService:  Socket connected, sending user_data_exchange event');
 
           // Use SeSocketService for user data exchange
           try {
@@ -1025,27 +1043,28 @@ class KeyExchangeService {
               encryptedData: encryptedData,
               conversationId: consistentConversationId, // Add conversation ID
             );
-            print(
-                '🔑 KeyExchangeService: ✅ Initial user data sent to $recipientId using SeSocketService with conversationId: $consistentConversationId');
+            Logger.success(
+                ' KeyExchangeService:  Initial user data sent to $recipientId using SeSocketService with conversationId: $consistentConversationId');
           } catch (e) {
-            print(
-                '🔑 KeyExchangeService: ⚠️ Warning: Could not send user data exchange: $e');
+            Logger.warning(
+                ' KeyExchangeService:  Warning: Could not send user data exchange: $e');
           }
 
           // Add a small delay to ensure the event is processed
           await Future.delayed(const Duration(milliseconds: 100));
-          print(
-              '🔑 KeyExchangeService: ⏱️ Event sent, waiting for processing...');
+          Logger.debug(
+              ' KeyExchangeService: ⏱️ Event sent, waiting for processing...');
         } else {
-          print('🔑 KeyExchangeService: ❌ Socket not connected');
-          print(
+          Logger.error(' KeyExchangeService:  Socket not connected');
+          Logger.debug(
               '🔑 KeyExchangeService: 🔍 Socket status: ${SeSocketService.instance.getSocketStatus()}');
         }
       } else {
-        print('🔑 KeyExchangeService: ❌ Failed to encrypt initial user data');
+        Logger.error(
+            ' KeyExchangeService:  Failed to encrypt initial user data');
       }
     } catch (e) {
-      print('🔑 KeyExchangeService: ❌ Error sending initial user data: $e');
+      Logger.error(' KeyExchangeService:  Error sending initial user data: $e');
     }
   }
 
@@ -1091,21 +1110,21 @@ class KeyExchangeService {
               'conversationId': consistentConversationId,
               'timestamp': DateTime.now().toIso8601String(),
             });
-            print(
-                '🔑 KeyExchangeService: ✅ User data response sent to $recipientId using user_data_exchange:send');
+            Logger.success(
+                ' KeyExchangeService:  User data response sent to $recipientId using user_data_exchange:send');
           } catch (e) {
-            print(
-                '🔑 KeyExchangeService: ❌ Error sending user data response: $e');
+            Logger.error(
+                ' KeyExchangeService:  Error sending user data response: $e');
           }
         } else {
-          print(
-              '🔑 KeyExchangeService: ⚠️ Socket not connected, cannot send user data response');
+          Logger.warning(
+              ' KeyExchangeService:  Socket not connected, cannot send user data response');
         }
       } else {
-        print('🔑 KeyExchangeService: ❌ Failed to encrypt user data');
+        Logger.error(' KeyExchangeService:  Failed to encrypt user data');
       }
     } catch (e) {
-      print('🔑 KeyExchangeService: Error sending user data response: $e');
+      Logger.debug(' KeyExchangeService: Error sending user data response: $e');
     }
   }
 
@@ -1120,25 +1139,27 @@ class KeyExchangeService {
   /// Handle user data exchange data received from socket
   Future<void> handleUserDataExchange(Map<String, dynamic> data) async {
     try {
-      print('🔑 KeyExchangeService: 🔍🔍🔍 USER DATA EXCHANGE HANDLER CALLED!');
-      print('🔑 KeyExchangeService: 🔍🔍🔍 Data: $data');
-      print('🔑 KeyExchangeService: 🔍🔍🔍 Data keys: ${data.keys.toList()}');
+      Logger.info(
+          ' KeyExchangeService: 🔍🔍 USER DATA EXCHANGE HANDLER CALLED!');
+      Logger.info(' KeyExchangeService: 🔍🔍 Data: $data');
+      Logger.debug(
+          '🔑 KeyExchangeService: 🔍🔍🔍 Data keys: ${data.keys.toList()}');
 
       final senderId = data['senderId'] as String?;
       final encryptedData = data['encryptedData'] as String?;
       final conversationId = data['conversationId'] as String?;
 
       if (senderId == null || encryptedData == null) {
-        print(
-            '🔑 KeyExchangeService: ❌ Missing senderId or encryptedData in user data exchange');
+        Logger.error(
+            ' KeyExchangeService:  Missing senderId or encryptedData in user data exchange');
         return;
       }
 
       // Create a unique key for this exchange to prevent duplicates
       final exchangeKey = '$senderId:$encryptedData';
       if (_processedUserDataExchanges.contains(exchangeKey)) {
-        print(
-            '🔑 KeyExchangeService: ℹ️ User data exchange already processed for $senderId, skipping');
+        Logger.info(
+            ' KeyExchangeService:  User data exchange already processed for $senderId, skipping');
         return;
       }
 
@@ -1153,8 +1174,8 @@ class KeyExchangeService {
             .getConversation(consistentConversationId);
 
         if (existingConversation != null) {
-          print(
-              '🔑 KeyExchangeService: ℹ️ Conversation already exists with consistent ID: $consistentConversationId, skipping creation');
+          Logger.info(
+              ' KeyExchangeService:  Conversation already exists with consistent ID: $consistentConversationId, skipping creation');
           return;
         }
       }
@@ -1162,18 +1183,18 @@ class KeyExchangeService {
       // Decrypt the user data
       final decryptedData = await _decryptUserData(encryptedData, senderId);
       if (decryptedData == null) {
-        print('🔑 KeyExchangeService: ❌ Failed to decrypt user data');
+        Logger.error(' KeyExchangeService:  Failed to decrypt user data');
         return;
       }
 
       // Store decrypted data for conversation creation
-      print(
-          '🔑 KeyExchangeService: 💾 Storing decrypted user data for conversation creation...');
+      Logger.debug(
+          ' KeyExchangeService: 💾 Storing decrypted user data for conversation creation...');
       _decryptedUserData = decryptedData;
-      print(
-          '🔑 KeyExchangeService: 💾 _decryptedUserData set to: $_decryptedUserData');
+      Logger.debug(
+          ' KeyExchangeService: 💾 _decryptedUserData set to: $_decryptedUserData');
 
-      print('🔑 KeyExchangeService: ✅ User data decrypted successfully');
+      Logger.success(' KeyExchangeService:  User data decrypted successfully');
 
       // Create conversation
       await _createConversation(recipientId: senderId);
@@ -1193,9 +1214,11 @@ class KeyExchangeService {
 
       // Mark this exchange as processed to prevent duplicates
       _processedUserDataExchanges.add(exchangeKey);
-      print('🔑 KeyExchangeService: ✅ User data exchange marked as processed');
+      Logger.success(
+          ' KeyExchangeService:  User data exchange marked as processed');
     } catch (e) {
-      print('🔑 KeyExchangeService: ❌ Error handling user data exchange: $e');
+      Logger.error(
+          ' KeyExchangeService:  Error handling user data exchange: $e');
     }
   }
 
@@ -1209,7 +1232,7 @@ class KeyExchangeService {
       }
       return null;
     } catch (e) {
-      print('🔑 KeyExchangeService: ❌ Error decrypting user data: $e');
+      Logger.error(' KeyExchangeService:  Error decrypting user data: $e');
       return null;
     }
   }
@@ -1218,8 +1241,8 @@ class KeyExchangeService {
   void _addContactAfterKeyExchange(
       String contactSessionId, Map<String, dynamic> userData) {
     try {
-      print(
-          '🔑 KeyExchangeService: 🔗 Adding contact after successful key exchange: $contactSessionId');
+      Logger.debug(
+          ' KeyExchangeService: 🔗 Adding contact after successful key exchange: $contactSessionId');
 
       // Get display name from user data - check both userName and displayName fields
       final displayName = userData['userName'] as String? ??
@@ -1230,11 +1253,11 @@ class KeyExchangeService {
       final presenceManager = PresenceManager.instance;
       presenceManager.addNewContact(contactSessionId, displayName);
 
-      print(
-          '🔑 KeyExchangeService: ✅ Contact added successfully: $displayName');
+      Logger.success(
+          ' KeyExchangeService:  Contact added successfully: $displayName');
     } catch (e) {
-      print(
-          '🔑 KeyExchangeService: ❌ Error adding contact after key exchange: $e');
+      Logger.error(
+          ' KeyExchangeService:  Error adding contact after key exchange: $e');
     }
   }
 
@@ -1263,11 +1286,12 @@ class KeyExchangeService {
       // Save to database
       await MessageStorageService.instance.saveConversation(conversation);
 
-      print(
-          '🔑 KeyExchangeService: ✅ Conversation saved to database: $conversationId');
+      Logger.success(
+          ' KeyExchangeService:  Conversation saved to database: $conversationId');
       return conversationId;
     } catch (e) {
-      print('🔑 KeyExchangeService: ❌ Error creating conversation locally: $e');
+      Logger.error(
+          ' KeyExchangeService:  Error creating conversation locally: $e');
       return null;
     }
   }
@@ -1294,8 +1318,8 @@ class KeyExchangeService {
       final encryptedData =
           await EncryptionService.encryptData(userData, recipientId);
       if (encryptedData == null) {
-        print(
-            '🔑 KeyExchangeService: ❌ Failed to encrypt user data for conversation response');
+        Logger.error(
+            ' KeyExchangeService:  Failed to encrypt user data for conversation response');
         return;
       }
 
@@ -1310,15 +1334,15 @@ class KeyExchangeService {
           'timestamp': DateTime.now().toIso8601String(),
         });
 
-        print(
-            '🔑 KeyExchangeService: ✅ Conversation created response sent with encrypted user data');
+        Logger.success(
+            ' KeyExchangeService:  Conversation created response sent with encrypted user data');
       } else {
-        print(
-            '🔑 KeyExchangeService: ⚠️ Socket not connected, cannot send conversation created response');
+        Logger.warning(
+            ' KeyExchangeService:  Socket not connected, cannot send conversation created response');
       }
     } catch (e) {
-      print(
-          '🔑 KeyExchangeService: ❌ Error sending conversation created response: $e');
+      Logger.error(
+          ' KeyExchangeService:  Error sending conversation created response: $e');
     }
   }
 
@@ -1332,18 +1356,19 @@ class KeyExchangeService {
       if (senderId == null ||
           conversationId == null ||
           encryptedUserData == null) {
-        print('🔑 KeyExchangeService: ❌ Invalid conversation created data');
+        Logger.error(' KeyExchangeService:  Invalid conversation created data');
         return;
       }
 
-      print(
-          '🔑 KeyExchangeService: 🔍 Processing conversation created from $senderId');
+      Logger.info(
+          ' KeyExchangeService:  Processing conversation created from $senderId');
 
       // Decrypt the sender's user data
       final decryptedData =
           await EncryptionService.decryptData(encryptedUserData);
       if (decryptedData == null) {
-        print('🔑 KeyExchangeService: ❌ Failed to decrypt sender user data');
+        Logger.error(
+            ' KeyExchangeService:  Failed to decrypt sender user data');
         return;
       }
 
@@ -1352,14 +1377,14 @@ class KeyExchangeService {
       final userName = userData['userName']?.toString() ?? 'Unknown User';
       final userSessionId = userData['sessionId']?.toString() ?? senderId;
 
-      print(
+      Logger.debug(
           '🔑 KeyExchangeService: ✅ Sender user data decrypted: $userName ($userSessionId)');
 
       // Create conversation locally using the sender's ID as the conversation ID
       final localConversationId = userSessionId;
       if (localConversationId != null) {
-        print(
-            '🔑 KeyExchangeService: ✅ Conversation created locally: $localConversationId');
+        Logger.success(
+            ' KeyExchangeService:  Conversation created locally: $localConversationId');
 
         // Notify UI that conversation was created
         if (_onConversationCreated != null) {
@@ -1377,8 +1402,8 @@ class KeyExchangeService {
 
         // CRITICAL: Trigger 2-way presence update with the new contact
         try {
-          print(
-              '🔑 KeyExchangeService: 🔄 Triggering 2-way presence update with new contact: $senderId');
+          Logger.info(
+              ' KeyExchangeService:  Triggering 2-way presence update with new contact: $senderId');
 
           // Add the new contact to our contact list
           final contactService = ContactService.instance;
@@ -1390,17 +1415,19 @@ class KeyExchangeService {
           SeSocketService.instance
               .updatePresence(true, specificUsers: [senderId]);
 
-          print(
-              '🔑 KeyExchangeService: ✅ 2-way presence update completed for new contact: $senderId');
+          Logger.success(
+              ' KeyExchangeService:  2-way presence update completed for new contact: $senderId');
         } catch (e) {
-          print(
-              '🔑 KeyExchangeService: ⚠️ Failed to trigger presence update for new contact: $e');
+          Logger.warning(
+              ' KeyExchangeService:  Failed to trigger presence update for new contact: $e');
         }
       } else {
-        print('🔑 KeyExchangeService: ❌ Failed to create conversation locally');
+        Logger.error(
+            ' KeyExchangeService:  Failed to create conversation locally');
       }
     } catch (e) {
-      print('🔑 KeyExchangeService: ❌ Error handling conversation created: $e');
+      Logger.error(
+          ' KeyExchangeService:  Error handling conversation created: $e');
       rethrow;
     }
   }
@@ -1408,8 +1435,8 @@ class KeyExchangeService {
   /// Handle key exchange accepted events (when someone accepts our request)
   Future<void> handleKeyExchangeAccepted(Map<String, dynamic> data) async {
     try {
-      print('🔑 KeyExchangeService: Handling key exchange accepted');
-      print('🔑 KeyExchangeService: Accept data: $data');
+      Logger.debug(' KeyExchangeService: Handling key exchange accepted');
+      Logger.debug(' KeyExchangeService: Accept data: $data');
 
       final senderId = data['senderId']?.toString();
       final publicKey = data['publicKey']?.toString();
@@ -1417,32 +1444,33 @@ class KeyExchangeService {
       final conversationId = data['conversationId']?.toString();
 
       if (senderId == null || publicKey == null || requestId == null) {
-        print('🔑 KeyExchangeService: ❌ Invalid key exchange accept data');
+        Logger.error(' KeyExchangeService:  Invalid key exchange accept data');
         return;
       }
 
-      print('🔑 KeyExchangeService: ✅ Key exchange accepted by $senderId');
+      Logger.success(
+          ' KeyExchangeService:  Key exchange accepted by $senderId');
 
       // Store the sender's public key for future encryption
       await _storeRecipientPublicKey(senderId, publicKey);
-      print('🔑 KeyExchangeService: ✅ Stored public key for $senderId');
+      Logger.success(' KeyExchangeService:  Stored public key for $senderId');
 
       // Notify KeyExchangeRequestProvider about the acceptance
       try {
         final provider = KeyExchangeRequestProvider();
         await provider.handleKeyExchangeAccepted(data);
-        print(
-            '🔑 KeyExchangeService: Notified KeyExchangeRequestProvider about acceptance');
+        Logger.debug(
+            ' KeyExchangeService: Notified KeyExchangeRequestProvider about acceptance');
       } catch (e) {
-        print(
-            '🔑 KeyExchangeService: ❌ Error notifying KeyExchangeRequestProvider: $e');
+        Logger.error(
+            ' KeyExchangeService:  Error notifying KeyExchangeRequestProvider: $e');
       }
 
       // Now we can send encrypted user data since we have their public key
       await _sendInitialUserData(senderId);
     } catch (e) {
-      print(
-          '🔑 KeyExchangeService: ❌ Error handling key exchange accepted: $e');
+      Logger.error(
+          ' KeyExchangeService:  Error handling key exchange accepted: $e');
       rethrow;
     }
   }
@@ -1450,8 +1478,8 @@ class KeyExchangeService {
   /// Handle key exchange response (when someone accepts our request)
   Future<void> handleKeyExchangeResponse(Map<String, dynamic> data) async {
     try {
-      print('🔑 KeyExchangeService: 🔍 Processing key exchange response');
-      print('🔑 KeyExchangeService: 🔍 Response data: $data');
+      Logger.info(' KeyExchangeService:  Processing key exchange response');
+      Logger.info(' KeyExchangeService:  Response data: $data');
 
       final senderId = data['senderId']?.toString();
       final publicKey = data['publicKey']?.toString();
@@ -1459,21 +1487,23 @@ class KeyExchangeService {
       final requestVersion = data['requestVersion']?.toString();
 
       if (senderId == null || publicKey == null) {
-        print('🔑 KeyExchangeService: ❌ Invalid key exchange response data');
+        Logger.error(
+            ' KeyExchangeService:  Invalid key exchange response data');
         return;
       }
 
-      print('🔑 KeyExchangeService: ✅ Received public key from $senderId');
+      Logger.success(
+          ' KeyExchangeService:  Received public key from $senderId');
 
       // CRITICAL: Store the sender's public key for future encryption
       await _storeRecipientPublicKey(senderId, publicKey);
-      print('🔑 KeyExchangeService: ✅ Stored public key for $senderId');
+      Logger.success(' KeyExchangeService:  Stored public key for $senderId');
 
       // Now we can send encrypted user data since we have their public key
       await _sendInitialUserData(senderId);
     } catch (e) {
-      print(
-          '🔑 KeyExchangeService: ❌ Error handling key exchange response: $e');
+      Logger.error(
+          ' KeyExchangeService:  Error handling key exchange response: $e');
       rethrow;
     }
   }
@@ -1484,10 +1514,11 @@ class KeyExchangeService {
     try {
       // Store the public key using EncryptionService
       await EncryptionService.storeRecipientPublicKey(recipientId, publicKey);
-      print('🔑 KeyExchangeService: ✅ Public key stored for $recipientId');
+      Logger.success(
+          ' KeyExchangeService:  Public key stored for $recipientId');
     } catch (e) {
-      print(
-          '🔑 KeyExchangeService: ❌ Failed to store public key for $recipientId: $e');
+      Logger.error(
+          ' KeyExchangeService:  Failed to store public key for $recipientId: $e');
       throw Exception('Failed to store public key: $e');
     }
   }
@@ -1498,8 +1529,8 @@ class KeyExchangeService {
       final publicKey = await EncryptionService.getRecipientPublicKey(senderId);
       return publicKey;
     } catch (e) {
-      print(
-          '🔑 KeyExchangeService: ❌ Failed to get public key for $senderId: $e');
+      Logger.error(
+          ' KeyExchangeService:  Failed to get public key for $senderId: $e');
       return null;
     }
   }

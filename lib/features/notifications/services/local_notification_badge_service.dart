@@ -13,6 +13,7 @@ import '../../../features/chat/providers/chat_list_provider.dart';
 import '../../../features/chat/providers/unified_chat_provider.dart';
 import '../../../features/chat/screens/unified_chat_screen.dart';
 import '../../../main.dart'; // Import to access global navigator key
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Service for managing local notification badge counts
 class LocalNotificationBadgeService {
@@ -58,10 +59,11 @@ class LocalNotificationBadgeService {
       }
 
       _isInitialized = true;
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: ✅ Initialized successfully (unread count: $unreadCount)');
     } catch (e) {
-      print('📱 LocalNotificationBadgeService: ❌ Failed to initialize: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to initialize: $e');
     }
   }
 
@@ -99,14 +101,14 @@ class LocalNotificationBadgeService {
       // Request notification permissions for Android
       await _requestNotificationPermissions();
 
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 Notification tap handler registered: _onNotificationTapped');
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Local notifications initialized');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Local notifications initialized');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to initialize local notifications: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to initialize local notifications: $e');
     }
   }
 
@@ -168,11 +170,11 @@ class LocalNotificationBadgeService {
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(messageChannel);
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Notification channels created');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Notification channels created');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to create notification channels: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to create notification channels: $e');
     }
   }
 
@@ -186,20 +188,20 @@ class LocalNotificationBadgeService {
 
       if (androidPlugin != null) {
         final granted = await androidPlugin.requestNotificationsPermission();
-        print(
+        Logger.debug(
             '📱 LocalNotificationBadgeService: 🔧 Android notification permission granted: $granted');
 
         if (granted == true) {
           // Also request exact alarm permission for Android 12+
           final exactAlarmGranted =
               await androidPlugin.requestExactAlarmsPermission();
-          print(
+          Logger.debug(
               '📱 LocalNotificationBadgeService: 🔧 Android exact alarm permission granted: $exactAlarmGranted');
         }
       }
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to request notification permissions: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to request notification permissions: $e');
     }
   }
 
@@ -211,8 +213,8 @@ class LocalNotificationBadgeService {
       return binding.lifecycleState == AppLifecycleState.paused ||
           binding.lifecycleState == AppLifecycleState.detached;
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to check app state: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to check app state: $e');
       return false; // Default to foreground if we can't determine
     }
   }
@@ -238,11 +240,11 @@ class LocalNotificationBadgeService {
         date: DateTime.now(),
       );
       await databaseService.insertNotification(notificationItem);
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Notification item created in database');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Notification item created in database');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to create notification item: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to create notification item: $e');
     }
   }
 
@@ -264,39 +266,40 @@ class LocalNotificationBadgeService {
 
   /// Handle notification tap
   void _onNotificationTapped(NotificationResponse response) {
-    print(
-        '📱 LocalNotificationBadgeService: 🔔 Notification tapped: ${response.payload}');
+    Logger.debug(
+        '📱 LocalNotificationBadgeService:  Notification tapped: ${response.payload}');
 
     // Handle deep linking based on notification type
     try {
       if (response.payload != null) {
         final payload = response.payload!;
-        print('📱 LocalNotificationBadgeService: 🔍 Parsing payload: $payload');
+        Logger.info(
+            '📱 LocalNotificationBadgeService:  Parsing payload: $payload');
 
         // Try to parse as JSON first
         try {
           final Map<String, dynamic> payloadMap = jsonDecode(payload);
-          print(
-              '📱 LocalNotificationBadgeService: 🔍 Parsed payload as JSON: $payloadMap');
+          Logger.info(
+              '📱 LocalNotificationBadgeService:  Parsed payload as JSON: $payloadMap');
 
           if (payloadMap['type'] == 'new_message') {
             final conversationId = payloadMap['conversationId'] as String?;
             if (conversationId != null && conversationId.isNotEmpty) {
-              print(
-                  '📱 LocalNotificationBadgeService: 🔍 Found conversation ID: $conversationId');
+              Logger.info(
+                  '📱 LocalNotificationBadgeService:  Found conversation ID: $conversationId');
               _navigateToChatScreen(conversationId);
             } else {
-              print(
-                  '📱 LocalNotificationBadgeService: ⚠️ No conversation ID found in payload');
+              Logger.warning(
+                  '📱 LocalNotificationBadgeService:  No conversation ID found in payload');
             }
           } else if (payloadMap['type'] == 'ker_received') {
-            print(
-                '📱 LocalNotificationBadgeService: 🔍 Navigating to key exchange screen');
+            Logger.info(
+                '📱 LocalNotificationBadgeService:  Navigating to key exchange screen');
             _navigateToKeyExchangeScreen();
           }
         } catch (jsonError) {
-          print(
-              '📱 LocalNotificationBadgeService: 🔍 Payload is not JSON, trying string parsing: $jsonError');
+          Logger.info(
+              '📱 LocalNotificationBadgeService:  Payload is not JSON, trying string parsing: $jsonError');
 
           // Fallback to string parsing for backward compatibility
           if (payload.contains('type=new_message')) {
@@ -310,8 +313,8 @@ class LocalNotificationBadgeService {
         }
       }
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Error handling notification tap: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Error handling notification tap: $e');
     }
   }
 
@@ -329,8 +332,8 @@ class LocalNotificationBadgeService {
         return payload.substring(startIndex, endIndex);
       }
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Error extracting conversation ID: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Error extracting conversation ID: $e');
     }
     return null;
   }
@@ -338,17 +341,18 @@ class LocalNotificationBadgeService {
   /// Navigate to chat screen with conversation ID
   void _navigateToChatScreen(String conversationId) {
     try {
-      print(
-          '📱 LocalNotificationBadgeService: 🔍 Attempting to navigate to conversation: $conversationId');
+      Logger.info(
+          '📱 LocalNotificationBadgeService:  Attempting to navigate to conversation: $conversationId');
 
       // Use the global navigator key from main.dart
       final context = navigatorKey.currentContext;
       if (context == null) {
-        print(
-            '📱 LocalNotificationBadgeService: ❌ No navigator context available');
+        Logger.error(
+            '📱 LocalNotificationBadgeService:  No navigator context available');
         return;
       }
-      print('📱 LocalNotificationBadgeService: ✅ Navigator context available');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Navigator context available');
 
       // Get the chat list provider to find the conversation
       final chatListProvider =
@@ -360,11 +364,11 @@ class LocalNotificationBadgeService {
         conversation = chatListProvider.conversations.firstWhere(
           (conv) => conv.id == conversationId,
         );
-        print(
-            '📱 LocalNotificationBadgeService: ✅ Found conversation: ${conversation.id}');
+        Logger.success(
+            '📱 LocalNotificationBadgeService:  Found conversation: ${conversation.id}');
       } catch (e) {
-        print(
-            '📱 LocalNotificationBadgeService: ⚠️ Conversation not found: $conversationId');
+        Logger.warning(
+            '📱 LocalNotificationBadgeService:  Conversation not found: $conversationId');
         return;
       }
 
@@ -372,11 +376,12 @@ class LocalNotificationBadgeService {
       final currentUserId = _getCurrentUserId();
       final recipientId = conversation.getOtherParticipantId(currentUserId);
       if (recipientId == null) {
-        print(
-            '📱 LocalNotificationBadgeService: ❌ Could not determine recipient ID');
+        Logger.error(
+            '📱 LocalNotificationBadgeService:  Could not determine recipient ID');
         return;
       }
-      print('📱 LocalNotificationBadgeService: ✅ Recipient ID: $recipientId');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Recipient ID: $recipientId');
 
       // Get recipient name from contact service
       String recipientName = recipientId; // Default to ID
@@ -388,15 +393,16 @@ class LocalNotificationBadgeService {
           recipientName = contact.displayName!;
         }
       } catch (e) {
-        print(
-            '📱 LocalNotificationBadgeService: ⚠️ Could not get recipient name: $e');
+        Logger.warning(
+            '📱 LocalNotificationBadgeService:  Could not get recipient name: $e');
       }
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Recipient name: $recipientName');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Recipient name: $recipientName');
 
       // Get online status
       final isOnline = chatListProvider.getRecipientOnlineStatus(recipientId);
-      print('📱 LocalNotificationBadgeService: ✅ Online status: $isOnline');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Online status: $isOnline');
 
       // Navigate to the chat screen using the same pattern as ChatListScreen
       Navigator.of(context).push(
@@ -413,10 +419,11 @@ class LocalNotificationBadgeService {
         ),
       );
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Navigated to chat screen: $conversationId');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Navigated to chat screen: $conversationId');
     } catch (e) {
-      print('📱 LocalNotificationBadgeService: ❌ Error navigating to chat: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Error navigating to chat: $e');
     }
   }
 
@@ -427,12 +434,12 @@ class LocalNotificationBadgeService {
       if (navigatorKey.currentContext != null) {
         // Navigate to key exchange screen
         Navigator.of(navigatorKey.currentContext!).pushNamed('/key-exchange');
-        print(
-            '📱 LocalNotificationBadgeService: ✅ Navigated to key exchange screen');
+        Logger.success(
+            '📱 LocalNotificationBadgeService:  Navigated to key exchange screen');
       }
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Error navigating to key exchange: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Error navigating to key exchange: $e');
     }
   }
 
@@ -446,8 +453,8 @@ class LocalNotificationBadgeService {
       }
       return 'unknown_user';
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Error getting current user ID: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Error getting current user ID: $e');
       return 'unknown_user';
     }
   }
@@ -456,12 +463,12 @@ class LocalNotificationBadgeService {
   Future<int> getUnreadCount() async {
     try {
       final count = await _databaseService.getUnreadCount();
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: 🔍 getUnreadCount() called, returning: $count');
       return count;
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to get unread count: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to get unread count: $e');
       return 0;
     }
   }
@@ -476,11 +483,11 @@ class LocalNotificationBadgeService {
       indicatorService.updateCountsWithContext(
           unreadNotifications: unreadCount);
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Badge count updated: $unreadCount');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Badge count updated: $unreadCount');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to update badge count: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to update badge count: $e');
     }
   }
 
@@ -489,11 +496,11 @@ class LocalNotificationBadgeService {
     try {
       await _databaseService.markAsRead(notificationId);
       await updateBadgeCount();
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Notification marked as read and badge updated');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Notification marked as read and badge updated');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to mark as read and update badge: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to mark as read and update badge: $e');
     }
   }
 
@@ -505,11 +512,11 @@ class LocalNotificationBadgeService {
         await _databaseService.markAsRead(id);
       }
       await updateBadgeCount();
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Multiple notifications marked as read and badge updated');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Multiple notifications marked as read and badge updated');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to mark multiple as read and update badge: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to mark multiple as read and update badge: $e');
     }
   }
 
@@ -525,11 +532,11 @@ class LocalNotificationBadgeService {
       }
 
       await updateBadgeCount();
-      print(
-          '📱 LocalNotificationBadgeService: ✅ All notifications marked as read and badge updated');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  All notifications marked as read and badge updated');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to mark all as read and update badge: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to mark all as read and update badge: $e');
     }
   }
 
@@ -542,11 +549,11 @@ class LocalNotificationBadgeService {
       final indicatorService = IndicatorService();
       indicatorService.updateCountsWithContext(unreadNotifications: 0);
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ All notifications cleared and badge reset to 0');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  All notifications cleared and badge reset to 0');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to clear all and update badge: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to clear all and update badge: $e');
     }
   }
 
@@ -563,11 +570,11 @@ class LocalNotificationBadgeService {
       indicatorService.updateCountsWithContext(
           unreadNotifications: unreadCount);
 
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: ✅ Cleanup completed (unread count: $unreadCount)');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to perform cleanup: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to perform cleanup: $e');
     }
   }
 
@@ -575,9 +582,11 @@ class LocalNotificationBadgeService {
   Future<void> forceCleanup() async {
     try {
       await _performCleanup();
-      print('📱 LocalNotificationBadgeService: ✅ Force cleanup completed');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Force cleanup completed');
     } catch (e) {
-      print('📱 LocalNotificationBadgeService: ❌ Failed to force cleanup: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to force cleanup: $e');
     }
   }
 
@@ -594,11 +603,11 @@ class LocalNotificationBadgeService {
       // Reinitialize
       await initialize();
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Force reset and reinitialization completed');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Force reset and reinitialization completed');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to force reset and reinitialize: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to force reset and reinitialize: $e');
     }
   }
 
@@ -656,11 +665,11 @@ class LocalNotificationBadgeService {
 
       // Show the notification
       final notificationPayload = payload != null ? jsonEncode(payload) : null;
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 Creating message notification with payload: $notificationPayload');
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 App in background: $isInBackground');
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 Notification details: $notificationDetails');
 
       final notificationId =
@@ -675,24 +684,24 @@ class LocalNotificationBadgeService {
         payload: notificationPayload,
       );
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Message notification shown with ID: $notificationId');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Message notification shown with ID: $notificationId');
 
       // Only create notification item in database if app is in background
       if (isInBackground) {
         await _createNotificationItem(title, body, type, payload);
-        print(
-            '📱 LocalNotificationBadgeService: ✅ Background message notification item created');
+        Logger.success(
+            '📱 LocalNotificationBadgeService:  Background message notification item created');
       } else {
-        print(
-            '📱 LocalNotificationBadgeService: ℹ️ Foreground message notification - no database item created');
+        Logger.info(
+            '📱 LocalNotificationBadgeService:  Foreground message notification - no database item created');
       }
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Message notification shown: $title');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Message notification shown: $title');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to show message notification: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to show message notification: $e');
     }
   }
 
@@ -744,11 +753,11 @@ class LocalNotificationBadgeService {
 
       // Show the notification
       final notificationPayload = payload != null ? jsonEncode(payload) : null;
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 Creating notification with payload: $notificationPayload');
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 App in background: $isInBackground');
-      print(
+      Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 Notification details: $notificationDetails');
 
       final notificationId =
@@ -761,24 +770,24 @@ class LocalNotificationBadgeService {
         payload: notificationPayload,
       );
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ Notification shown with ID: $notificationId');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Notification shown with ID: $notificationId');
 
       // Only create notification item in database if app is in background
       if (isInBackground) {
         await _createNotificationItem(title, body, type, payload);
-        print(
-            '📱 LocalNotificationBadgeService: ✅ Background notification item created');
+        Logger.success(
+            '📱 LocalNotificationBadgeService:  Background notification item created');
       } else {
-        print(
-            '📱 LocalNotificationBadgeService: ℹ️ Foreground notification - no database item created');
+        Logger.info(
+            '📱 LocalNotificationBadgeService:  Foreground notification - no database item created');
       }
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ KER notification shown: $title');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  KER notification shown: $title');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to show KER notification: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to show KER notification: $e');
     }
   }
 
@@ -805,10 +814,11 @@ class LocalNotificationBadgeService {
       // Note: Local notification items don't affect app badge counter
       // App badge is managed separately by push notifications
 
-      print('📱 LocalNotificationBadgeService: ✅ Badge count reset to 0');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  Badge count reset to 0');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to reset badge count: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to reset badge count: $e');
     }
   }
 
@@ -818,11 +828,11 @@ class LocalNotificationBadgeService {
       // Cancel all pending notifications
       await _localNotifications.cancelAll();
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ All device notifications cleared from tray');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  All device notifications cleared from tray');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to clear device notifications: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to clear device notifications: $e');
     }
   }
 
@@ -869,11 +879,11 @@ class LocalNotificationBadgeService {
         DateTime.now().millisecondsSinceEpoch.remainder(100000),
       );
 
-      print(
-          '📱 LocalNotificationBadgeService: ✅ App badge count set to: $count');
+      Logger.success(
+          '📱 LocalNotificationBadgeService:  App badge count set to: $count');
     } catch (e) {
-      print(
-          '📱 LocalNotificationBadgeService: ❌ Failed to set badge count: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Failed to set badge count: $e');
     }
   }
 
@@ -881,6 +891,6 @@ class LocalNotificationBadgeService {
   void dispose() {
     _cleanupTimer?.cancel();
     _isInitialized = false;
-    print('📱 LocalNotificationBadgeService: ✅ Disposed');
+    Logger.success('📱 LocalNotificationBadgeService:  Disposed');
   }
 }

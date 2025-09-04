@@ -3,6 +3,7 @@ import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import '../../features/chat/services/message_storage_service.dart';
+import '/..//../core/utils/logger.dart';
 
 /// Service to handle user online status
 class OnlineStatusService {
@@ -37,9 +38,9 @@ class OnlineStatusService {
       // Set current user as online
       await setUserOnline(true);
 
-      print('🟢 OnlineStatusService: Initialized successfully');
+      Logger.debug('🟢 OnlineStatusService: Initialized successfully');
     } catch (e) {
-      print('🟢 OnlineStatusService: Error during initialization: $e');
+      Logger.debug('🟢 OnlineStatusService: Error during initialization: $e');
     }
   }
 
@@ -59,7 +60,7 @@ class OnlineStatusService {
     try {
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) {
-        print('🟢 OnlineStatusService: User not logged in');
+        Logger.debug('🟢 OnlineStatusService: User not logged in');
         return;
       }
 
@@ -80,9 +81,10 @@ class OnlineStatusService {
         );
       }
 
-      print('🟢 OnlineStatusService: User online status set to $isOnline');
+      Logger.debug(
+          '🟢 OnlineStatusService: User online status set to $isOnline');
     } catch (e) {
-      print('🟢 OnlineStatusService: Error setting online status: $e');
+      Logger.debug('🟢 OnlineStatusService: Error setting online status: $e');
     }
   }
 
@@ -133,10 +135,10 @@ class OnlineStatusService {
 
       _updateLocalStatus(senderId, isOnline, lastSeenTime);
 
-      print(
+      Logger.debug(
           '🟢 OnlineStatusService: Updated status for $senderId to $isOnline');
     } catch (e) {
-      print(
+      Logger.debug(
           '🟢 OnlineStatusService: Error processing online status update: $e');
     }
   }
@@ -156,7 +158,7 @@ class OnlineStatusService {
 
       await _prefsService.setJson('online_status_cache', statusMap);
     } catch (e) {
-      print('🟢 OnlineStatusService: Error saving online statuses: $e');
+      Logger.debug('🟢 OnlineStatusService: Error saving online statuses: $e');
     }
   }
 
@@ -181,10 +183,10 @@ class OnlineStatusService {
         });
       }
 
-      print(
+      Logger.debug(
           '🟢 OnlineStatusService: Loaded ${_onlineStatus.length} online statuses');
     } catch (e) {
-      print('🟢 OnlineStatusService: Error loading online statuses: $e');
+      Logger.debug('🟢 OnlineStatusService: Error loading online statuses: $e');
     }
   }
 
@@ -210,7 +212,7 @@ class OnlineStatusService {
           contactIds.add(otherParticipantId);
         }
       } catch (e) {
-        print(
+        Logger.debug(
             '🟢 OnlineStatusService: Error getting conversations from database: $e');
         // Fallback to SharedPreferences if database fails
         final chatsJson = await _prefsService.getJsonList('chats') ?? [];
@@ -228,7 +230,7 @@ class OnlineStatusService {
 
       return contactIds.toList();
     } catch (e) {
-      print('🟢 OnlineStatusService: Error getting contacts: $e');
+      Logger.debug('🟢 OnlineStatusService: Error getting contacts: $e');
       return [];
     }
   }

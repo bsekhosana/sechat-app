@@ -4,6 +4,7 @@ import '../models/notification_icons.dart';
 import 'local_notification_database_service.dart';
 import 'local_notification_badge_service.dart';
 import '../../../core/services/se_session_service.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Service for creating and managing local notification items
 class LocalNotificationItemsService {
@@ -23,8 +24,8 @@ class LocalNotificationItemsService {
       // Check if welcome notification already exists
       final hasWelcome = await _databaseService.hasWelcomeNotification(userId);
       if (hasWelcome) {
-        print(
-            '📱 LocalNotificationItemsService: ℹ️ Welcome notification already exists for user: $userId');
+        Logger.info(
+            '📱 LocalNotificationItemsService:  Welcome notification already exists for user: $userId');
         return;
       }
 
@@ -46,11 +47,11 @@ class LocalNotificationItemsService {
       );
 
       await _databaseService.insertNotification(notification);
-      print(
-          '📱 LocalNotificationItemsService: ✅ Welcome notification created for user: $userId');
+      Logger.success(
+          '📱 LocalNotificationItemsService:  Welcome notification created for user: $userId');
     } catch (e) {
-      print(
-          '📱 LocalNotificationItemsService: ❌ Failed to create welcome notification: $e');
+      Logger.error(
+          '📱 LocalNotificationItemsService:  Failed to create welcome notification: $e');
     }
   }
 
@@ -85,11 +86,11 @@ class LocalNotificationItemsService {
       );
 
       await _databaseService.insertNotification(notification);
-      print(
-          '📱 LocalNotificationItemsService: ✅ KER sent notification created');
+      Logger.success(
+          '📱 LocalNotificationItemsService:  KER sent notification created');
     } catch (e) {
-      print(
-          '📱 LocalNotificationItemsService: ❌ Failed to create KER sent notification: $e');
+      Logger.error(
+          '📱 LocalNotificationItemsService:  Failed to create KER sent notification: $e');
     }
   }
 
@@ -128,11 +129,11 @@ class LocalNotificationItemsService {
       // Push notifications are handled separately by the socket service
       await _databaseService.insertNotification(notification);
 
-      print(
+      Logger.debug(
           '📱 LocalNotificationItemsService: ✅ KER received notification created (database only)');
     } catch (e) {
-      print(
-          '📱 LocalNotificationItemsService: ❌ Failed to create KER received notification: $e');
+      Logger.error(
+          '📱 LocalNotificationItemsService:  Failed to create KER received notification: $e');
     }
   }
 
@@ -189,11 +190,11 @@ class LocalNotificationItemsService {
       );
 
       await _databaseService.insertNotification(notification);
-      print(
-          '📱 LocalNotificationItemsService: ✅ KER accepted notification created');
+      Logger.success(
+          '📱 LocalNotificationItemsService:  KER accepted notification created');
     } catch (e) {
-      print(
-          '📱 LocalNotificationItemsService: ❌ Failed to create KER accepted notification: $e');
+      Logger.error(
+          '📱 LocalNotificationItemsService:  Failed to create KER accepted notification: $e');
     }
   }
 
@@ -248,11 +249,11 @@ class LocalNotificationItemsService {
       );
 
       await _databaseService.insertNotification(notification);
-      print(
-          '📱 LocalNotificationItemsService: ✅ KER declined notification created');
+      Logger.success(
+          '📱 LocalNotificationItemsService:  KER declined notification created');
     } catch (e) {
-      print(
-          '📱 LocalNotificationItemsService: ❌ Failed to create KER declined notification: $e');
+      Logger.error(
+          '📱 LocalNotificationItemsService:  Failed to create KER declined notification: $e');
     }
   }
 
@@ -286,11 +287,11 @@ class LocalNotificationItemsService {
       );
 
       await _databaseService.insertNotification(notification);
-      print(
-          '📱 LocalNotificationItemsService: ✅ KER resent notification created');
+      Logger.success(
+          '📱 LocalNotificationItemsService:  KER resent notification created');
     } catch (e) {
-      print(
-          '📱 LocalNotificationItemsService: ❌ Failed to create KER resent notification: $e');
+      Logger.error(
+          '📱 LocalNotificationItemsService:  Failed to create KER resent notification: $e');
     }
   }
 
@@ -318,7 +319,8 @@ class LocalNotificationItemsService {
     try {
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) {
-        print('📱 LocalNotificationItemsService: ❌ No current session ID');
+        Logger.error(
+            '📱 LocalNotificationItemsService:  No current session ID');
         return;
       }
 
@@ -343,11 +345,11 @@ class LocalNotificationItemsService {
       );
 
       await _databaseService.insertNotification(notification);
-      print(
-          '📱 LocalNotificationItemsService: ✅ Conversation created notification created for: $participantName');
+      Logger.success(
+          '📱 LocalNotificationItemsService:  Conversation created notification created for: $participantName');
     } catch (e) {
-      print(
-          '📱 LocalNotificationItemsService: ❌ Failed to create conversation created notification: $e');
+      Logger.error(
+          '📱 LocalNotificationItemsService:  Failed to create conversation created notification: $e');
     }
   }
 

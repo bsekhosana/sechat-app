@@ -8,6 +8,7 @@ import 'package:sechat_app/core/services/encryption_service.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 import 'package:sechat_app/core/services/message_notification_service.dart';
 import 'package:sechat_app/core/services/contact_service.dart';
+import '/..//../core/utils/logger.dart';
 
 /// Unified Message Service - Single source of truth for all message operations
 /// Replaces all duplicate message services with one consistent implementation
@@ -39,7 +40,7 @@ class UnifiedMessageService extends ChangeNotifier {
     String? conversationId,
   }) async {
     try {
-      print(
+      Logger.debug(
           '📤 UnifiedMessageService: Sending message $messageId to $recipientId');
 
       // Validate inputs
@@ -77,9 +78,11 @@ class UnifiedMessageService extends ChangeNotifier {
 
         encryptedResult = await EncryptionService.encryptAesCbcPkcs7(
             messageData, recipientId);
-        print('📤 UnifiedMessageService: ✅ Message encrypted successfully');
+        Logger.success(
+            '📤 UnifiedMessageService:  Message encrypted successfully');
       } catch (e) {
-        print('📤 UnifiedMessageService: ❌ Failed to encrypt message: $e');
+        Logger.error(
+            '📤 UnifiedMessageService:  Failed to encrypt message: $e');
         return MessageSendResult.failure('Failed to encrypt message: $e');
       }
 
@@ -116,11 +119,11 @@ class UnifiedMessageService extends ChangeNotifier {
             _generateConsistentConversationId(
                 _sessionService.currentSessionId ?? '', recipientId);
 
-        print('📤 UnifiedMessageService: 🔍 Database save:');
-        print(
-            '📤 UnifiedMessageService: 🔍 Passed conversationId: $conversationId');
-        print(
-            '📤 UnifiedMessageService: 🔍 Effective conversationId: $effectiveConversationId');
+        Logger.info('📤 UnifiedMessageService:  Database save:');
+        Logger.info(
+            '📤 UnifiedMessageService:  Passed conversationId: $conversationId');
+        Logger.info(
+            '📤 UnifiedMessageService:  Effective conversationId: $effectiveConversationId');
 
         final encryptedMessage = msg.Message(
           id: messageId,
@@ -147,19 +150,20 @@ class UnifiedMessageService extends ChangeNotifier {
         );
 
         await _messageStorage.saveMessage(encryptedMessage);
-        print(
-            '📤 UnifiedMessageService: ✅ Encrypted message saved to database: $messageId');
+        Logger.success(
+            '📤 UnifiedMessageService:  Encrypted message saved to database: $messageId');
 
         // Notify listeners for outgoing message
-        print(
+        Logger.debug(
             '📤 UnifiedMessageService: 🔔 Calling notifyListeners() for outgoing message on instance: ${this.hashCode}');
-        print('📤 UnifiedMessageService: 🔍 Has listeners: ${hasListeners}');
+        Logger.info(
+            '📤 UnifiedMessageService:  Has listeners: ${hasListeners}');
         notifyListeners();
-        print(
+        Logger.debug(
             '📤 UnifiedMessageService: ✅ notifyListeners() called for outgoing message');
       } catch (e) {
-        print(
-            '📤 UnifiedMessageService: ⚠️ Failed to save message to database: $e');
+        Logger.warning(
+            '📤 UnifiedMessageService:  Failed to save message to database: $e');
         // Continue with sending even if database save fails
       }
 
@@ -168,14 +172,14 @@ class UnifiedMessageService extends ChangeNotifier {
 
       if (success) {
         _messageStates[messageId]?.status = msg.MessageStatus.sent;
-        print(
-            '📤 UnifiedMessageService: ✅ Message sent successfully: $messageId');
+        Logger.success(
+            '📤 UnifiedMessageService:  Message sent successfully: $messageId');
         return MessageSendResult.success();
       } else {
         return MessageSendResult.failure('Socket send failed');
       }
     } catch (e) {
-      print('📤 UnifiedMessageService: ❌ Error sending message: $e');
+      Logger.error('📤 UnifiedMessageService:  Error sending message: $e');
       return MessageSendResult.failure('Failed to send message: $e');
     }
   }
@@ -183,7 +187,7 @@ class UnifiedMessageService extends ChangeNotifier {
   /// Send message via socket with retry logic
   Future<bool> _sendViaSocket(Map<String, dynamic> payload) async {
     try {
-      print(
+      Logger.debug(
           '📤 UnifiedMessageService: 🔧 Calling SeSocketService.sendMessage...');
 
       // Use the existing SeSocketService.sendMessage method
@@ -196,11 +200,11 @@ class UnifiedMessageService extends ChangeNotifier {
             payload['conversationId'], // Pass the conversationId from payload
       );
 
-      print(
-          '📤 UnifiedMessageService: ✅ SeSocketService.sendMessage called successfully');
+      Logger.success(
+          '📤 UnifiedMessageService:  SeSocketService.sendMessage called successfully');
       return true;
     } catch (e) {
-      print('📤 UnifiedMessageService: ❌ Socket send error: $e');
+      Logger.error('📤 UnifiedMessageService:  Socket send error: $e');
       return false;
     }
   }
@@ -218,11 +222,11 @@ class UnifiedMessageService extends ChangeNotifier {
         conversationId ?? _sessionService.currentSessionId ?? '';
     final fromUserId = _sessionService.currentSessionId ?? '';
 
-    print('📤 UnifiedMessageService: 🔍 _createMessageObject:');
-    print(
-        '📤 UnifiedMessageService: 🔍 Passed conversationId: $conversationId');
-    print(
-        '📤 UnifiedMessageService: 🔍 Effective conversationId: $effectiveConversationId');
+    Logger.info('📤 UnifiedMessageService:  _createMessageObject:');
+    Logger.info(
+        '📤 UnifiedMessageService:  Passed conversationId: $conversationId');
+    Logger.info(
+        '📤 UnifiedMessageService:  Effective conversationId: $effectiveConversationId');
 
     return msg.Message(
       id: messageId,
@@ -276,7 +280,7 @@ class UnifiedMessageService extends ChangeNotifier {
     if (messageState != null) {
       messageState.status = status;
       messageState.timestamp = DateTime.now();
-      print(
+      Logger.debug(
           '📤 UnifiedMessageService: Status updated: $messageId -> ${status.name}');
       notifyListeners();
     }
@@ -293,14 +297,15 @@ class UnifiedMessageService extends ChangeNotifier {
     String? checksum, // For encrypted messages
   }) async {
     try {
-      print(
+      Logger.debug(
           '📤 UnifiedMessageService: 📥 Handling incoming message: $messageId');
 
       String decryptedBody = body;
 
       // CRITICAL: Decrypt message and store unhashed value to avoid decryption on chat screen
       if (isEncrypted && body.isNotEmpty) {
-        print('📤 UnifiedMessageService: 🔓 Decrypting message for storage');
+        Logger.debug(
+            '📤 UnifiedMessageService:  Decrypting message for storage');
         try {
           // Use EncryptionService to decrypt the message (first layer)
           final decryptedData =
@@ -308,13 +313,13 @@ class UnifiedMessageService extends ChangeNotifier {
 
           if (decryptedData != null && decryptedData.containsKey('text')) {
             final firstLayerDecrypted = decryptedData['text'] as String;
-            print('📤 UnifiedMessageService: ✅ First layer decrypted');
+            Logger.success('📤 UnifiedMessageService:  First layer decrypted');
 
             // Check if the decrypted text is still encrypted (double encryption scenario)
             if (firstLayerDecrypted.length > 100 &&
                 firstLayerDecrypted.contains('eyJ')) {
-              print(
-                  '📤 UnifiedMessageService: 🔍 Detected double encryption, decrypting inner layer...');
+              Logger.info(
+                  '📤 UnifiedMessageService:  Detected double encryption, decrypting inner layer...');
               try {
                 // Decrypt the inner encrypted content
                 final innerDecryptedData =
@@ -325,32 +330,32 @@ class UnifiedMessageService extends ChangeNotifier {
                     innerDecryptedData.containsKey('text')) {
                   final finalDecryptedText =
                       innerDecryptedData['text'] as String;
-                  print(
-                      '📤 UnifiedMessageService: ✅ Inner layer decrypted successfully');
+                  Logger.success(
+                      '📤 UnifiedMessageService:  Inner layer decrypted successfully');
                   decryptedBody = finalDecryptedText;
                 } else {
-                  print(
-                      '📤 UnifiedMessageService: ⚠️ Inner layer decryption failed, using first layer');
+                  Logger.warning(
+                      '📤 UnifiedMessageService:  Inner layer decryption failed, using first layer');
                   decryptedBody = firstLayerDecrypted;
                 }
               } catch (e) {
-                print(
-                    '📤 UnifiedMessageService: ❌ Inner layer decryption error: $e, using first layer');
+                Logger.error(
+                    '📤 UnifiedMessageService:  Inner layer decryption error: $e, using first layer');
                 decryptedBody = firstLayerDecrypted;
               }
             } else {
               // Single layer encryption, use as is
-              print(
-                  '📤 UnifiedMessageService: ✅ Single layer decryption completed');
+              Logger.success(
+                  '📤 UnifiedMessageService:  Single layer decryption completed');
               decryptedBody = firstLayerDecrypted;
             }
           } else {
-            print(
-                '📤 UnifiedMessageService: ⚠️ Decryption failed - invalid format, using encrypted text');
+            Logger.warning(
+                '📤 UnifiedMessageService:  Decryption failed - invalid format, using encrypted text');
             decryptedBody = '[Encrypted Message]';
           }
         } catch (e) {
-          print('📤 UnifiedMessageService: ❌ Decryption failed: $e');
+          Logger.error('📤 UnifiedMessageService:  Decryption failed: $e');
           decryptedBody = '[Encrypted Message]';
         }
       }
@@ -395,8 +400,8 @@ class UnifiedMessageService extends ChangeNotifier {
 
       // Save to database
       await _messageStorage.saveMessage(message);
-      print(
-          '📤 UnifiedMessageService: ✅ Incoming message saved to database: $messageId');
+      Logger.success(
+          '📤 UnifiedMessageService:  Incoming message saved to database: $messageId');
 
       // Show push notification for received message
       try {
@@ -408,15 +413,15 @@ class UnifiedMessageService extends ChangeNotifier {
               contact.displayName != null &&
               contact.displayName!.isNotEmpty) {
             senderName = contact.displayName!;
-            print(
-                '📤 UnifiedMessageService: ✅ Using contact display name: $senderName');
+            Logger.success(
+                '📤 UnifiedMessageService:  Using contact display name: $senderName');
           } else {
-            print(
-                '📤 UnifiedMessageService: ⚠️ No contact found or display name empty, using userId: $senderName');
+            Logger.warning(
+                '📤 UnifiedMessageService:  No contact found or display name empty, using userId: $senderName');
           }
         } catch (e) {
-          print(
-              '📤 UnifiedMessageService: ⚠️ Error getting sender name from contact service: $e');
+          Logger.warning(
+              '📤 UnifiedMessageService:  Error getting sender name from contact service: $e');
         }
 
         await MessageNotificationService.instance.showMessageNotification(
@@ -426,22 +431,22 @@ class UnifiedMessageService extends ChangeNotifier {
           conversationId: consistentConversationId,
           isEncrypted: isEncrypted,
         );
-        print(
-            '📤 UnifiedMessageService: ✅ Push notification shown for message: $messageId from: $senderName');
+        Logger.success(
+            '📤 UnifiedMessageService:  Push notification shown for message: $messageId from: $senderName');
       } catch (e) {
-        print(
-            '📤 UnifiedMessageService: ❌ Failed to show push notification: $e');
+        Logger.error(
+            '📤 UnifiedMessageService:  Failed to show push notification: $e');
       }
 
       // Notify listeners
-      print(
+      Logger.debug(
           '📤 UnifiedMessageService: 🔔 Calling notifyListeners() for incoming message on instance: ${this.hashCode}');
-      print('📤 UnifiedMessageService: 🔍 Has listeners: ${hasListeners}');
+      Logger.info('📤 UnifiedMessageService:  Has listeners: ${hasListeners}');
       notifyListeners();
-      print('📤 UnifiedMessageService: ✅ notifyListeners() called');
+      Logger.debug('📤 UnifiedMessageService: ✅ notifyListeners() called');
     } catch (e) {
-      print(
-          '📤 UnifiedMessageService: ❌ Failed to handle incoming message: $e');
+      Logger.error(
+          '📤 UnifiedMessageService:  Failed to handle incoming message: $e');
     }
   }
 

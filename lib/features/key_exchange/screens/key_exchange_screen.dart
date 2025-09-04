@@ -5,6 +5,7 @@ import '../../../shared/models/key_exchange_request.dart';
 import '../providers/key_exchange_request_provider.dart';
 import '../../../shared/widgets/custom_elevated_button.dart';
 import '../../../core/services/indicator_service.dart';
+import '/../core/utils/logger.dart';
 
 class KeyExchangeScreen extends StatefulWidget {
   const KeyExchangeScreen({super.key});
@@ -48,10 +49,10 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
       try {
         final indicatorService = IndicatorService();
         indicatorService.setScreenContext(isOnKeyExchangeScreen: false);
-        print(
-            '🔑 KeyExchangeScreen: ✅ Screen context reset - badge updates will resume');
+        Logger.success(
+            ' KeyExchangeScreen:  Screen context reset - badge updates will resume');
       } catch (e) {
-        print('🔑 KeyExchangeScreen: ❌ Error resetting screen context: $e');
+        Logger.error(' KeyExchangeScreen:  Error resetting screen context: $e');
       }
     });
 
@@ -102,9 +103,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
     return Consumer<KeyExchangeRequestProvider>(
       builder: (context, provider, child) {
         final receivedRequests = provider.receivedRequests;
-        print(
-            '🔑 KeyExchangeScreen: 🔄 Consumer rebuild - received requests count: ${receivedRequests.length}');
-        print(
+        Logger.info(
+            ' KeyExchangeScreen:  Consumer rebuild - received requests count: ${receivedRequests.length}');
+        Logger.debug(
             '🔑 KeyExchangeScreen: 🔄 Received requests details: ${receivedRequests.map((req) => '${req.id}:${req.status}:${req.fromSessionId}').toList()}');
 
         if (receivedRequests.isEmpty) {
@@ -131,9 +132,9 @@ class _KeyExchangeScreenState extends State<KeyExchangeScreen>
     return Consumer<KeyExchangeRequestProvider>(
       builder: (context, provider, child) {
         final sentRequests = provider.sentRequests;
-        print(
-            '🔑 KeyExchangeScreen: 🔄 Consumer rebuild - sent requests count: ${sentRequests.length}');
-        print(
+        Logger.info(
+            ' KeyExchangeScreen:  Consumer rebuild - sent requests count: ${sentRequests.length}');
+        Logger.debug(
             '🔑 KeyExchangeScreen: 🔄 Sent requests statuses: ${sentRequests.map((req) => '${req.id}:${req.status}').toList()}');
 
         if (sentRequests.isEmpty) {

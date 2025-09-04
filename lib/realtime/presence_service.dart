@@ -7,6 +7,7 @@ import '../core/services/se_socket_service.dart';
 import '../core/services/se_session_service.dart';
 import 'realtime_logger.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
+import '/../core/utils/logger.dart';
 
 /// Service to manage user presence (online/offline) with robust TTL handling
 class PresenceService {
@@ -192,15 +193,16 @@ class PresenceService {
     try {
       final currentUserId = _sessionService.currentSessionId;
       if (currentUserId == null) {
-        print(
-            '🟢 PresenceService: ❌ No session ID available for presence update');
+        Logger.error(
+            '🟢 PresenceService:  No session ID available for presence update');
         return;
       }
 
       // Get all active contacts from the session service
       final activeContacts = _getActiveContactsFromSession();
       if (activeContacts.isEmpty) {
-        print('🟢 PresenceService: ℹ️ No active contacts to send presence to');
+        Logger.info(
+            '🟢 PresenceService:  No active contacts to send presence to');
         return;
       }
 
@@ -212,10 +214,10 @@ class PresenceService {
         socketService.sendPresenceUpdate(contactId, isOnline);
       }
 
-      print(
-          '🟢 PresenceService: ✅ Presence update sent via channel socket: ${isOnline ? 'online' : 'offline'} to ${activeContacts.length} contacts');
+      Logger.success(
+          '🟢 PresenceService:  Presence update sent via channel socket: ${isOnline ? 'online' : 'offline'} to ${activeContacts.length} contacts');
     } catch (e) {
-      print('🟢 PresenceService: ❌ Failed to send presence update: $e');
+      Logger.error('🟢 PresenceService:  Failed to send presence update: $e');
     }
   }
 
@@ -232,7 +234,7 @@ class PresenceService {
       // or be derived from the message cache
       return <String>[];
     } catch (e) {
-      print('🟢 PresenceService: ❌ Error getting active contacts: $e');
+      Logger.error('🟢 PresenceService:  Error getting active contacts: $e');
       return [];
     }
   }

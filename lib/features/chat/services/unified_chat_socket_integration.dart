@@ -2,6 +2,7 @@ import '../services/unified_chat_integration_service.dart';
 import '../services/message_status_tracking_service.dart';
 import '../models/message.dart';
 import '../models/message_status.dart' as msg_status;
+import '/../core/utils/logger.dart';
 
 /// Service to integrate unified chat system with existing socket event handling
 class UnifiedChatSocketIntegration {
@@ -21,8 +22,8 @@ class UnifiedChatSocketIntegration {
     required String body,
     required String senderName,
   }) {
-    print(
-        'UnifiedChatSocketIntegration: 📨 Handling incoming message: $messageId');
+    Logger.debug(
+        'UnifiedChatSocketIntegration:  Handling incoming message: $messageId');
 
     // Notify integration service
     _integrationService.handleNewMessageArrival(
@@ -41,8 +42,8 @@ class UnifiedChatSocketIntegration {
     required bool isTyping,
     required String conversationId,
   }) {
-    print(
-        'UnifiedChatSocketIntegration: ⌨️ Handling typing indicator: $senderId -> $isTyping');
+    Logger.debug(
+        'UnifiedChatSocketIntegration:  Handling typing indicator: $senderId -> $isTyping');
 
     // Notify integration service
     _integrationService.handleTypingIndicatorUpdate(
@@ -58,7 +59,7 @@ class UnifiedChatSocketIntegration {
     required bool isOnline,
     DateTime? lastSeen,
   }) {
-    print(
+    Logger.debug(
         'UnifiedChatSocketIntegration: 🟢 Handling presence update: $userId -> $isOnline');
 
     // Notify integration service
@@ -75,7 +76,7 @@ class UnifiedChatSocketIntegration {
     required msg_status.MessageDeliveryStatus status,
     required String senderId,
   }) {
-    print(
+    Logger.debug(
         'UnifiedChatSocketIntegration: 📊 Handling message status update: $messageId -> $status');
 
     // Create status update object

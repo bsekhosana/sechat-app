@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '/..//../core/utils/logger.dart';
 
 /// Service for handling push notifications for received messages
 class MessageNotificationService {
@@ -30,10 +31,10 @@ class MessageNotificationService {
       // We just use the same instance that's already initialized
 
       _isInitialized = true;
-      print(
+      Logger.debug(
           '🔔 MessageNotificationService: ✅ Initialized successfully (using shared plugin instance)');
     } catch (e) {
-      print('🔔 MessageNotificationService: ❌ Failed to initialize: $e');
+      Logger.error(' MessageNotificationService:  Failed to initialize: $e');
     }
   }
 
@@ -43,15 +44,15 @@ class MessageNotificationService {
       // Request notification permission
       final status = await Permission.notification.request();
       if (status.isGranted) {
-        print(
-            '🔔 MessageNotificationService: ✅ Notification permission granted');
+        Logger.success(
+            ' MessageNotificationService:  Notification permission granted');
       } else {
-        print(
-            '🔔 MessageNotificationService: ⚠️ Notification permission denied');
+        Logger.warning(
+            ' MessageNotificationService:  Notification permission denied');
       }
     } catch (e) {
-      print(
-          '🔔 MessageNotificationService: ❌ Error requesting permissions: $e');
+      Logger.error(
+          ' MessageNotificationService:  Error requesting permissions: $e');
     }
   }
 
@@ -109,11 +110,11 @@ class MessageNotificationService {
         }), // Pass JSON payload with type and conversation ID
       );
 
-      print(
-          '🔔 MessageNotificationService: ✅ Message notification shown for: $senderName');
+      Logger.success(
+          ' MessageNotificationService:  Message notification shown for: $senderName');
     } catch (e) {
-      print(
-          '🔔 MessageNotificationService: ❌ Failed to show message notification: $e');
+      Logger.error(
+          ' MessageNotificationService:  Failed to show message notification: $e');
     }
   }
 
@@ -123,10 +124,11 @@ class MessageNotificationService {
   Future<void> cancelAllNotifications() async {
     try {
       await _flutterLocalNotificationsPlugin.cancelAll();
-      print('🔔 MessageNotificationService: ✅ All notifications cancelled');
+      Logger.success(
+          ' MessageNotificationService:  All notifications cancelled');
     } catch (e) {
-      print(
-          '🔔 MessageNotificationService: ❌ Failed to cancel notifications: $e');
+      Logger.error(
+          ' MessageNotificationService:  Failed to cancel notifications: $e');
     }
   }
 
@@ -134,11 +136,11 @@ class MessageNotificationService {
   Future<void> cancelNotification(int notificationId) async {
     try {
       await _flutterLocalNotificationsPlugin.cancel(notificationId);
-      print(
-          '🔔 MessageNotificationService: ✅ Notification cancelled: $notificationId');
+      Logger.success(
+          ' MessageNotificationService:  Notification cancelled: $notificationId');
     } catch (e) {
-      print(
-          '🔔 MessageNotificationService: ❌ Failed to cancel notification: $e');
+      Logger.error(
+          ' MessageNotificationService:  Failed to cancel notification: $e');
     }
   }
 

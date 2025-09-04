@@ -1,3 +1,5 @@
+import 'package:sechat_app//../core/utils/logger.dart';
+
 class Chat {
   final String id;
   final String user1Id;
@@ -35,8 +37,8 @@ class Chat {
     final Map<String, dynamic> data = Map<String, dynamic>.from(json);
 
     // Debug: Log the incoming data
-    print('🔍 Chat.fromJson: Parsing chat data: ${data.keys.toList()}');
-    print('🔍 Chat.fromJson: Data values: $data');
+    Logger.debug('🔍 Chat.fromJson: Parsing chat data: ${data.keys.toList()}');
+    Logger.info(' Chat.fromJson: Data values: $data');
 
     // Handle API response structure with other_user
     if (data.containsKey('other_user')) {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '/..//../core/utils/logger.dart';
 
 class StoreLinkResolver {
   static const _fallbackWeb = 'https://sechat.app';
@@ -83,7 +84,7 @@ class StoreLinkResolver {
       }
     } catch (e) {
       // Log error for debugging but don't throw
-      print('iOS store link resolution failed: $e');
+      Logger.debug('iOS store link resolution failed: $e');
     }
 
     // Return fallback if dynamic resolution fails
@@ -111,7 +112,7 @@ class StoreLinkResolver {
       }
     } catch (e) {
       // Log error for debugging but don't throw
-      print('Android store link resolution failed: $e');
+      Logger.debug('Android store link resolution failed: $e');
     }
 
     // Return fallback if dynamic resolution fails

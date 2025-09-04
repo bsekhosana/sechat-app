@@ -16,6 +16,7 @@ import '../models/chat_conversation.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'session_chat_provider.dart';
+import '/../core/utils/logger.dart';
 
 /// Provider for managing chat list state and operations
 class ChatListProvider extends ChangeNotifier {
@@ -50,8 +51,8 @@ class ChatListProvider extends ChangeNotifier {
   /// Set the active SessionChatProvider for real-time updates
   void setActiveSessionChatProvider(SessionChatProvider? provider) {
     _activeSessionChatProvider = provider;
-    print(
-        '📱 ChatListProvider: ${provider != null ? '✅ Set' : '❌ Cleared'} active SessionChatProvider');
+    Logger.success(
+        '📱 ChatListProvider: ${provider != null ? ' Set' : '❌ Cleared'} active SessionChatProvider');
   }
 
   /// Get real-time online status for a specific recipient
@@ -62,13 +63,13 @@ class ChatListProvider extends ChangeNotifier {
       final contactService = ContactService.instance;
       final contact = contactService.getContact(recipientId);
       if (contact != null) {
-        print(
-            '📱 ChatListProvider: ✅ Using ContactService presence for $recipientId: ${contact.isOnline}');
+        Logger.success(
+            '📱 ChatListProvider:  Using ContactService presence for $recipientId: ${contact.isOnline}');
         return contact.isOnline;
       }
     } catch (e) {
-      print(
-          '📱 ChatListProvider: ⚠️ ContactService not available, falling back: $e');
+      Logger.warning(
+          '📱 ChatListProvider:  ContactService not available, falling back: $e');
     }
 
     // Fallback to conversation data if ContactService not available
@@ -78,13 +79,13 @@ class ChatListProvider extends ChangeNotifier {
             conv.participant1Id == recipientId ||
             conv.participant2Id == recipientId,
       );
-      print(
-          '📱 ChatListProvider: ✅ Using conversation presence for $recipientId: ${conversation.isOnline}');
+      Logger.success(
+          '📱 ChatListProvider:  Using conversation presence for $recipientId: ${conversation.isOnline}');
       return conversation.isOnline ?? false;
     } catch (e) {
       // No conversation found, default to offline
-      print(
-          '📱 ChatListProvider: ⚠️ No presence data found for $recipientId, defaulting to offline');
+      Logger.warning(
+          '📱 ChatListProvider:  No presence data found for $recipientId, defaulting to offline');
       return false;
     }
   }
@@ -102,8 +103,8 @@ class ChatListProvider extends ChangeNotifier {
   }) async {
     // 🆕 FIXED: Process ALL status updates including delivered/read for chat list items
     // The chat list needs to show the latest message status for proper UI updates
-    print(
-        '📱 ChatListProvider: 🔄 Processing status update: ${update.messageId} -> ${update.status}');
+    Logger.info(
+        '📱 ChatListProvider:  Processing status update: ${update.messageId} -> ${update.status}');
 
     // First, update the chat list (conversation metadata)
     await _updateMessageStatusWithContext(update,
@@ -112,20 +113,20 @@ class ChatListProvider extends ChangeNotifier {
     // Then, forward the update to the active SessionChatProvider for real-time UI updates
     if (_activeSessionChatProvider != null) {
       try {
-        print(
-            '📱 ChatListProvider: 🔄 Forwarding status update to SessionChatProvider: ${update.messageId} -> ${update.status}');
+        Logger.info(
+            '📱 ChatListProvider:  Forwarding status update to SessionChatProvider: ${update.messageId} -> ${update.status}');
         await _activeSessionChatProvider!.handleMessageStatusUpdate(update);
-        print(
-            '📱 ChatListProvider: ✅ Forwarded message status update to active SessionChatProvider');
+        Logger.success(
+            '📱 ChatListProvider:  Forwarded message status update to active SessionChatProvider');
       } catch (e) {
-        print(
-            '📱 ChatListProvider: ⚠️ Failed to forward status update to SessionChatProvider: $e');
+        Logger.warning(
+            '📱 ChatListProvider:  Failed to forward status update to SessionChatProvider: $e');
       }
     } else {
-      print(
-          '📱 ChatListProvider: ℹ️ No active SessionChatProvider to forward status update to');
-      print(
-          '📱 ChatListProvider: 🔍 Active provider: $_activeSessionChatProvider');
+      Logger.info(
+          '📱 ChatListProvider:  No active SessionChatProvider to forward status update to');
+      Logger.info(
+          '📱 ChatListProvider:  Active provider: $_activeSessionChatProvider');
     }
   }
 
@@ -139,7 +140,8 @@ class ChatListProvider extends ChangeNotifier {
     required MessageType messageType,
   }) async {
     try {
-      print('📱 ChatListProvider: 🔄 Handling new message arrival: $messageId');
+      Logger.info(
+          '📱 ChatListProvider:  Handling new message arrival: $messageId');
 
       // Find the conversation
       final conversationIndex = _conversations.indexWhere(
@@ -151,7 +153,7 @@ class ChatListProvider extends ChangeNotifier {
         String decryptedPreview = content;
 
         // Debug: Log the content being processed
-        print(
+        Logger.debug(
             '📱 ChatListProvider: 🔍 Processing message content for preview: ${content.length} chars, starts with: ${content.length > 50 ? content.substring(0, 50) : content}');
 
         // Check if this looks like encrypted content (base64 encoded JSON)
@@ -172,8 +174,8 @@ class ChatListProvider extends ChangeNotifier {
                     RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(content)));
 
         if (isEncryptedContent) {
-          print(
-              '📱 ChatListProvider: 🔓 Attempting to decrypt message preview for chat list');
+          Logger.debug(
+              '📱 ChatListProvider:  Attempting to decrypt message preview for chat list');
           try {
             // Use EncryptionService to decrypt the message (first layer)
             final decryptedData =
@@ -181,14 +183,14 @@ class ChatListProvider extends ChangeNotifier {
 
             if (decryptedData != null && decryptedData.containsKey('text')) {
               final firstLayerDecrypted = decryptedData['text'] as String;
-              print(
-                  '📱 ChatListProvider: ✅ First layer decrypted for preview: $firstLayerDecrypted');
+              Logger.success(
+                  '📱 ChatListProvider:  First layer decrypted for preview: $firstLayerDecrypted');
 
               // Check if the decrypted text is still encrypted (double encryption scenario)
               if (firstLayerDecrypted.length > 100 &&
                   firstLayerDecrypted.contains('eyJ')) {
-                print(
-                    '📱 ChatListProvider: 🔍 Detected double encryption in preview, decrypting inner layer...');
+                Logger.info(
+                    '📱 ChatListProvider:  Detected double encryption in preview, decrypting inner layer...');
                 try {
                   // Decrypt the inner encrypted content
                   final innerDecryptedData =
@@ -199,37 +201,38 @@ class ChatListProvider extends ChangeNotifier {
                       innerDecryptedData.containsKey('text')) {
                     final finalDecryptedText =
                         innerDecryptedData['text'] as String;
-                    print(
-                        '📱 ChatListProvider: ✅ Inner layer decrypted for preview successfully');
+                    Logger.success(
+                        '📱 ChatListProvider:  Inner layer decrypted for preview successfully');
                     decryptedPreview = finalDecryptedText;
                   } else {
-                    print(
-                        '📱 ChatListProvider: ⚠️ Inner layer decryption failed for preview, using first layer');
+                    Logger.warning(
+                        '📱 ChatListProvider:  Inner layer decryption failed for preview, using first layer');
                     decryptedPreview = firstLayerDecrypted;
                   }
                 } catch (e) {
-                  print(
-                      '📱 ChatListProvider: ❌ Inner layer decryption error for preview: $e, using first layer');
+                  Logger.error(
+                      '📱 ChatListProvider:  Inner layer decryption error for preview: $e, using first layer');
                   decryptedPreview = firstLayerDecrypted;
                 }
               } else {
                 // Single layer encryption, use as is
-                print(
-                    '📱 ChatListProvider: ✅ Single layer decryption completed for preview');
+                Logger.success(
+                    '📱 ChatListProvider:  Single layer decryption completed for preview');
                 decryptedPreview = firstLayerDecrypted;
               }
             } else {
-              print(
-                  '📱 ChatListProvider: ⚠️ Decryption failed for preview - invalid format, using encrypted text');
+              Logger.warning(
+                  '📱 ChatListProvider:  Decryption failed for preview - invalid format, using encrypted text');
               decryptedPreview = '[Encrypted Message]';
             }
           } catch (e) {
-            print('📱 ChatListProvider: ❌ Decryption failed for preview: $e');
+            Logger.error(
+                '📱 ChatListProvider:  Decryption failed for preview: $e');
             decryptedPreview = '[Encrypted Message]';
           }
         } else {
-          print(
-              '📱 ChatListProvider: ℹ️ Message appears to be plain text for preview, using as-is');
+          Logger.info(
+              '📱 ChatListProvider:  Message appears to be plain text for preview, using as-is');
         }
 
         // Update the conversation with new message info
@@ -251,14 +254,15 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print(
-            '📱 ChatListProvider: ✅ Chat list updated with decrypted message preview: $messageId');
+        Logger.success(
+            '📱 ChatListProvider:  Chat list updated with decrypted message preview: $messageId');
       } else {
-        print(
-            '📱 ChatListProvider: ⚠️ Conversation not found for new message: $conversationId');
+        Logger.warning(
+            '📱 ChatListProvider:  Conversation not found for new message: $conversationId');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error handling new message arrival: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error handling new message arrival: $e');
     }
   }
 
@@ -267,8 +271,8 @@ class ChatListProvider extends ChangeNotifier {
     if (conversationIndex > 0) {
       final conversation = _conversations.removeAt(conversationIndex);
       _conversations.insert(0, conversation);
-      print(
-          '📱 ChatListProvider: ✅ Moved conversation to top: ${conversation.id}');
+      Logger.success(
+          '📱 ChatListProvider:  Moved conversation to top: ${conversation.id}');
     }
   }
 
@@ -302,9 +306,9 @@ class ChatListProvider extends ChangeNotifier {
   void updateConversationOnlineStatus(
       String userId, bool isOnline, String? lastSeen) {
     try {
-      print(
-          '📱 ChatListProvider: 🔍 Updating online status for user: $userId -> ${isOnline ? 'online' : 'offline'}');
-      print(
+      Logger.info(
+          '📱 ChatListProvider:  Updating online status for user: $userId -> ${isOnline ? 'online' : 'offline'}');
+      Logger.debug(
           '📱 ChatListProvider: 🔍 Current conversations: ${_conversations.map((c) => '${c.id}:${c.isOnline}').join(', ')}');
 
       // Find conversation with this user and update online status
@@ -324,18 +328,18 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print(
+        Logger.debug(
             '📱 ChatListProvider: ✅ Online status updated for conversation: ${oldConversation.id} (${oldConversation.displayName}) -> ${oldConversation.isOnline} -> $isOnline');
-        print(
+        Logger.debug(
             '📱 ChatListProvider: 🔔 notifyListeners() called for presence update');
       } else {
-        print(
-            '📱 ChatListProvider: ⚠️ No conversation found for user: $userId');
-        print(
+        Logger.warning(
+            '📱 ChatListProvider:  No conversation found for user: $userId');
+        Logger.debug(
             '📱 ChatListProvider: 🔍 Available conversations: ${_conversations.map((c) => '${c.id} (${c.displayName})').join(', ')}');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error updating online status: $e');
+      Logger.error('📱 ChatListProvider:  Error updating online status: $e');
     }
   }
 
@@ -352,8 +356,8 @@ class ChatListProvider extends ChangeNotifier {
   /// Clear all data and reset provider state (used when account is deleted)
   void clearAllData() {
     try {
-      print(
-          '📱 ChatListProvider: 🗑️ Clearing all data and resetting state...');
+      Logger.info(
+          '📱 ChatListProvider:  Clearing all data and resetting state...');
 
       // Clear all conversations
       _conversations.clear();
@@ -373,9 +377,9 @@ class ChatListProvider extends ChangeNotifier {
       // Notify listeners
       notifyListeners();
 
-      print('📱 ChatListProvider: ✅ All data cleared and state reset');
+      Logger.success('📱 ChatListProvider:  All data cleared and state reset');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error clearing data: $e');
+      Logger.error('📱 ChatListProvider:  Error clearing data: $e');
     }
   }
 
@@ -384,7 +388,7 @@ class ChatListProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
-      print('📱 ChatListProvider: Initializing...');
+      Logger.debug('📱 ChatListProvider: Initializing...');
 
       // Initialize the channel-based socket service
       await _socketService.initialize();
@@ -396,9 +400,9 @@ class ChatListProvider extends ChangeNotifier {
       _setupSocketCallbacks();
 
       _isInitialized = true;
-      print('📱 ChatListProvider: ✅ Initialized successfully');
+      Logger.success('📱 ChatListProvider:  Initialized successfully');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to initialize: $e');
+      Logger.error('📱 ChatListProvider:  Failed to initialize: $e');
       rethrow;
     }
   }
@@ -408,7 +412,7 @@ class ChatListProvider extends ChangeNotifier {
     try {
       final currentUserId = _getCurrentUserId();
       if (currentUserId == 'unknown_user') {
-        print('📱 ChatListProvider: ❌ No current user session found');
+        Logger.error('📱 ChatListProvider:  No current user session found');
         _conversations = [];
         _applySearchFilter();
         return;
@@ -442,35 +446,36 @@ class ChatListProvider extends ChangeNotifier {
           _applySearchFilter();
           databaseReady = true;
 
-          print(
-              '📱 ChatListProvider: ✅ Loaded ${conversations.length} conversations from database');
+          Logger.success(
+              '📱 ChatListProvider:  Loaded ${conversations.length} conversations from database');
 
           // If we have conversations but they're all empty, there might be a parsing issue
           if (conversations.isNotEmpty &&
               conversations.every((c) => c.id.isEmpty)) {
-            print(
-                '📱 ChatListProvider: ⚠️ All conversations have empty IDs, possible parsing issue');
+            Logger.warning(
+                '📱 ChatListProvider:  All conversations have empty IDs, possible parsing issue');
             _setError(
                 'Conversation data corrupted. Please try recreating the database.');
           }
         } catch (e) {
           retryCount++;
           if (e.toString().contains('Database not initialized')) {
-            print(
+            Logger.debug(
                 '📱 ChatListProvider: ⏳ MessageStorageService database not ready, retry $retryCount/$maxRetries...');
             if (retryCount < maxRetries) {
               // Wait a bit for the database to be ready
               await Future.delayed(const Duration(milliseconds: 500));
             } else {
-              print(
-                  '📱 ChatListProvider: ❌ Database still not ready after $maxRetries retries');
+              Logger.error(
+                  '📱 ChatListProvider:  Database still not ready after $maxRetries retries');
               _conversations = [];
               _applySearchFilter();
               databaseReady =
                   true; // Mark as ready even with empty conversations
             }
           } else {
-            print('📱 ChatListProvider: ❌ Failed to load conversations: $e');
+            Logger.error(
+                '📱 ChatListProvider:  Failed to load conversations: $e');
             _conversations = [];
             _applySearchFilter();
             databaseReady = true; // Mark as ready even with empty conversations
@@ -481,13 +486,13 @@ class ChatListProvider extends ChangeNotifier {
 
       // Ensure we always have a result, even if it's empty
       if (!databaseReady) {
-        print(
-            '📱 ChatListProvider: ⚠️ Database not ready, using empty conversations');
+        Logger.warning(
+            '📱 ChatListProvider:  Database not ready, using empty conversations');
         _conversations = [];
         _applySearchFilter();
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to load conversations: $e');
+      Logger.error('📱 ChatListProvider:  Failed to load conversations: $e');
       // Don't rethrow, just log the error and continue with empty conversations
       _conversations = [];
       _applySearchFilter();
@@ -497,8 +502,8 @@ class ChatListProvider extends ChangeNotifier {
   /// Load last messages for all conversations to populate previews
   Future<void> _loadLastMessagesForAllConversations() async {
     try {
-      print(
-          '📱 ChatListProvider: 🔄 Loading last messages for all conversations...');
+      Logger.info(
+          '📱 ChatListProvider:  Loading last messages for all conversations...');
 
       for (int i = 0; i < _conversations.length; i++) {
         final conversation = _conversations[i];
@@ -534,10 +539,10 @@ class ChatListProvider extends ChangeNotifier {
         return bTime.compareTo(aTime);
       });
 
-      print(
-          '📱 ChatListProvider: ✅ Last messages loaded for all conversations');
+      Logger.success(
+          '📱 ChatListProvider:  Last messages loaded for all conversations');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error loading last messages: $e');
+      Logger.error('📱 ChatListProvider:  Error loading last messages: $e');
     }
   }
 
@@ -564,20 +569,20 @@ class ChatListProvider extends ChangeNotifier {
       socketService.setOnTypingIndicator((senderId, isTyping) {
         _handleTypingIndicatorFromSocket(senderId, isTyping);
       });
-      print(
-          '🔌 ChatListProvider: ✅ Socket service typing indicator callback set');
+      Logger.success(
+          ' ChatListProvider:  Socket service typing indicator callback set');
     } catch (e) {
-      print(
-          '🔌 ChatListProvider: ❌ Failed to set up socket service typing indicator callback: $e');
+      Logger.error(
+          ' ChatListProvider:  Failed to set up socket service typing indicator callback: $e');
     }
 
     // Listen for online status updates from socket service
     try {
       final socketService = SeSocketService.instance;
       // Note: Online status updates are handled through lastSeen updates
-      print('🔌 ChatListProvider: ✅ Status tracking services set up');
+      Logger.success(' ChatListProvider:  Status tracking services set up');
     } catch (e) {
-      print('🔌 ChatListProvider: ❌ Failed to set up status tracking: $e');
+      Logger.error(' ChatListProvider:  Failed to set up status tracking: $e');
     }
   }
 
@@ -596,12 +601,12 @@ class ChatListProvider extends ChangeNotifier {
         _conversations[index] = updatedConversation;
         await _storageService.saveConversation(updatedConversation);
 
-        print(
-            '📱 ChatListProvider: ✅ Online status updated for conversation: $conversationId');
+        Logger.success(
+            '📱 ChatListProvider:  Online status updated for conversation: $conversationId');
         notifyListeners();
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error updating online status: $e');
+      Logger.error('📱 ChatListProvider:  Error updating online status: $e');
     }
   }
 
@@ -627,14 +632,14 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print(
-            '🔌 ChatListProvider: ✅ Updated conversation display name: $senderId -> $displayName');
+        Logger.success(
+            ' ChatListProvider:  Updated conversation display name: $senderId -> $displayName');
       } else {
-        print(
-            '🔌 ChatListProvider: ⚠️ No conversation found for user data exchange: $senderId');
+        Logger.warning(
+            ' ChatListProvider:  No conversation found for user data exchange: $senderId');
       }
     } catch (e) {
-      print('🔌 ChatListProvider: ❌ Error handling user data exchange: $e');
+      Logger.error(' ChatListProvider:  Error handling user data exchange: $e');
     }
   }
 
@@ -655,15 +660,15 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print(
-            '🔌 ChatListProvider: ✅ Updated display name for conversation: $conversationId -> $displayName');
+        Logger.success(
+            ' ChatListProvider:  Updated display name for conversation: $conversationId -> $displayName');
       } else {
-        print(
-            '🔌 ChatListProvider: ⚠️ No conversation found to update display name: $conversationId');
+        Logger.warning(
+            ' ChatListProvider:  No conversation found to update display name: $conversationId');
       }
     } catch (e) {
-      print(
-          '🔌 ChatListProvider: ❌ Error updating conversation display name: $e');
+      Logger.error(
+          ' ChatListProvider:  Error updating conversation display name: $e');
     }
   }
 
@@ -672,8 +677,8 @@ class ChatListProvider extends ChangeNotifier {
     try {
       final socketService = SeSocketService.instance;
       socketService.setOnConversationCreated((conversationData) async {
-        print(
-            '🔌 ChatListProvider: 🆕 New conversation created: ${conversationData['conversation_id_local'] ?? 'unknown'}');
+        Logger.info(
+            ' ChatListProvider:  New conversation created: ${conversationData['conversation_id_local'] ?? 'unknown'}');
 
         // Create a ChatConversation from the socket data
         try {
@@ -718,28 +723,29 @@ class ChatListProvider extends ChangeNotifier {
             try {
               await MessageStorageService.instance
                   .saveConversation(conversation);
-              print(
-                  '🔌 ChatListProvider: ✅ Conversation saved to database: $conversationId');
+              Logger.success(
+                  ' ChatListProvider:  Conversation saved to database: $conversationId');
             } catch (e) {
-              print(
-                  '🔌 ChatListProvider: ❌ Failed to save conversation to database: $e');
+              Logger.error(
+                  ' ChatListProvider:  Failed to save conversation to database: $e');
             }
 
             _addNewConversation(conversation);
-            print(
-                '🔌 ChatListProvider: ✅ Conversation created and added: ${conversation.id}');
+            Logger.success(
+                ' ChatListProvider:  Conversation created and added: ${conversation.id}');
           }
         } catch (e) {
-          print(
-              '🔌 ChatListProvider: ❌ Error creating conversation from socket data: $e');
+          Logger.error(
+              ' ChatListProvider:  Error creating conversation from socket data: $e');
         }
 
-        print('🔌 ChatListProvider: Conversation data: $conversationData');
+        Logger.debug(' ChatListProvider: Conversation data: $conversationData');
       });
-      print('🔌 ChatListProvider: ✅ Conversation creation listener set up');
+      Logger.success(
+          ' ChatListProvider:  Conversation creation listener set up');
     } catch (e) {
-      print(
-          '🔌 ChatListProvider: ❌ Failed to set up conversation creation listener: $e');
+      Logger.error(
+          ' ChatListProvider:  Failed to set up conversation creation listener: $e');
     }
   }
 
@@ -748,7 +754,8 @@ class ChatListProvider extends ChangeNotifier {
     try {
       // Check if already initialized
       if (_presenceService != null) {
-        print('📱 ChatListProvider: ℹ️ Presence service already initialized');
+        Logger.info(
+            '📱 ChatListProvider:  Presence service already initialized');
         return;
       }
 
@@ -759,17 +766,19 @@ class ChatListProvider extends ChangeNotifier {
       // The realtime presence service will be used for local presence management
       // and peer presence updates will come through the socket service callbacks
 
-      print('📱 ChatListProvider: ✅ Realtime services set up successfully');
+      Logger.success(
+          '📱 ChatListProvider:  Realtime services set up successfully');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to set up realtime services: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Failed to set up realtime services: $e');
     }
   }
 
   /// Handle typing indicator from socket service
   void _handleTypingIndicatorFromSocket(String senderId, bool isTyping) {
     try {
-      print(
-          '📱 ChatListProvider: 🔔 Typing indicator from socket: $senderId -> $isTyping');
+      Logger.debug(
+          '📱 ChatListProvider:  Typing indicator from socket: $senderId -> $isTyping');
 
       // Find conversation with this sender and update typing status
       final conversationIndex = _conversations.indexWhere(
@@ -788,15 +797,15 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print(
-            '📱 ChatListProvider: ✅ Updated typing indicator for conversation: ${conversation.id}');
+        Logger.success(
+            '📱 ChatListProvider:  Updated typing indicator for conversation: ${conversation.id}');
       } else {
-        print(
-            '📱 ChatListProvider: ⚠️ No conversation found for typing indicator from: $senderId');
+        Logger.warning(
+            '📱 ChatListProvider:  No conversation found for typing indicator from: $senderId');
       }
     } catch (e) {
-      print(
-          '📱 ChatListProvider: ❌ Error handling typing indicator from socket: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error handling typing indicator from socket: $e');
     }
   }
 
@@ -820,7 +829,7 @@ class ChatListProvider extends ChangeNotifier {
   /// Clear all typing indicators (call this when app loads to clear stale data)
   void clearAllTypingIndicators() {
     try {
-      print('📱 ChatListProvider: 🔄 Clearing all typing indicators');
+      Logger.info('📱 ChatListProvider:  Clearing all typing indicators');
 
       bool hasChanges = false;
       for (int i = 0; i < _conversations.length; i++) {
@@ -836,24 +845,25 @@ class ChatListProvider extends ChangeNotifier {
       if (hasChanges) {
         _applySearchFilter();
         notifyListeners();
-        print('📱 ChatListProvider: ✅ All typing indicators cleared');
+        Logger.success('📱 ChatListProvider:  All typing indicators cleared');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error clearing typing indicators: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error clearing typing indicators: $e');
     }
   }
 
   /// Update typing indicator by participant ID (for socket events)
   void updateTypingIndicatorByParticipant(String participantId, bool isTyping) {
     try {
-      print(
-          '📱 ChatListProvider: 🔔 Updating typing indicator for participant: $participantId -> $isTyping');
+      Logger.debug(
+          '📱 ChatListProvider:  Updating typing indicator for participant: $participantId -> $isTyping');
 
       // CRITICAL: Prevent sender from processing their own typing indicator
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId != null && participantId == currentUserId) {
-        print(
-            '📱 ChatListProvider: ⚠️ Ignoring own typing indicator from: $participantId');
+        Logger.warning(
+            '📱 ChatListProvider:  Ignoring own typing indicator from: $participantId');
         return; // Don't process own typing indicator
       }
 
@@ -869,8 +879,8 @@ class ChatListProvider extends ChangeNotifier {
         // This ensures typing indicators are shown on the recipient's side, not the sender's side
         final currentUserId = SeSessionService().currentSessionId;
         if (currentUserId != null && participantId == currentUserId) {
-          print(
-              '📱 ChatListProvider: ⚠️ Not showing typing indicator for own conversation');
+          Logger.warning(
+              '📱 ChatListProvider:  Not showing typing indicator for own conversation');
           return; // Don't show typing indicator for own conversation
         }
 
@@ -896,21 +906,21 @@ class ChatListProvider extends ChangeNotifier {
               _conversations[index] = clearedConversation;
               _applySearchFilter();
               notifyListeners();
-              print(
-                  '📱 ChatListProvider: ✅ Auto-cleared typing indicator for conversation: ${conversation.id}');
+              Logger.success(
+                  '📱 ChatListProvider:  Auto-cleared typing indicator for conversation: ${conversation.id}');
             }
           });
         }
 
-        print(
-            '📱 ChatListProvider: ✅ Updated typing indicator for conversation: ${conversation.id}');
+        Logger.success(
+            '📱 ChatListProvider:  Updated typing indicator for conversation: ${conversation.id}');
       } else {
-        print(
-            '📱 ChatListProvider: ⚠️ No conversation found for typing indicator from: $participantId');
+        Logger.warning(
+            '📱 ChatListProvider:  No conversation found for typing indicator from: $participantId');
       }
     } catch (e) {
-      print(
-          '📱 ChatListProvider: ❌ Error updating typing indicator by participant: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error updating typing indicator by participant: $e');
     }
   }
 
@@ -929,8 +939,8 @@ class ChatListProvider extends ChangeNotifier {
       _applySearchFilter();
       notifyListeners();
 
-      print(
-          '📱 ChatListProvider: ✅ Last seen updated for conversation: ${conversation.id}');
+      Logger.success(
+          '📱 ChatListProvider:  Last seen updated for conversation: ${conversation.id}');
     }
   }
 
@@ -946,21 +956,21 @@ class ChatListProvider extends ChangeNotifier {
 
         _applySearchFilter();
         notifyListeners();
-        print(
-            '📱 ChatListProvider: ✅ New conversation added to list: ${conversation.id}');
+        Logger.success(
+            '📱 ChatListProvider:  New conversation added to list: ${conversation.id}');
       } else {
-        print(
-            '📱 ChatListProvider: ℹ️ Conversation already exists: ${conversation.id}');
+        Logger.info(
+            '📱 ChatListProvider:  Conversation already exists: ${conversation.id}');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error adding new conversation: $e');
+      Logger.error('📱 ChatListProvider:  Error adding new conversation: $e');
     }
   }
 
   /// Update message status for a conversation - FIXED conversation lookup
   Future<void> _updateMessageStatus(MessageStatusUpdate update) async {
     try {
-      print(
+      Logger.debug(
           '📱 ChatListProvider: Message status update received for message: ${update.messageId}');
 
       // CRITICAL FIX: Find conversation by multiple methods
@@ -971,11 +981,12 @@ class ChatListProvider extends ChangeNotifier {
         conversation = _conversations.firstWhere(
           (conv) => conv.lastMessageId == update.messageId,
         );
-        print(
-            '📱 ChatListProvider: ✅ Found conversation by lastMessageId: ${conversation.id}');
+        Logger.success(
+            '📱 ChatListProvider:  Found conversation by lastMessageId: ${conversation.id}');
       } catch (e) {
         conversation = null;
-        print('📱 ChatListProvider: ⚠️ No conversation found by lastMessageId');
+        Logger.warning(
+            '📱 ChatListProvider:  No conversation found by lastMessageId');
       }
 
       // Method 2: If not found by lastMessageId, try to find by sender ID
@@ -988,11 +999,11 @@ class ChatListProvider extends ChangeNotifier {
                 conv.id ==
                     update.senderId, // Conversation ID might be participant ID
           );
-          print(
-              '📱 ChatListProvider: ✅ Found conversation by senderId: ${conversation.id}');
+          Logger.success(
+              '📱 ChatListProvider:  Found conversation by senderId: ${conversation.id}');
         } catch (e) {
-          print(
-              '📱 ChatListProvider: ⚠️ No conversation found by senderId: ${update.senderId}');
+          Logger.warning(
+              '📱 ChatListProvider:  No conversation found by senderId: ${update.senderId}');
         }
       }
 
@@ -1017,11 +1028,11 @@ class ChatListProvider extends ChangeNotifier {
               _convertDeliveryStatusToMessageStatus(update.status);
           await _storageService.updateMessageStatus(
               update.messageId, messageStatus);
-          print(
-              '📱 ChatListProvider: ✅ Message status updated in database: ${update.messageId} -> ${messageStatus}');
+          Logger.success(
+              '📱 ChatListProvider:  Message status updated in database: ${update.messageId} -> ${messageStatus}');
         } catch (e) {
-          print(
-              '📱 ChatListProvider: ⚠️ Failed to update message status in database: $e');
+          Logger.warning(
+              '📱 ChatListProvider:  Failed to update message status in database: $e');
         }
 
         // Update local state
@@ -1035,18 +1046,18 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print(
-            '📱 ChatListProvider: ✅ Message status updated for conversation: ${conversation.id}');
+        Logger.success(
+            '📱 ChatListProvider:  Message status updated for conversation: ${conversation.id}');
       } else {
-        print(
-            '📱 ChatListProvider: ⚠️ No conversation found for message: ${update.messageId}');
-        print(
+        Logger.warning(
+            '📱 ChatListProvider:  No conversation found for message: ${update.messageId}');
+        Logger.debug(
             '📱 ChatListProvider: 🔍 Available conversations: ${_conversations.map((c) => '${c.id} (lastMsg: ${c.lastMessageId})').join(', ')}');
-        print(
-            '📱 ChatListProvider: 🔍 Update details: senderId=${update.senderId}');
+        Logger.info(
+            '📱 ChatListProvider:  Update details: senderId=${update.senderId}');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error updating message status: $e');
+      Logger.error('📱 ChatListProvider:  Error updating message status: $e');
     }
   }
 
@@ -1057,10 +1068,10 @@ class ChatListProvider extends ChangeNotifier {
     String? recipientId,
   }) async {
     try {
-      print(
+      Logger.debug(
           '📱 ChatListProvider: Message status update with context for message: ${update.messageId}');
-      print(
-          '📱 ChatListProvider: 🔍 Context: conversationId=$conversationId, recipientId=$recipientId');
+      Logger.info(
+          '📱 ChatListProvider:  Context: conversationId=$conversationId, recipientId=$recipientId');
 
       // ENHANCED LOOKUP: Use the additional context for better conversation finding
       ChatConversation? conversation;
@@ -1073,11 +1084,11 @@ class ChatListProvider extends ChangeNotifier {
           conversation = _conversations.firstWhere(
             (conv) => conv.id == conversationId,
           );
-          print(
-              '📱 ChatListProvider: ✅ Found conversation by context conversationId: ${conversation.id}');
+          Logger.success(
+              '📱 ChatListProvider:  Found conversation by context conversationId: ${conversation.id}');
         } catch (e) {
-          print(
-              '📱 ChatListProvider: ⚠️ No conversation found by context conversationId: $conversationId');
+          Logger.warning(
+              '📱 ChatListProvider:  No conversation found by context conversationId: $conversationId');
         }
       }
 
@@ -1091,11 +1102,11 @@ class ChatListProvider extends ChangeNotifier {
                 conv.id ==
                     recipientId, // Conversation ID might be participant ID
           );
-          print(
-              '📱 ChatListProvider: ✅ Found conversation by context recipientId: ${conversation.id}');
+          Logger.success(
+              '📱 ChatListProvider:  Found conversation by context recipientId: ${conversation.id}');
         } catch (e) {
-          print(
-              '📱 ChatListProvider: ⚠️ No conversation found by context recipientId: $recipientId');
+          Logger.warning(
+              '📱 ChatListProvider:  No conversation found by context recipientId: $recipientId');
         }
       }
 
@@ -1105,11 +1116,11 @@ class ChatListProvider extends ChangeNotifier {
           conversation = _conversations.firstWhere(
             (conv) => conv.lastMessageId == update.messageId,
           );
-          print(
-              '📱 ChatListProvider: ✅ Found conversation by lastMessageId: ${conversation.id}');
+          Logger.success(
+              '📱 ChatListProvider:  Found conversation by lastMessageId: ${conversation.id}');
         } catch (e) {
-          print(
-              '📱 ChatListProvider: ⚠️ No conversation found by lastMessageId');
+          Logger.warning(
+              '📱 ChatListProvider:  No conversation found by lastMessageId');
         }
       }
 
@@ -1123,11 +1134,11 @@ class ChatListProvider extends ChangeNotifier {
                 conv.id ==
                     update.senderId, // Conversation ID might be participant ID
           );
-          print(
-              '📱 ChatListProvider: ✅ Found conversation by update senderId: ${conversation.id}');
+          Logger.success(
+              '📱 ChatListProvider:  Found conversation by update senderId: ${conversation.id}');
         } catch (e) {
-          print(
-              '📱 ChatListProvider: ⚠️ No conversation found by update senderId: ${update.senderId}');
+          Logger.warning(
+              '📱 ChatListProvider:  No conversation found by update senderId: ${update.senderId}');
         }
       }
 
@@ -1152,11 +1163,11 @@ class ChatListProvider extends ChangeNotifier {
               _convertDeliveryStatusToMessageStatus(update.status);
           await _storageService.updateMessageStatus(
               update.messageId, messageStatus);
-          print(
-              '📱 ChatListProvider: ✅ Message status updated in database: ${update.messageId} -> ${messageStatus}');
+          Logger.success(
+              '📱 ChatListProvider:  Message status updated in database: ${update.messageId} -> ${messageStatus}');
         } catch (e) {
-          print(
-              '📱 ChatListProvider: ⚠️ Failed to update message status in database: $e');
+          Logger.warning(
+              '📱 ChatListProvider:  Failed to update message status in database: $e');
         }
 
         // Update local state
@@ -1170,19 +1181,19 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print(
-            '📱 ChatListProvider: ✅ Message status updated with context for conversation: ${conversation.id}');
+        Logger.success(
+            '📱 ChatListProvider:  Message status updated with context for conversation: ${conversation.id}');
       } else {
-        print(
-            '📱 ChatListProvider: ⚠️ No conversation found for message with context: ${update.messageId}');
-        print(
+        Logger.warning(
+            '📱 ChatListProvider:  No conversation found for message with context: ${update.messageId}');
+        Logger.debug(
             '📱 ChatListProvider: 🔍 Available conversations: ${_conversations.map((c) => '${c.id} (lastMsg: ${c.lastMessageId})').join(', ')}');
-        print(
-            '📱 ChatListProvider: 🔍 Context details: conversationId=$conversationId, recipientId=$recipientId, senderId=${update.senderId}');
+        Logger.info(
+            '📱 ChatListProvider:  Context details: conversationId=$conversationId, recipientId=$recipientId, senderId=${update.senderId}');
       }
     } catch (e) {
-      print(
-          '📱 ChatListProvider: ❌ Error updating message status with context: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error updating message status with context: $e');
     }
   }
 
@@ -1219,25 +1230,25 @@ class ChatListProvider extends ChangeNotifier {
   /// Refresh conversations
   Future<void> refreshConversations() async {
     try {
-      print('📱 ChatListProvider: 🔄 Refreshing conversations...');
+      Logger.info('📱 ChatListProvider:  Refreshing conversations...');
       await _loadConversations();
       notifyListeners();
-      print('📱 ChatListProvider: ✅ Conversations refreshed');
+      Logger.success('📱 ChatListProvider:  Conversations refreshed');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to refresh conversations: $e');
+      Logger.error('📱 ChatListProvider:  Failed to refresh conversations: $e');
       _setError('Failed to refresh conversations: $e');
     }
   }
 
   /// Force refresh UI state
   void forceRefresh() {
-    print('📱 ChatListProvider: 🔄 Forcing UI refresh');
+    Logger.info('📱 ChatListProvider:  Forcing UI refresh');
     notifyListeners();
   }
 
   /// Force reset loading state (for debugging)
   void forceResetLoading() {
-    print('📱 ChatListProvider: 🔄 Force resetting loading state');
+    Logger.info('📱 ChatListProvider:  Force resetting loading state');
     _isLoading = false;
     _hasError = false;
     _errorMessage = null;
@@ -1247,14 +1258,14 @@ class ChatListProvider extends ChangeNotifier {
   /// Force database recreation (for schema issues)
   Future<void> forceDatabaseRecreation() async {
     try {
-      print('📱 ChatListProvider: 🔄 Force recreating database...');
+      Logger.info('📱 ChatListProvider:  Force recreating database...');
       await _storageService.forceRecreateDatabase();
       await _loadConversations();
       notifyListeners();
-      print(
-          '📱 ChatListProvider: ✅ Database recreated and conversations reloaded');
+      Logger.success(
+          '📱 ChatListProvider:  Database recreated and conversations reloaded');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to recreate database: $e');
+      Logger.error('📱 ChatListProvider:  Failed to recreate database: $e');
       _setError('Failed to recreate database: $e');
     }
   }
@@ -1272,7 +1283,7 @@ class ChatListProvider extends ChangeNotifier {
       }
       return null;
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error getting latest message: $e');
+      Logger.error('📱 ChatListProvider:  Error getting latest message: $e');
       return null;
     }
   }
@@ -1311,13 +1322,13 @@ class ChatListProvider extends ChangeNotifier {
           _applySearchFilter();
           notifyListeners();
 
-          print(
-              '📱 ChatListProvider: ✅ Conversation updated with latest message: $conversationId');
+          Logger.success(
+              '📱 ChatListProvider:  Conversation updated with latest message: $conversationId');
         }
       }
     } catch (e) {
-      print(
-          '📱 ChatListProvider: ❌ Error updating conversation with latest message: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error updating conversation with latest message: $e');
     }
   }
 
@@ -1376,8 +1387,8 @@ class ChatListProvider extends ChangeNotifier {
       // This is the same logic used in TextMessageBubble
       if (encryptedText.length > 100 && encryptedText.contains('eyJ')) {
         // This looks like encrypted data, try to decrypt it
-        print(
-            '📱 ChatListProvider: 🔓 Attempting to decrypt message for preview: ${message.id}');
+        Logger.debug(
+            '📱 ChatListProvider:  Attempting to decrypt message for preview: ${message.id}');
 
         try {
           // Use EncryptionService to decrypt the message
@@ -1386,14 +1397,14 @@ class ChatListProvider extends ChangeNotifier {
 
           if (decryptedData != null && decryptedData.containsKey('text')) {
             final decryptedText = decryptedData['text'] as String;
-            print(
-                '📱 ChatListProvider: ✅ First layer decrypted: $decryptedText');
+            Logger.success(
+                '📱 ChatListProvider:  First layer decrypted: $decryptedText');
 
             // CRITICAL: Check if the decrypted text is still encrypted (double encryption scenario)
             if (decryptedText.length > 100 && decryptedText.contains('eyJ')) {
-              print(
-                  '📱 ChatListProvider: 🔍 Detected double encryption, decrypting inner layer...');
-              print(
+              Logger.info(
+                  '📱 ChatListProvider:  Detected double encryption, decrypting inner layer...');
+              Logger.debug(
                   '📱 ChatListProvider: 🔍 First layer decrypted text preview: ${decryptedText.substring(0, decryptedText.length > 100 ? 100 : decryptedText.length)}...');
 
               try {
@@ -1405,32 +1416,35 @@ class ChatListProvider extends ChangeNotifier {
                     innerDecryptedData.containsKey('text')) {
                   final finalDecryptedText =
                       innerDecryptedData['text'] as String;
-                  print(
-                      '📱 ChatListProvider: ✅ Inner layer decrypted successfully');
-                  print(
-                      '📱 ChatListProvider: 🔍 Final decrypted text: $finalDecryptedText');
+                  Logger.success(
+                      '📱 ChatListProvider:  Inner layer decrypted successfully');
+                  Logger.info(
+                      '📱 ChatListProvider:  Final decrypted text: $finalDecryptedText');
                   return finalDecryptedText;
                 } else {
-                  print(
-                      '📱 ChatListProvider: ⚠️ Inner layer decryption failed');
+                  Logger.warning(
+                      '📱 ChatListProvider:  Inner layer decryption failed');
                   return decryptedText; // Return the first layer decrypted text as fallback
                 }
               } catch (e) {
-                print(
-                    '📱 ChatListProvider: ❌ Inner layer decryption error: $e');
+                Logger.error(
+                    '📱 ChatListProvider:  Inner layer decryption error: $e');
                 return decryptedText; // Return the first layer decrypted text as fallback
               }
             } else {
               // Single layer encryption, return as is
-              print('📱 ChatListProvider: ✅ Single layer decryption completed');
+              Logger.success(
+                  '📱 ChatListProvider:  Single layer decryption completed');
               return decryptedText;
             }
           } else {
-            print('📱 ChatListProvider: ⚠️ Decryption failed - invalid format');
+            Logger.warning(
+                '📱 ChatListProvider:  Decryption failed - invalid format');
             return '[Encrypted Message]';
           }
         } catch (e) {
-          print('📱 ChatListProvider: ❌ Decryption failed for preview: $e');
+          Logger.error(
+              '📱 ChatListProvider:  Decryption failed for preview: $e');
           return '[Encrypted Message]';
         }
       } else {
@@ -1438,7 +1452,8 @@ class ChatListProvider extends ChangeNotifier {
         return encryptedText;
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error decrypting message preview: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error decrypting message preview: $e');
       return '[Encrypted Message]';
     }
   }
@@ -1446,7 +1461,7 @@ class ChatListProvider extends ChangeNotifier {
   /// Refresh conversations when screen becomes visible
   Future<void> onScreenVisible() async {
     try {
-      print(
+      Logger.debug(
           '📱 ChatListProvider: 👁️ Screen became visible, refreshing conversations...');
       // Only refresh if we don't have conversations or if there was an error
       if (_conversations.isEmpty || _hasError) {
@@ -1454,20 +1469,23 @@ class ChatListProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to refresh on screen visible: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Failed to refresh on screen visible: $e');
     }
   }
 
   /// Handle database corruption by forcing recreation
   Future<void> handleDatabaseCorruption() async {
     try {
-      print('📱 ChatListProvider: 🔧 Handling database corruption...');
+      Logger.debug('📱 ChatListProvider: 🔧 Handling database corruption...');
       _setError('Database corrupted. Recreating...');
       await forceDatabaseRecreation();
       _clearError();
-      print('📱 ChatListProvider: ✅ Database corruption handled successfully');
+      Logger.success(
+          '📱 ChatListProvider:  Database corruption handled successfully');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to handle database corruption: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Failed to handle database corruption: $e');
       _setError('Failed to recover from database corruption: $e');
     }
   }
@@ -1504,10 +1522,10 @@ class ChatListProvider extends ChangeNotifier {
       _applySearchFilter();
       notifyListeners();
 
-      print(
-          '📱 ChatListProvider: ✅ Conversation ${conversation.id} added/updated');
+      Logger.success(
+          '📱 ChatListProvider:  Conversation ${conversation.id} added/updated');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to add conversation: $e');
+      Logger.error('📱 ChatListProvider:  Failed to add conversation: $e');
       rethrow;
     }
   }
@@ -1546,10 +1564,11 @@ class ChatListProvider extends ChangeNotifier {
       _applySearchFilter();
       notifyListeners();
 
-      print('📱 ChatListProvider: ✅ Conversation updated with new message');
+      Logger.success(
+          '📱 ChatListProvider:  Conversation updated with new message');
     } catch (e) {
-      print(
-          '📱 ChatListProvider: ❌ Failed to update conversation with message: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Failed to update conversation with message: $e');
     }
   }
 
@@ -1569,10 +1588,11 @@ class ChatListProvider extends ChangeNotifier {
         // Update in storage
         await _storageService.saveConversation(updatedConversation);
 
-        print('📱 ChatListProvider: ✅ Conversation marked as read');
+        Logger.success('📱 ChatListProvider:  Conversation marked as read');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to mark conversation as read: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Failed to mark conversation as read: $e');
     }
   }
 
@@ -1592,11 +1612,12 @@ class ChatListProvider extends ChangeNotifier {
         // Update in storage
         await _storageService.saveConversation(updatedConversation);
 
-        print(
-            '📱 ChatListProvider: ✅ Notifications ${updatedConversation.isMuted ? 'muted' : 'unmuted'}');
+        Logger.success(
+            '📱 ChatListProvider:  Notifications ${updatedConversation.isMuted ? 'muted' : 'unmuted'}');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to toggle mute notifications: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Failed to toggle mute notifications: $e');
     }
   }
 
@@ -1609,10 +1630,10 @@ class ChatListProvider extends ChangeNotifier {
         final conversation = _conversations[index];
         // Note: ChatConversation doesn't have isBlocked property yet
         // This will be implemented when we add blocking functionality
-        print('📱 ChatListProvider: Blocking not implemented yet');
+        Logger.debug('📱 ChatListProvider: Blocking not implemented yet');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to block user: $e');
+      Logger.error('📱 ChatListProvider:  Failed to block user: $e');
     }
   }
 
@@ -1627,9 +1648,9 @@ class ChatListProvider extends ChangeNotifier {
       // Delete from storage
       await _storageService.deleteConversation(conversationId);
 
-      print('📱 ChatListProvider: ✅ Conversation deleted');
+      Logger.success('📱 ChatListProvider:  Conversation deleted');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to delete conversation: $e');
+      Logger.error('📱 ChatListProvider:  Failed to delete conversation: $e');
     }
   }
 
@@ -1648,7 +1669,7 @@ class ChatListProvider extends ChangeNotifier {
 
   /// Set loading state
   void _setLoading(bool loading) {
-    print('📱 ChatListProvider: 🔄 Setting loading to: $loading');
+    Logger.info('📱 ChatListProvider:  Setting loading to: $loading');
     _isLoading = loading;
     if (loading) {
       _hasError = false;
@@ -1662,7 +1683,7 @@ class ChatListProvider extends ChangeNotifier {
     _hasError = true;
     _errorMessage = message;
     _isLoading = false;
-    print('📱 ChatListProvider: ❌ Error: $message');
+    Logger.error('📱 ChatListProvider:  Error: $message');
     notifyListeners(); // Ensure UI updates when error occurs
   }
 
@@ -1682,7 +1703,7 @@ class ChatListProvider extends ChangeNotifier {
   /// Dispose of resources
   @override
   void dispose() {
-    print('📱 ChatListProvider: ✅ Provider disposed');
+    Logger.success('📱 ChatListProvider:  Provider disposed');
     super.dispose();
   }
 
@@ -1705,9 +1726,10 @@ class ChatListProvider extends ChangeNotifier {
       // Notify listeners to update UI
       notifyListeners();
 
-      print('📱 ChatListProvider: ✅ Chat list order refreshed');
+      Logger.success('📱 ChatListProvider:  Chat list order refreshed');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error refreshing chat list order: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error refreshing chat list order: $e');
     }
   }
 
@@ -1720,7 +1742,7 @@ class ChatListProvider extends ChangeNotifier {
     String? messageId, // Add messageId parameter
   }) async {
     try {
-      print(
+      Logger.debug(
           '📱 ChatListProvider: Handling incoming message from $senderName: $message');
 
       // CRITICAL: Decrypt the message content for chat list preview
@@ -1728,8 +1750,8 @@ class ChatListProvider extends ChangeNotifier {
 
       // Check if this looks like encrypted content
       if (message.length > 100 && message.contains('eyJ')) {
-        print(
-            '📱 ChatListProvider: 🔓 Detected encrypted message, attempting decryption...');
+        Logger.debug(
+            '📱 ChatListProvider:  Detected encrypted message, attempting decryption...');
         try {
           // Use EncryptionService to decrypt the message (first layer)
           final decryptedData =
@@ -1737,19 +1759,19 @@ class ChatListProvider extends ChangeNotifier {
 
           if (decryptedData != null && decryptedData.containsKey('text')) {
             final firstLayerDecrypted = decryptedData['text'] as String;
-            print(
-                '📱 ChatListProvider: ✅ First layer decrypted: $firstLayerDecrypted');
-            print(
-                '📱 ChatListProvider: 🔍 First layer length: ${firstLayerDecrypted.length}');
-            print(
+            Logger.success(
+                '📱 ChatListProvider:  First layer decrypted: $firstLayerDecrypted');
+            Logger.info(
+                '📱 ChatListProvider:  First layer length: ${firstLayerDecrypted.length}');
+            Logger.debug(
                 '📱 ChatListProvider: 🔍 First layer contains eyJ: ${firstLayerDecrypted.contains('eyJ')}');
 
             // CRITICAL: Check if the decrypted text is still encrypted (double encryption scenario)
             if (firstLayerDecrypted.length > 100 &&
                 firstLayerDecrypted.contains('eyJ')) {
-              print(
-                  '📱 ChatListProvider: 🔍 Detected double encryption, decrypting inner layer...');
-              print(
+              Logger.info(
+                  '📱 ChatListProvider:  Detected double encryption, decrypting inner layer...');
+              Logger.debug(
                   '📱 ChatListProvider: 🔍 First layer preview: ${firstLayerDecrypted.substring(0, firstLayerDecrypted.length > 100 ? 100 : firstLayerDecrypted.length)}...');
 
               try {
@@ -1762,44 +1784,46 @@ class ChatListProvider extends ChangeNotifier {
                     innerDecryptedData.containsKey('text')) {
                   final finalDecryptedText =
                       innerDecryptedData['text'] as String;
-                  print(
-                      '📱 ChatListProvider: ✅ Inner layer decrypted successfully');
-                  print(
-                      '📱 ChatListProvider: 🔍 Final decrypted text: $finalDecryptedText');
+                  Logger.success(
+                      '📱 ChatListProvider:  Inner layer decrypted successfully');
+                  Logger.info(
+                      '📱 ChatListProvider:  Final decrypted text: $finalDecryptedText');
                   decryptedMessagePreview = finalDecryptedText;
                 } else {
-                  print(
-                      '📱 ChatListProvider: ⚠️ Inner layer decryption failed, using first layer');
+                  Logger.warning(
+                      '📱 ChatListProvider:  Inner layer decryption failed, using first layer');
                   decryptedMessagePreview = firstLayerDecrypted;
                 }
               } catch (e) {
-                print(
-                    '📱 ChatListProvider: ❌ Inner layer decryption error: $e, using first layer');
+                Logger.error(
+                    '📱 ChatListProvider:  Inner layer decryption error: $e, using first layer');
                 decryptedMessagePreview = firstLayerDecrypted;
               }
             } else {
               // Single layer encryption, use as is
-              print('📱 ChatListProvider: ✅ Single layer decryption completed');
+              Logger.success(
+                  '📱 ChatListProvider:  Single layer decryption completed');
               decryptedMessagePreview = firstLayerDecrypted;
             }
           } else {
-            print(
-                '📱 ChatListProvider: ⚠️ Decryption failed - invalid format, using encrypted preview');
+            Logger.warning(
+                '📱 ChatListProvider:  Decryption failed - invalid format, using encrypted preview');
             decryptedMessagePreview = '[Encrypted Message]';
           }
         } catch (e) {
-          print('📱 ChatListProvider: ❌ Decryption failed for preview: $e');
+          Logger.error(
+              '📱 ChatListProvider:  Decryption failed for preview: $e');
           decryptedMessagePreview = '[Encrypted Message]';
         }
       } else {
-        print(
-            '📱 ChatListProvider: ℹ️ Message appears to be plain text, using as-is');
+        Logger.info(
+            '📱 ChatListProvider:  Message appears to be plain text, using as-is');
       }
 
       // Create or update conversation
       final currentUserId = _getCurrentUserId();
       if (currentUserId == 'unknown_user') {
-        print('📱 ChatListProvider: ❌ No current user session found');
+        Logger.error('📱 ChatListProvider:  No current user session found');
         return;
       }
 
@@ -1810,12 +1834,12 @@ class ChatListProvider extends ChangeNotifier {
         existingConversation = _conversations.firstWhere(
           (conv) => conv.id == conversationId,
         );
-        print(
-            '📱 ChatListProvider: ✅ Found conversation by consistent ID: $conversationId');
+        Logger.success(
+            '📱 ChatListProvider:  Found conversation by consistent ID: $conversationId');
       } catch (e) {
         existingConversation = null;
-        print(
-            '📱 ChatListProvider: ⚠️ No existing conversation found for ID: $conversationId');
+        Logger.warning(
+            '📱 ChatListProvider:  No existing conversation found for ID: $conversationId');
       }
 
       if (existingConversation != null) {
@@ -1840,8 +1864,8 @@ class ChatListProvider extends ChangeNotifier {
           _conversations[index] = updatedConversation;
         }
 
-        print(
-            '📱 ChatListProvider: ✅ Updated existing conversation with decrypted preview');
+        Logger.success(
+            '📱 ChatListProvider:  Updated existing conversation with decrypted preview');
       } else {
         // Create new conversation with DECRYPTED preview
         final newConversation = ChatConversation(
@@ -1881,8 +1905,8 @@ class ChatListProvider extends ChangeNotifier {
         // Add to local state
         _conversations.add(newConversation);
 
-        print(
-            '📱 ChatListProvider: ✅ Created new conversation with decrypted preview');
+        Logger.success(
+            '📱 ChatListProvider:  Created new conversation with decrypted preview');
       }
 
       // Sort conversations by last message time (newest first)
@@ -1898,13 +1922,13 @@ class ChatListProvider extends ChangeNotifier {
       // Notify listeners to update UI
       notifyListeners();
 
-      print(
-          '📱 ChatListProvider: ✅ Chat list reordered - conversation moved to top');
+      Logger.success(
+          '📱 ChatListProvider:  Chat list reordered - conversation moved to top');
 
-      print(
-          '📱 ChatListProvider: ✅ Incoming message handled successfully with decryption');
+      Logger.success(
+          '📱 ChatListProvider:  Incoming message handled successfully with decryption');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error handling incoming message: $e');
+      Logger.error('📱 ChatListProvider:  Error handling incoming message: $e');
     }
   }
 
@@ -1919,8 +1943,8 @@ class ChatListProvider extends ChangeNotifier {
 
       // Check if conversation already exists
       if (_conversations.any((conv) => conv.id == conversationId)) {
-        print(
-            '📱 ChatListProvider: ℹ️ Conversation already exists: $conversationId');
+        Logger.info(
+            '📱 ChatListProvider:  Conversation already exists: $conversationId');
         return;
       }
 
@@ -1959,9 +1983,10 @@ class ChatListProvider extends ChangeNotifier {
       _applySearchFilter();
       notifyListeners();
 
-      print('📱 ChatListProvider: ✅ Added new conversation: $conversationId');
+      Logger.success(
+          '📱 ChatListProvider:  Added new conversation: $conversationId');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to add new conversation: $e');
+      Logger.error('📱 ChatListProvider:  Failed to add new conversation: $e');
     }
   }
 
@@ -2026,13 +2051,14 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print('📱 ChatListProvider: ✅ Created conversation: $conversationId');
+        Logger.success(
+            '📱 ChatListProvider:  Created conversation: $conversationId');
       } else {
-        print(
-            '📱 ChatListProvider: ℹ️ Conversation already exists: $conversationId');
+        Logger.info(
+            '📱 ChatListProvider:  Conversation already exists: $conversationId');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to ensure conversation: $e');
+      Logger.error('📱 ChatListProvider:  Failed to ensure conversation: $e');
     }
   }
 
@@ -2082,17 +2108,19 @@ class ChatListProvider extends ChangeNotifier {
       _applySearchFilter();
       notifyListeners();
 
-      print(
-          '📱 ChatListProvider: ✅ Updated conversation with outgoing message: $conversationId');
+      Logger.success(
+          '📱 ChatListProvider:  Updated conversation with outgoing message: $conversationId');
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Failed to handle outgoing message: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Failed to handle outgoing message: $e');
     }
   }
 
   /// Refresh a specific conversation with latest data
   Future<void> refreshConversation(String conversationId) async {
     try {
-      print('📱 ChatListProvider: 🔄 Refreshing conversation: $conversationId');
+      Logger.info(
+          '📱 ChatListProvider:  Refreshing conversation: $conversationId');
 
       // Get the latest conversation data from storage
       final currentUserId = _getCurrentUserId();
@@ -2119,10 +2147,11 @@ class ChatListProvider extends ChangeNotifier {
         _applySearchFilter();
         notifyListeners();
 
-        print('📱 ChatListProvider: ✅ Conversation refreshed: $conversationId');
+        Logger.success(
+            '📱 ChatListProvider:  Conversation refreshed: $conversationId');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error refreshing conversation: $e');
+      Logger.error('📱 ChatListProvider:  Error refreshing conversation: $e');
     }
   }
 
@@ -2131,12 +2160,13 @@ class ChatListProvider extends ChangeNotifier {
     try {
       // REMOVED: Direct callback to SeSocketService to avoid duplication
       // Online status updates now come through main.dart -> updateConversationOnlineStatus
-      print(
+      Logger.debug(
           '🔌 ChatListProvider: ℹ️ Online status updates handled via main.dart callback (no duplicate)');
-      print('🔌 ChatListProvider: ✅ Online status callback setup complete');
+      Logger.success(
+          ' ChatListProvider:  Online status callback setup complete');
     } catch (e) {
-      print(
-          '🔌 ChatListProvider: ❌ Error setting up online status callback: $e');
+      Logger.error(
+          ' ChatListProvider:  Error setting up online status callback: $e');
     }
   }
 
@@ -2144,8 +2174,8 @@ class ChatListProvider extends ChangeNotifier {
   void _handleOnlineStatusUpdate(
       String senderId, bool isOnline, String? lastSeen) {
     try {
-      print(
-          '📱 ChatListProvider: 🔔 Online status update: $senderId -> $isOnline');
+      Logger.debug(
+          '📱 ChatListProvider:  Online status update: $senderId -> $isOnline');
 
       // Find conversation with this sender and update online status
       final conversationIndex = _conversations.indexWhere(
@@ -2170,14 +2200,15 @@ class ChatListProvider extends ChangeNotifier {
               senderId, isOnline, updatedConversation.lastSeen);
         }
 
-        print(
-            '📱 ChatListProvider: ✅ Online status updated for conversation: ${conversation.id}');
+        Logger.success(
+            '📱 ChatListProvider:  Online status updated for conversation: ${conversation.id}');
       } else {
-        print(
-            '📱 ChatListProvider: ⚠️ No conversation found for sender: $senderId');
+        Logger.warning(
+            '📱 ChatListProvider:  No conversation found for sender: $senderId');
       }
     } catch (e) {
-      print('📱 ChatListProvider: ❌ Error handling online status update: $e');
+      Logger.error(
+          '📱 ChatListProvider:  Error handling online status update: $e');
     }
   }
 

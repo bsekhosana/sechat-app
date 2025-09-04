@@ -4,6 +4,7 @@ import '../models/message.dart';
 import '../models/message_status.dart' as msg_status;
 import 'message_storage_service.dart';
 import '../../../core/services/se_session_service.dart';
+import '/../core/utils/logger.dart';
 
 /// Service for tracking message delivery status and read receipts
 class MessageStatusTrackingService {
@@ -33,16 +34,17 @@ class MessageStatusTrackingService {
   /// Initialize the tracking service
   Future<void> initialize() async {
     try {
-      print('📊 MessageStatusTrackingService: Initializing tracking service');
+      Logger.debug(
+          '📊 MessageStatusTrackingService: Initializing tracking service');
 
       // Note: Socket callbacks are now handled by ChannelSocketService
       // This service focuses on local status tracking and UI updates
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Tracking service initialized successfully');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Tracking service initialized successfully');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to initialize tracking service: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to initialize tracking service: $e');
       rethrow;
     }
   }
@@ -51,7 +53,7 @@ class MessageStatusTrackingService {
   void handleMessageStatusUpdate(
       String senderId, String messageId, String status) {
     try {
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Handling status update: $messageId -> $status');
 
       // Convert string status to enum
@@ -70,7 +72,8 @@ class MessageStatusTrackingService {
           messageStatus = msg_status.MessageDeliveryStatus.failed;
           break;
         default:
-          print('📊 MessageStatusTrackingService: Unknown status: $status');
+          Logger.debug(
+              '📊 MessageStatusTrackingService: Unknown status: $status');
           return;
       }
 
@@ -85,11 +88,11 @@ class MessageStatusTrackingService {
         senderId: senderId,
       ));
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Status update handled: $messageId -> ${messageStatus.name}');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Status update handled: $messageId -> ${messageStatus.name}');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to handle status update: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to handle status update: $e');
     }
   }
 
@@ -107,7 +110,7 @@ class MessageStatusTrackingService {
   /// Mark message as sent
   Future<void> markMessageAsSent(String messageId) async {
     try {
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Marking message as sent: $messageId');
 
       // Update cache only (storage update not implemented yet)
@@ -120,11 +123,11 @@ class MessageStatusTrackingService {
         timestamp: DateTime.now(),
       ));
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Message marked as sent: $messageId');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Message marked as sent: $messageId');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to mark message as sent: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to mark message as sent: $e');
       rethrow;
     }
   }
@@ -132,7 +135,7 @@ class MessageStatusTrackingService {
   /// Mark message as delivered
   Future<void> markMessageAsDelivered(String messageId) async {
     try {
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Marking message as delivered: $messageId');
 
       // Update cache only (storage update not implemented yet)
@@ -148,11 +151,11 @@ class MessageStatusTrackingService {
       // Send delivery confirmation to sender
       await _sendDeliveryConfirmation(messageId);
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Message marked as delivered: $messageId');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Message marked as delivered: $messageId');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to mark message as delivered: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to mark message as delivered: $e');
       rethrow;
     }
   }
@@ -160,7 +163,7 @@ class MessageStatusTrackingService {
   /// Mark message as read
   Future<void> markMessageAsRead(String messageId) async {
     try {
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Marking message as read: $messageId');
 
       // Update cache only (storage update not implemented yet)
@@ -176,11 +179,11 @@ class MessageStatusTrackingService {
       // Send read receipt to sender
       await _sendReadReceipt(messageId);
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Message marked as read: $messageId');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Message marked as read: $messageId');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to mark message as read: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to mark message as read: $e');
       rethrow;
     }
   }
@@ -188,7 +191,7 @@ class MessageStatusTrackingService {
   /// Mark message as failed
   Future<void> markMessageAsFailed(String messageId, String error) async {
     try {
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Marking message as failed: $messageId');
 
       // Update cache only (storage update not implemented yet)
@@ -201,11 +204,11 @@ class MessageStatusTrackingService {
         timestamp: DateTime.now(),
       ));
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Message marked as failed: $messageId');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Message marked as failed: $messageId');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to mark message as failed: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to mark message as failed: $e');
       rethrow;
     }
   }
@@ -214,7 +217,7 @@ class MessageStatusTrackingService {
   Future<void> updateTypingIndicator(
       String conversationId, String userId, bool isTyping) async {
     try {
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Updating typing indicator: $userId -> $isTyping');
 
       // Get current user ID
@@ -224,7 +227,7 @@ class MessageStatusTrackingService {
       // Only update typing indicator if the user is NOT the current user
       // (i.e., don't show typing indicator on sender's screen)
       if (userId == currentUserId) {
-        print(
+        Logger.debug(
             '📊 MessageStatusTrackingService: Skipping typing indicator update for current user');
         return;
       }
@@ -245,18 +248,18 @@ class MessageStatusTrackingService {
         timestamp: DateTime.now(),
       ));
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Typing indicator updated: $userId -> $isTyping');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Typing indicator updated: $userId -> $isTyping');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to update typing indicator: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to update typing indicator: $e');
     }
   }
 
   /// Handle typing indicator update
   Future<void> _handleTypingIndicator(String senderId, bool isTyping) async {
     try {
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Handling typing indicator: $senderId -> $isTyping');
 
       // Get current user ID
@@ -267,8 +270,8 @@ class MessageStatusTrackingService {
       // Only prevent users from seeing their own typing indicator if they're not in a conversation
       if (senderId == currentUserId) {
         // For now, always process typing indicators for consistency
-        print(
-            '📊 MessageStatusTrackingService: ℹ️ Processing own typing indicator for UI consistency');
+        Logger.info(
+            '📊 MessageStatusTrackingService:  Processing own typing indicator for UI consistency');
       }
 
       // Note: Storage service methods not implemented yet
@@ -289,11 +292,11 @@ class MessageStatusTrackingService {
         timestamp: DateTime.now(),
       ));
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Typing indicator handled: $senderId -> $isTyping');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Typing indicator handled: $senderId -> $isTyping');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to handle typing indicator: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to handle typing indicator: $e');
     }
   }
 
@@ -302,13 +305,13 @@ class MessageStatusTrackingService {
   Future<void> handleExternalTypingIndicator(
       String senderId, bool isTyping) async {
     try {
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Handling external typing indicator: $senderId -> $isTyping');
 
       // Get current user ID
       final currentUserId = _sessionService.currentSessionId;
       if (currentUserId == null) {
-        print(
+        Logger.debug(
             '📊 MessageStatusTrackingService: No current session ID available');
         return;
       }
@@ -320,13 +323,13 @@ class MessageStatusTrackingService {
         final conversations =
             await _storageService.getUserConversations(currentUserId);
         if (conversations.isEmpty) {
-          print(
+          Logger.debug(
               '📊 MessageStatusTrackingService: Skipping external typing indicator for current user (no conversations)');
           return;
         }
         // If we have conversations, process the typing indicator for UI consistency
-        print(
-            '📊 MessageStatusTrackingService: ℹ️ Processing own external typing indicator in active conversation');
+        Logger.info(
+            '📊 MessageStatusTrackingService:  Processing own external typing indicator in active conversation');
       }
 
       // Find conversation with this sender
@@ -356,11 +359,11 @@ class MessageStatusTrackingService {
         _clearTypingTimeout(conversation.id);
       }
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ External typing indicator handled: $senderId -> $isTyping');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  External typing indicator handled: $senderId -> $isTyping');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to handle external typing indicator: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to handle external typing indicator: $e');
     }
   }
 
@@ -389,7 +392,8 @@ class MessageStatusTrackingService {
   /// Update last seen for a user
   Future<void> updateLastSeen(String userId) async {
     try {
-      print('📊 MessageStatusTrackingService: Updating last seen for: $userId');
+      Logger.debug(
+          '📊 MessageStatusTrackingService: Updating last seen for: $userId');
 
       // Get current user ID
       final currentUserId = _sessionService.currentSessionId;
@@ -414,11 +418,11 @@ class MessageStatusTrackingService {
         timestamp: DateTime.now(),
       ));
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Last seen updated for: $userId');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Last seen updated for: $userId');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to update last seen: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to update last seen: $e');
     }
   }
 
@@ -431,14 +435,14 @@ class MessageStatusTrackingService {
 
       // Send silent notification to sender using existing notification service
       // For now, we'll use a placeholder - this will be implemented when we extend the notification service
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Would send delivery confirmation for: $messageId');
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Delivery confirmation sent for: $messageId');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Delivery confirmation sent for: $messageId');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to send delivery confirmation: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to send delivery confirmation: $e');
     }
   }
 
@@ -451,14 +455,14 @@ class MessageStatusTrackingService {
 
       // Send silent notification to sender using existing notification service
       // For now, we'll use a placeholder - this will be implemented when we extend the notification service
-      print(
+      Logger.debug(
           '📊 MessageStatusTrackingService: Would send read receipt for: $messageId');
 
-      print(
-          '📊 MessageStatusTrackingService: ✅ Read receipt sent for: $messageId');
+      Logger.success(
+          '📊 MessageStatusTrackingService:  Read receipt sent for: $messageId');
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to send read receipt: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to send read receipt: $e');
     }
   }
 
@@ -469,7 +473,8 @@ class MessageStatusTrackingService {
       // For now, we'll return null and implement this later
       return null;
     } catch (e) {
-      print('📊 MessageStatusTrackingService: ❌ Failed to get message: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to get message: $e');
       return null;
     }
   }
@@ -497,8 +502,8 @@ class MessageStatusTrackingService {
       // Check if user has active typing indicators
       return _typingTimers.containsKey(userId);
     } catch (e) {
-      print(
-          '📊 MessageStatusTrackingService: ❌ Failed to get typing status: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to get typing status: $e');
       return false;
     }
   }
@@ -510,7 +515,8 @@ class MessageStatusTrackingService {
       // For now, return null as we don't have this data
       return null;
     } catch (e) {
-      print('📊 MessageStatusTrackingService: ❌ Failed to get last seen: $e');
+      Logger.error(
+          '📊 MessageStatusTrackingService:  Failed to get last seen: $e');
       return null;
     }
   }
@@ -531,7 +537,7 @@ class MessageStatusTrackingService {
     // Clear cache
     _statusCache.clear();
 
-    print('📊 MessageStatusTrackingService: ✅ Service disposed');
+    Logger.success('📊 MessageStatusTrackingService:  Service disposed');
   }
 }
 

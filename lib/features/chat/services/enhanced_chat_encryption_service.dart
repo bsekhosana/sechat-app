@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart';
 import 'package:sechat_app/core/services/key_exchange_service.dart';
 import '../models/optimized_message.dart';
+import '/../core/utils/logger.dart';
 
 /// Enhanced Chat Encryption Service
 /// Provides proper encryption for all chat messages and notifications
@@ -33,8 +34,8 @@ class EnhancedChatEncryptionService {
           _keyExpiryTimes.containsKey(conversationId)) {
         final expiryTime = _keyExpiryTimes[conversationId]!;
         if (DateTime.now().isBefore(expiryTime)) {
-          print(
-              '🔐 EnhancedChatEncryptionService: ✅ Using existing key for conversation: $conversationId');
+          Logger.success(
+              ' EnhancedChatEncryptionService:  Using existing key for conversation: $conversationId');
           return _conversationKeys[conversationId]!;
         }
       }
@@ -44,16 +45,16 @@ class EnhancedChatEncryptionService {
         final hasKey =
             await KeyExchangeService.instance.hasPublicKeyForUser(recipientId);
         if (!hasKey) {
-          print(
-              '🔐 EnhancedChatEncryptionService: 🔑 Initiating key exchange with $recipientId');
+          Logger.debug(
+              ' EnhancedChatEncryptionService: 🔑 Initiating key exchange with $recipientId');
           final keyExchangeSuccess = await KeyExchangeService.instance
               .ensureKeyExchangeWithUser(recipientId);
           if (!keyExchangeSuccess) {
             throw Exception('Key exchange failed with $recipientId');
           }
         }
-        print(
-            '🔐 EnhancedChatEncryptionService: ✅ Key exchange completed with $recipientId');
+        Logger.success(
+            ' EnhancedChatEncryptionService:  Key exchange completed with $recipientId');
       }
 
       // Generate new secure key
@@ -69,12 +70,12 @@ class EnhancedChatEncryptionService {
       _conversationKeys[conversationId] = key;
       _keyExpiryTimes[conversationId] = DateTime.now().add(_keyExpiryDuration);
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Generated new secure key for conversation: $conversationId');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Generated new secure key for conversation: $conversationId');
       return key;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to generate conversation key: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to generate conversation key: $e');
       rethrow;
     }
   }
@@ -82,8 +83,8 @@ class EnhancedChatEncryptionService {
   /// Encrypt a chat message with proper encryption
   Future<Map<String, dynamic>> encryptMessage(OptimizedMessage message) async {
     try {
-      print(
-          '🔐 EnhancedChatEncryptionService: 🔒 Encrypting message: ${message.id}');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 🔒 Encrypting message: ${message.id}');
 
       // Get or generate conversation key (ensure key exchange with recipient)
       final conversationKey = await generateConversationKey(
@@ -137,12 +138,12 @@ class EnhancedChatEncryptionService {
         'version': '1.0',
       };
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Message encrypted successfully');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Message encrypted successfully');
       return encryptedMessage;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to encrypt message: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to encrypt message: $e');
       rethrow;
     }
   }
@@ -151,7 +152,7 @@ class EnhancedChatEncryptionService {
   Future<Map<String, dynamic>> decryptMessage(
       Map<String, dynamic> encryptedMessage) async {
     try {
-      print('🔐 EnhancedChatEncryptionService: 🔓 Decrypting message');
+      Logger.debug(' EnhancedChatEncryptionService: 🔓 Decrypting message');
 
       final encryptedData = encryptedMessage['encrypted_data'] as String;
       final iv = encryptedMessage['iv'] as String;
@@ -186,12 +187,12 @@ class EnhancedChatEncryptionService {
       // Parse the decrypted JSON
       final payload = jsonDecode(decryptedJson) as Map<String, dynamic>;
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Message decrypted successfully');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Message decrypted successfully');
       return payload;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to decrypt message: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to decrypt message: $e');
       rethrow;
     }
   }
@@ -204,7 +205,8 @@ class EnhancedChatEncryptionService {
     required String conversationId,
   }) async {
     try {
-      print('🔐 EnhancedChatEncryptionService: 🔒 Encrypting typing indicator');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 🔒 Encrypting typing indicator');
 
       // Get or generate conversation key (ensure key exchange with recipient)
       final conversationKey =
@@ -255,12 +257,12 @@ class EnhancedChatEncryptionService {
         'version': '1.0',
       };
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Typing indicator encrypted successfully');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Typing indicator encrypted successfully');
       return encryptedTypingIndicator;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to encrypt typing indicator: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to encrypt typing indicator: $e');
       rethrow;
     }
   }
@@ -269,7 +271,8 @@ class EnhancedChatEncryptionService {
   Future<Map<String, dynamic>> decryptTypingIndicator(
       Map<String, dynamic> encryptedData) async {
     try {
-      print('🔐 EnhancedChatEncryptionService: 🔓 Decrypting typing indicator');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 🔓 Decrypting typing indicator');
 
       final encryptedMessage = encryptedData['encrypted_data'] as String;
       final iv = encryptedData['iv'] as String;
@@ -303,12 +306,12 @@ class EnhancedChatEncryptionService {
       // Parse the decrypted JSON
       final payload = jsonDecode(decryptedJson) as Map<String, dynamic>;
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Typing indicator decrypted successfully');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Typing indicator decrypted successfully');
       return payload;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to decrypt typing indicator: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to decrypt typing indicator: $e');
       rethrow;
     }
   }
@@ -320,7 +323,8 @@ class EnhancedChatEncryptionService {
     required String? lastSeen,
   }) async {
     try {
-      print('🔐 EnhancedChatEncryptionService: 🔒 Encrypting online status');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 🔒 Encrypting online status');
 
       // Generate a temporary key for online status (not conversation-specific)
       final tempKey = await _generateTemporaryKey();
@@ -368,12 +372,12 @@ class EnhancedChatEncryptionService {
         'version': '1.0',
       };
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Online status encrypted successfully');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Online status encrypted successfully');
       return encryptedOnlineStatus;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to encrypt online status: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to encrypt online status: $e');
       rethrow;
     }
   }
@@ -382,7 +386,8 @@ class EnhancedChatEncryptionService {
   Future<Map<String, dynamic>> decryptOnlineStatus(
       Map<String, dynamic> encryptedData) async {
     try {
-      print('🔐 EnhancedChatEncryptionService: 🔓 Decrypting online status');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 🔓 Decrypting online status');
 
       // For online status, we need to handle the decryption differently
       // since it's not conversation-specific
@@ -393,8 +398,8 @@ class EnhancedChatEncryptionService {
       throw UnimplementedError(
           'Online status decryption requires key exchange implementation');
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to decrypt online status: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to decrypt online status: $e');
       rethrow;
     }
   }
@@ -406,7 +411,8 @@ class EnhancedChatEncryptionService {
     required String conversationId,
   }) async {
     try {
-      print('🔐 EnhancedChatEncryptionService: 🔒 Encrypting message status');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 🔒 Encrypting message status');
 
       // Get or generate conversation key (ensure key exchange with recipient)
       final conversationKey =
@@ -456,12 +462,12 @@ class EnhancedChatEncryptionService {
         'version': '1.0',
       };
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Message status encrypted successfully');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Message status encrypted successfully');
       return encryptedMessageStatus;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to encrypt message status: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to encrypt message status: $e');
       rethrow;
     }
   }
@@ -470,7 +476,8 @@ class EnhancedChatEncryptionService {
   Future<Map<String, dynamic>> decryptMessageStatus(
       Map<String, dynamic> encryptedData) async {
     try {
-      print('🔐 EnhancedChatEncryptionService: 🔓 Decrypting message status');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 🔓 Decrypting message status');
 
       final encryptedMessage = encryptedData['encrypted_data'] as String;
       final iv = encryptedData['iv'] as String;
@@ -504,12 +511,12 @@ class EnhancedChatEncryptionService {
       // Parse the decrypted JSON
       final payload = jsonDecode(decryptedJson) as Map<String, dynamic>;
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Message status decrypted successfully');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Message status decrypted successfully');
       return payload;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to decrypt message status: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to decrypt message status: $e');
       rethrow;
     }
   }
@@ -541,12 +548,12 @@ class EnhancedChatEncryptionService {
       final expectedChecksum = _generateChecksum(encryptedData);
       final isValid = checksum == expectedChecksum;
 
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Message integrity verified: $isValid');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Message integrity verified: $isValid');
       return isValid;
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Failed to verify message integrity: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Failed to verify message integrity: $e');
       return false;
     }
   }
@@ -568,8 +575,8 @@ class EnhancedChatEncryptionService {
     }
 
     if (expiredKeys.isNotEmpty) {
-      print(
-          '🔐 EnhancedChatEncryptionService: 🧹 Cleared ${expiredKeys.length} expired keys');
+      Logger.info(
+          ' EnhancedChatEncryptionService:  Cleared ${expiredKeys.length} expired keys');
     }
   }
 
@@ -589,46 +596,46 @@ class EnhancedChatEncryptionService {
   Future<bool> handleRecipientKeyExchange(
       String senderId, String conversationId) async {
     try {
-      print(
-          '🔐 EnhancedChatEncryptionService: 🔑 Handling recipient key exchange for $senderId');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 🔑 Handling recipient key exchange for $senderId');
 
       // Check if we already have a public key for the sender
       final hasKey =
           await KeyExchangeService.instance.hasPublicKeyForUser(senderId);
       if (hasKey) {
-        print(
-            '🔐 EnhancedChatEncryptionService: ✅ Already have public key for $senderId');
+        Logger.success(
+            ' EnhancedChatEncryptionService:  Already have public key for $senderId');
         return true;
       }
 
       // Check if key exchange is pending
       final isPending = await _isKeyExchangePending(senderId);
       if (isPending) {
-        print(
-            '🔐 EnhancedChatEncryptionService: ⏳ Key exchange already pending for $senderId');
+        Logger.debug(
+            ' EnhancedChatEncryptionService: ⏳ Key exchange already pending for $senderId');
         return true;
       }
 
       // Initiate key exchange
-      print(
-          '🔐 EnhancedChatEncryptionService: 🔄 Initiating key exchange with $senderId');
+      Logger.info(
+          ' EnhancedChatEncryptionService:  Initiating key exchange with $senderId');
       final keyExchangeSuccess =
           await KeyExchangeService.instance.ensureKeyExchangeWithUser(senderId);
 
       if (keyExchangeSuccess) {
-        print(
-            '🔐 EnhancedChatEncryptionService: ✅ Key exchange initiated successfully with $senderId');
+        Logger.success(
+            ' EnhancedChatEncryptionService:  Key exchange initiated successfully with $senderId');
         // Store pending exchange for this conversation
         await _storePendingKeyExchange(senderId, conversationId);
         return true;
       } else {
-        print(
-            '🔐 EnhancedChatEncryptionService: ❌ Key exchange failed with $senderId');
+        Logger.error(
+            ' EnhancedChatEncryptionService:  Key exchange failed with $senderId');
         return false;
       }
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Error handling recipient key exchange: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Error handling recipient key exchange: $e');
       return false;
     }
   }
@@ -640,8 +647,8 @@ class EnhancedChatEncryptionService {
       // For now, we'll use a simple local check
       return false; // Placeholder - integrate with actual key exchange service
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Error checking key exchange status: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Error checking key exchange status: $e');
       return false;
     }
   }
@@ -652,37 +659,37 @@ class EnhancedChatEncryptionService {
     try {
       // Store the pending key exchange mapping
       // This would integrate with the existing key exchange service
-      print(
-          '🔐 EnhancedChatEncryptionService: 💾 Stored pending key exchange for $userId in conversation $conversationId');
+      Logger.debug(
+          ' EnhancedChatEncryptionService: 💾 Stored pending key exchange for $userId in conversation $conversationId');
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Error storing pending key exchange: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Error storing pending key exchange: $e');
     }
   }
 
   /// Complete key exchange for a conversation
   Future<bool> completeKeyExchange(String userId, String conversationId) async {
     try {
-      print(
-          '🔐 EnhancedChatEncryptionService: ✅ Completing key exchange for $userId in conversation $conversationId');
+      Logger.success(
+          ' EnhancedChatEncryptionService:  Completing key exchange for $userId in conversation $conversationId');
 
       // Check if we now have the public key
       final hasKey =
           await KeyExchangeService.instance.hasPublicKeyForUser(userId);
       if (hasKey) {
-        print(
-            '🔐 EnhancedChatEncryptionService: ✅ Key exchange completed successfully for $userId');
+        Logger.success(
+            ' EnhancedChatEncryptionService:  Key exchange completed successfully for $userId');
         // Remove from pending exchanges
         await _removePendingKeyExchange(userId, conversationId);
         return true;
       } else {
-        print(
-            '🔐 EnhancedChatEncryptionService: ❌ Key exchange not yet completed for $userId');
+        Logger.error(
+            ' EnhancedChatEncryptionService:  Key exchange not yet completed for $userId');
         return false;
       }
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Error completing key exchange: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Error completing key exchange: $e');
       return false;
     }
   }
@@ -692,11 +699,11 @@ class EnhancedChatEncryptionService {
       String userId, String conversationId) async {
     try {
       // Remove the pending key exchange mapping
-      print(
-          '🔐 EnhancedChatEncryptionService: 🗑️ Removed pending key exchange for $userId in conversation $conversationId');
+      Logger.info(
+          ' EnhancedChatEncryptionService:  Removed pending key exchange for $userId in conversation $conversationId');
     } catch (e) {
-      print(
-          '🔐 EnhancedChatEncryptionService: ❌ Error removing pending key exchange: $e');
+      Logger.error(
+          ' EnhancedChatEncryptionService:  Error removing pending key exchange: $e');
     }
   }
 }

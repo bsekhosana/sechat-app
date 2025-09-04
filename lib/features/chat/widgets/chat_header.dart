@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '/../core/utils/logger.dart';
 
 /// Header widget for individual chat conversations
 class ChatHeader extends StatelessWidget {
@@ -21,8 +22,8 @@ class ChatHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print(
-        '🔍 ChatHeader: Building with isOnline=$isOnline, recipientName=$recipientName');
+    Logger.info(
+        ' ChatHeader: Building with isOnline=$isOnline, recipientName=$recipientName');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

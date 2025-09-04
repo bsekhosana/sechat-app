@@ -11,6 +11,8 @@ import 'package:sechat_app/features/notifications/services/local_notification_ba
 import 'package:sechat_app/core/services/contact_service.dart';
 
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
+import '/..//../core/utils/logger.dart';
 
 class SeSocketService {
   SeSocketService._();
@@ -20,12 +22,12 @@ class SeSocketService {
   static SeSocketService get instance {
     if (_instance == null && !_isDestroyed) {
       _instance = SeSocketService._();
-      print('🔌 SeSocketService: 🆕 New instance created');
+      Logger.info('New instance created', 'SeSocketService');
     } else if (_instance == null && _isDestroyed) {
       // Reset destruction state and create new instance
       _isDestroyed = false;
       _instance = SeSocketService._();
-      print('🔌 SeSocketService: 🔄 Instance recreated after destruction');
+      Logger.info('Instance recreated after destruction', 'SeSocketService');
     }
     return _instance!;
   }
@@ -40,7 +42,7 @@ class SeSocketService {
   // CRITICAL: Method to completely destroy the singleton instance
   static void destroyInstance() {
     if (_instance != null) {
-      print('🔌 SeSocketService: 🗑️ Destroying singleton instance...');
+      Logger.debug('Destroying singleton instance...', 'SeSocketService');
 
       // First dispose the current instance
       _instance!.dispose();
@@ -50,20 +52,21 @@ class SeSocketService {
       _isDestroyed = true; // Mark as destroyed
 
       // Force garbage collection hint
-      print(
-          '🔌 SeSocketService: ✅ Singleton instance destroyed and references cleared');
+      Logger.success(
+          ' SeSocketService:  Singleton instance destroyed and references cleared');
     }
   }
 
   // Additional cleanup method for aggressive memory cleanup
   static void forceCleanup() {
-    print('🔌 SeSocketService: 🧹 Force cleaning up all socket resources...');
+    Logger.debug(
+        'Force cleaning up all socket resources...', 'SeSocketService');
 
     // Destroy instance if it exists
     destroyInstance();
 
     // Additional cleanup steps
-    print('🔌 SeSocketService: ✅ Force cleanup completed');
+    Logger.success('Force cleanup completed', 'SeSocketService');
   }
 
   /// Create push notification for socket events (excluding connect/disconnect)
@@ -81,8 +84,8 @@ class SeSocketService {
     try {
       // Skip notifications for silent events
       if (silent) {
-        print(
-            '🔌 SeSocketService: 🔇 Skipping notification for silent event: $eventType');
+        Logger.debug(
+            ' SeSocketService: 🔇 Skipping notification for silent event: $eventType');
         return;
       }
 
@@ -92,13 +95,13 @@ class SeSocketService {
           eventType == 'connect_error' ||
           eventType == 'reconnect' ||
           eventType == 'reconnect_failed') {
-        print(
-            '🔌 SeSocketService: 🔇 Skipping notification for connection event: $eventType');
+        Logger.debug(
+            ' SeSocketService: 🔇 Skipping notification for connection event: $eventType');
         return;
       }
 
-      print(
-          '🔌 SeSocketService: 🔔 Creating notification for event: $eventType');
+      Logger.debug(
+          ' SeSocketService: 🔔 Creating notification for event: $eventType');
 
       // Use new local notification system
       final localNotificationBadgeService = LocalNotificationBadgeService();
@@ -118,16 +121,17 @@ class SeSocketService {
         },
       );
 
-      print('🔌 SeSocketService: ✅ Notification created for event: $eventType');
+      Logger.success(
+          'Notification created for event: $eventType', 'SeSocketService');
     } catch (e) {
-      print(
-          '🔌 SeSocketService: ❌ Failed to create notification for event $eventType: $e');
+      Logger.error(
+          ' SeSocketService:  Failed to create notification for event $eventType: $e');
     }
   }
 
   // Method to reset the service for new connections
   static void resetForNewConnection() {
-    print('🔌 SeSocketService: 🔄 Resetting service for new connection...');
+    Logger.info(' SeSocketService:  Resetting service for new connection...');
 
     // Reset the destroyed flag
     _isDestroyed = false;
@@ -158,14 +162,14 @@ class SeSocketService {
         _instance!._connectionStateController?.close();
         _instance!._connectionStateController = null;
 
-        print('🔌 SeSocketService: ✅ Existing instance cleaned up');
+        Logger.success(' SeSocketService:  Existing instance cleaned up');
       } catch (e) {
-        print(
-            '🔌 SeSocketService: ⚠️ Warning - error cleaning up existing instance: $e');
+        Logger.warning(
+            ' SeSocketService:  Warning - error cleaning up existing instance: $e');
       }
     }
 
-    print('🔌 SeSocketService: ✅ Service reset for new connection');
+    Logger.success(' SeSocketService:  Service reset for new connection');
   }
 
   // Check if service is ready for new connections
@@ -205,8 +209,8 @@ class SeSocketService {
         _connectionStateController!.add(state);
       }
     } catch (e) {
-      print(
-          '🔌 SeSocketService: ⚠️ Warning - could not add connection state event: $e');
+      Logger.warning(
+          ' SeSocketService:  Warning - could not add connection state event: $e');
     }
   }
 
@@ -248,8 +252,8 @@ class SeSocketService {
   Future<void> connect(String sessionId) async {
     // If instance was destroyed, reset it for new connection
     if (SeSocketService.isDestroyed) {
-      print(
-          '🔌 SeSocketService: 🔄 Instance was destroyed, resetting for new connection...');
+      Logger.info(
+          ' SeSocketService:  Instance was destroyed, resetting for new connection...');
       SeSocketService.resetForNewConnection();
     }
 
@@ -260,7 +264,8 @@ class SeSocketService {
     _ready = false;
     _sessionConfirmed = false;
 
-    print('🔌 SeSocketService: Connecting to $_url with session: $sessionId');
+    Logger.debug(
+        ' SeSocketService: Connecting to $_url with session: $sessionId');
 
     try {
       _socket = IO.io(_url, {
@@ -285,15 +290,15 @@ class SeSocketService {
       // Add connection timeout
       Timer(const Duration(seconds: 35), () {
         if (_isConnecting && !_ready) {
-          print(
-              '🔌 SeSocketService: ⚠️ Connection timeout, forcing disconnect');
+          Logger.warning(
+              ' SeSocketService:  Connection timeout, forcing disconnect');
           _socket?.disconnect();
           _isConnecting = false;
           _addConnectionStateEvent(false);
         }
       });
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error creating socket connection: $e');
+      Logger.error(' SeSocketService:  Error creating socket connection: $e');
       _isConnecting = false;
       _addConnectionStateEvent(false);
       rethrow;
@@ -302,7 +307,7 @@ class SeSocketService {
 
   void _bindCore() {
     _socket!.on('connect', (_) async {
-      print('🔌 SeSocketService: ✅ Connected to server');
+      Logger.success(' SeSocketService:  Connected to server');
       _isConnecting = false;
       _reconnectAttempts = 0;
       // Don't set _ready = true here - wait for session_registered confirmation
@@ -310,7 +315,7 @@ class SeSocketService {
           false); // Still not fully ready until session confirmed
 
       if (_sessionId != null) {
-        print('🔌 SeSocketService: Registering session: $_sessionId');
+        Logger.debug(' SeSocketService: Registering session: $_sessionId');
 
         // Get the user's public key for session registration
         String? userPublicKey;
@@ -319,15 +324,15 @@ class SeSocketService {
           final sessionService = SeSessionService();
           userPublicKey = sessionService.currentSession?.publicKey;
           if (userPublicKey != null) {
-            print(
-                '🔌 SeSocketService: ✅ Retrieved user public key for session registration');
+            Logger.success(
+                ' SeSocketService:  Retrieved user public key for session registration');
           } else {
-            print(
-                '🔌 SeSocketService: ⚠️ No public key available in current session');
+            Logger.warning(
+                ' SeSocketService:  No public key available in current session');
           }
         } catch (e) {
-          print(
-              '🔌 SeSocketService: ⚠️ Warning - could not retrieve user public key: $e');
+          Logger.warning(
+              ' SeSocketService:  Warning - could not retrieve user public key: $e');
           // Continue without public key, but this may cause key exchange issues
         }
 
@@ -338,11 +343,11 @@ class SeSocketService {
 
         if (userPublicKey != null) {
           registrationData['publicKey'] = userPublicKey;
-          print(
-              '🔌 SeSocketService: 🔑 Including public key in session registration');
+          Logger.debug(
+              ' SeSocketService: 🔑 Including public key in session registration');
         } else {
-          print(
-              '🔌 SeSocketService: ⚠️ No public key available for session registration');
+          Logger.warning(
+              ' SeSocketService:  No public key available for session registration');
         }
 
         _socket!.emit('register_session', registrationData);
@@ -351,8 +356,8 @@ class SeSocketService {
         // assume registration was successful and proceed
         Timer(const Duration(seconds: 5), () {
           if (!_sessionConfirmed && _socket?.connected == true) {
-            print(
-                '🔌 SeSocketService: ⚠️ No session_registered received, assuming success');
+            Logger.warning(
+                ' SeSocketService:  No session_registered received, assuming success');
             _sessionConfirmed = true;
             _ready = true;
             _startClientHeartbeat();
@@ -366,7 +371,8 @@ class SeSocketService {
     });
 
     _socket!.on('session_registered', (data) async {
-      print('✅ SeSocketService: Session confirmed: ${data['sessionId']}');
+      Logger.success(
+          ' SeSocketService: Session confirmed: ${data['sessionId']}');
 
       // Create notification for session registered
       await _createSocketEventNotification(
@@ -391,7 +397,8 @@ class SeSocketService {
     });
 
     _socket!.on('disconnect', (reason) {
-      print('🔌 SeSocketService: ❌ Disconnected from server. Reason: $reason');
+      Logger.error(
+          ' SeSocketService:  Disconnected from server. Reason: $reason');
       _ready = false;
       _isConnecting = false;
       _addConnectionStateEvent(false);
@@ -400,9 +407,11 @@ class SeSocketService {
       if (_sessionId != null) {
         try {
           sendPresence(false, []); // Empty array means broadcast to all users
-          print('🔌 SeSocketService: ✅ Offline presence sent on disconnect');
+          Logger.success(
+              ' SeSocketService:  Offline presence sent on disconnect');
         } catch (e) {
-          print('🔌 SeSocketService: ⚠️ Failed to send offline presence: $e');
+          Logger.warning(
+              ' SeSocketService:  Failed to send offline presence: $e');
         }
       }
 
@@ -413,28 +422,28 @@ class SeSocketService {
     });
 
     _socket!.on('reconnect', (attemptNumber) {
-      print(
-          '🔌 SeSocketService: 🔄 Reconnected to server. Attempt: $attemptNumber');
+      Logger.info(
+          ' SeSocketService:  Reconnected to server. Attempt: $attemptNumber');
       _isConnecting = false;
       _reconnectAttempts = 0;
       // Don't set _ready = true here - wait for session_registered confirmation
       _addConnectionStateEvent(false);
 
       // CRITICAL: Rebind event handlers after reconnection
-      print(
-          '🔌 SeSocketService: 🔄 Rebinding event handlers after reconnection');
+      Logger.info(
+          ' SeSocketService:  Rebinding event handlers after reconnection');
       _bindCore();
 
       if (_sessionId != null) {
-        print('🔌 SeSocketService: Re-registering session: $_sessionId');
+        Logger.debug(' SeSocketService: Re-registering session: $_sessionId');
         _socket!.emit('register_session', {'sessionId': _sessionId});
 
         // FALLBACK: If server doesn't send session_registered within 5 seconds,
         // assume registration was successful and proceed
         Timer(const Duration(seconds: 5), () {
           if (!_sessionConfirmed && _socket?.connected == true) {
-            print(
-                '🔌 SeSocketService: ⚠️ No session_registered received, assuming success');
+            Logger.warning(
+                ' SeSocketService:  No session_registered received, assuming success');
             _sessionConfirmed = true;
             _ready = true;
             _startClientHeartbeat();
@@ -445,7 +454,7 @@ class SeSocketService {
     });
 
     _socket!.on('reconnect_failed', (data) {
-      print('🔌 SeSocketService: ❌ Reconnection failed');
+      Logger.error(' SeSocketService:  Reconnection failed');
       _isConnecting = false;
       _ready = false;
       _addConnectionStateEvent(false);
@@ -459,27 +468,27 @@ class SeSocketService {
 
     // Connection stability checks
     _socket!.on('connection:stability_check', (data) {
-      print('🔌 SeSocketService: 🔍 Connection stability check received');
+      Logger.info(' SeSocketService:  Connection stability check received');
       _respondToStabilityCheck(data);
     });
 
     _socket!.on('connection:ping', (data) {
-      print('🔌 SeSocketService: 🔍 Connection ping received');
+      Logger.info(' SeSocketService:  Connection ping received');
       _respondToConnectionPing(data);
     });
 
     // Key exchange events
     _socket!.on('key_exchange:request', (data) async {
-      print('🔑 SeSocketService: Key exchange request received');
+      Logger.debug(' SeSocketService: Key exchange request received');
 
       // Process the key exchange request with KeyExchangeService
       try {
         KeyExchangeService.instance.processKeyExchangeRequest(data);
-        print(
-            '🔑 SeSocketService: ✅ Key exchange request processed by KeyExchangeService');
+        Logger.success(
+            ' SeSocketService:  Key exchange request processed by KeyExchangeService');
       } catch (e) {
-        print(
-            '🔑 SeSocketService: ❌ Error processing key exchange request: $e');
+        Logger.error(
+            ' SeSocketService:  Error processing key exchange request: $e');
       }
 
       // Create notification for key exchange request
@@ -495,25 +504,28 @@ class SeSocketService {
       );
 
       if (onKeyExchangeRequest != null) {
-        print(
-            '🔑 SeSocketService: 🚀 Calling onKeyExchangeRequest callback...');
+        Logger.info(
+            ' SeSocketService:  Calling onKeyExchangeRequest callback...');
         onKeyExchangeRequest!(data);
-        print('🔑 SeSocketService: ✅ onKeyExchangeRequest callback completed');
+        Logger.success(
+            ' SeSocketService:  onKeyExchangeRequest callback completed');
       } else {
-        print('🔑 SeSocketService: ❌ onKeyExchangeRequest callback is NULL!');
+        Logger.error(
+            ' SeSocketService:  onKeyExchangeRequest callback is NULL!');
       }
     });
 
     _socket!.on('key_exchange:response', (data) async {
-      print('🔑 SeSocketService: 🔍🔍🔍 KEY EXCHANGE RESPONSE EVENT RECEIVED!');
-      print('🔑 SeSocketService: 🔍🔍🔍 Event data: $data');
-      print('🔑 SeSocketService: 🔍🔍🔍 Data type: ${data.runtimeType}');
-      print(
-          '🔑 SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
-      print('🔑 SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
-      print('🔑 SeSocketService: 🔍🔍🔍 Session ID: $_sessionId');
-      print(
-          '🔑 SeSocketService: 🔍🔍🔍 onKeyExchangeResponse callback: ${onKeyExchangeResponse != null ? 'SET' : 'NULL'}');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 KEY EXCHANGE RESPONSE EVENT RECEIVED!');
+      Logger.info(' SeSocketService: 🔍🔍 Event data: $data');
+      Logger.info(' SeSocketService: 🔍🔍 Data type: ${data.runtimeType}');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 Socket connected: ${_socket?.connected}');
+      Logger.info(' SeSocketService: 🔍🔍 Socket ready: $_ready');
+      Logger.info(' SeSocketService: 🔍🔍 Session ID: $_sessionId');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 onKeyExchangeResponse callback: ${onKeyExchangeResponse != null ? 'SET' : 'NULL'}');
 
       // Create notification for key exchange response
       await _createSocketEventNotification(
@@ -527,39 +539,41 @@ class SeSocketService {
       );
 
       if (onKeyExchangeResponse != null) {
-        print(
-            '🔑 SeSocketService: 🚀 Calling onKeyExchangeResponse callback...');
+        Logger.info(
+            ' SeSocketService:  Calling onKeyExchangeResponse callback...');
         onKeyExchangeResponse!(data);
-        print('🔑 SeSocketService: ✅ onKeyExchangeResponse callback completed');
+        Logger.success(
+            ' SeSocketService:  onKeyExchangeResponse callback completed');
       } else {
-        print('🔑 SeSocketService: ❌ onKeyExchangeResponse callback is NULL!');
+        Logger.error(
+            ' SeSocketService:  onKeyExchangeResponse callback is NULL!');
 
         // CRITICAL: Even if callback is null, we need to process this event
         // This prevents the key exchange from failing completely
-        print(
-            '🔑 SeSocketService: 🚨 CRITICAL: Processing key exchange response without callback');
-        print(
-            '🔑 SeSocketService: 🔍 This should not happen - callback should be set in main.dart');
+        Logger.debug(
+            ' SeSocketService: 🚨 CRITICAL: Processing key exchange response without callback');
+        Logger.info(
+            ' SeSocketService:  This should not happen - callback should be set in main.dart');
 
         // Try to process the event directly with KeyExchangeService as a fallback
         try {
-          print(
-              '🔑 SeSocketService: 🔄 Attempting fallback processing with KeyExchangeService...');
+          Logger.info(
+              ' SeSocketService:  Attempting fallback processing with KeyExchangeService...');
           // Import KeyExchangeService to handle the event directly
           // import 'package:sechat_app/core/services/key_exchange_service.dart'; // This import is already at the top
           KeyExchangeService.instance.handleKeyExchangeResponse(data);
-          print(
-              '🔑 SeSocketService: ✅ Fallback processing completed successfully');
+          Logger.success(
+              ' SeSocketService:  Fallback processing completed successfully');
         } catch (e) {
-          print('🔑 SeSocketService: ❌ Fallback processing failed: $e');
-          print(
-              '🔑 SeSocketService: 🚨 This key exchange response will be lost!');
+          Logger.error(' SeSocketService:  Fallback processing failed: $e');
+          Logger.debug(
+              ' SeSocketService: 🚨 This key exchange response will be lost!');
         }
       }
     });
 
     _socket!.on('key_exchange:revoked', (data) async {
-      print('🔑 SeSocketService: Key exchange revoked');
+      Logger.debug(' SeSocketService: Key exchange revoked');
 
       // Create notification for key exchange revoked
       await _createSocketEventNotification(
@@ -579,8 +593,8 @@ class SeSocketService {
 
     // Key exchange declined events (received by requester)
     _socket!.on('key_exchange:declined', (data) async {
-      print('🔑 SeSocketService: Key exchange declined');
-      print('🔑 SeSocketService: Decline data: $data');
+      Logger.debug(' SeSocketService: Key exchange declined');
+      Logger.debug(' SeSocketService: Decline data: $data');
 
       // Create notification for key exchange declined
       await _createSocketEventNotification(
@@ -596,11 +610,11 @@ class SeSocketService {
       // Notify KeyExchangeService about the decline
       try {
         await KeyExchangeService.instance.handleKeyExchangeDeclined(data);
-        print(
-            '🔑 SeSocketService: ✅ Key exchange decline processed by KeyExchangeService');
+        Logger.success(
+            ' SeSocketService:  Key exchange decline processed by KeyExchangeService');
       } catch (e) {
-        print(
-            '🔑 SeSocketService: ❌ Error processing key exchange decline: $e');
+        Logger.error(
+            ' SeSocketService:  Error processing key exchange decline: $e');
       }
 
       // Call the callback if set
@@ -611,8 +625,8 @@ class SeSocketService {
 
     // Key exchange accepted events (received by requester)
     _socket!.on('key_exchange:accept', (data) async {
-      print('🔑 SeSocketService: Key exchange accepted');
-      print('🔑 SeSocketService: Accept data: $data');
+      Logger.debug(' SeSocketService: Key exchange accepted');
+      Logger.debug(' SeSocketService: Accept data: $data');
 
       // Create notification for key exchange accepted
       await _createSocketEventNotification(
@@ -628,11 +642,11 @@ class SeSocketService {
       // Notify KeyExchangeService about the acceptance
       try {
         await KeyExchangeService.instance.handleKeyExchangeAccepted(data);
-        print(
-            '🔑 SeSocketService: ✅ Key exchange acceptance processed by KeyExchangeService');
+        Logger.success(
+            ' SeSocketService:  Key exchange acceptance processed by KeyExchangeService');
       } catch (e) {
-        print(
-            '🔑 SeSocketService: ❌ Error processing key exchange acceptance: $e');
+        Logger.error(
+            ' SeSocketService:  Error processing key exchange acceptance: $e');
       }
 
       // Call the callback if set
@@ -643,8 +657,8 @@ class SeSocketService {
 
     // Key exchange error events
     _socket!.on('key_exchange:error', (data) async {
-      print('🔑 SeSocketService: Key exchange error received');
-      print('🔑 SeSocketService: Error data: $data');
+      Logger.debug(' SeSocketService: Key exchange error received');
+      Logger.debug(' SeSocketService: Error data: $data');
 
       // Handle key exchange error
       await _handleKeyExchangeError(data);
@@ -652,24 +666,25 @@ class SeSocketService {
 
     // User data exchange events
     _socket!.on('user_data_exchange:data', (data) async {
-      print('🔑 SeSocketService: 🔍🔍🔍 USER DATA EXCHANGE EVENT RECEIVED!');
-      print('🔑 SeSocketService: 🔍🔍🔍 Event: user_data_exchange:data');
-      print('🔑 SeSocketService: 🔍🔍🔍 Data: $data');
-      print('🔑 SeSocketService: 🔍🔍🔍 Data type: ${data.runtimeType}');
-      print(
-          '🔑 SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
-      print('🔑 SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
-      print('🔑 SeSocketService: 🔍🔍🔍 Session ID: $_sessionId');
-      print('🔑 SeSocketService: 🔍🔍🔍 Session confirmed: $_sessionConfirmed');
-      print('🔑 SeSocketService: 🔍🔍🔍 Socket ID: ${_socket?.id}');
-      print(
-          '🔑 SeSocketService: 🔍🔍🔍 Socket transport: ${_socket?.io.engine?.transport?.name ?? 'unknown'}');
-      print(
-          '🔑 SeSocketService: 🔍🔍🔍 onUserDataExchange callback: ${onUserDataExchange != null ? 'SET' : 'NULL'}');
-      print(
+      Logger.info(' SeSocketService: 🔍🔍 USER DATA EXCHANGE EVENT RECEIVED!');
+      Logger.info(' SeSocketService: 🔍🔍 Event: user_data_exchange:data');
+      Logger.info(' SeSocketService: 🔍🔍 Data: $data');
+      Logger.info(' SeSocketService: 🔍🔍 Data type: ${data.runtimeType}');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 Socket connected: ${_socket?.connected}');
+      Logger.info(' SeSocketService: 🔍🔍 Socket ready: $_ready');
+      Logger.info(' SeSocketService: 🔍🔍 Session ID: $_sessionId');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 Session confirmed: $_sessionConfirmed');
+      Logger.info(' SeSocketService: 🔍🔍 Socket ID: ${_socket?.id}');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 Socket transport: ${_socket?.io.engine?.transport?.name ?? 'unknown'}');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 onUserDataExchange callback: ${onUserDataExchange != null ? 'SET' : 'NULL'}');
+      Logger.debug(
           '🔑 SeSocketService: 🔍🔍🔍 Current timestamp: ${DateTime.now().toIso8601String()}');
-      print(
-          '🔑 SeSocketService: 🔍🔍🔍 Event received on recipient side: ${_sessionId == data['recipientId'] ? 'YES' : 'NO'}');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 Event received on recipient side: ${_sessionId == data['recipientId'] ? 'YES' : 'NO'}');
 
       // Create notification for user data exchange
       await _createSocketEventNotification(
@@ -683,23 +698,25 @@ class SeSocketService {
       );
 
       if (onUserDataExchange != null) {
-        print('🔑 SeSocketService: 🚀 Calling onUserDataExchange callback...');
+        Logger.info(
+            ' SeSocketService:  Calling onUserDataExchange callback...');
         onUserDataExchange!(data);
-        print('🔑 SeSocketService: ✅ onUserDataExchange callback completed');
+        Logger.success(
+            ' SeSocketService:  onUserDataExchange callback completed');
       } else {
-        print('🔑 SeSocketService: ❌ onUserDataExchange callback is NULL!');
+        Logger.error(' SeSocketService:  onUserDataExchange callback is NULL!');
 
         // CRITICAL: Even if callback is null, we need to process this event
         // This prevents user data exchange from failing completely
-        print(
-            '🔑 SeSocketService: 🚨 CRITICAL: Processing user data exchange without callback');
-        print(
-            '🔑 SeSocketService: 🔍 This should not happen - callback should be set in main.dart');
+        Logger.debug(
+            ' SeSocketService: 🚨 CRITICAL: Processing user data exchange without callback');
+        Logger.info(
+            ' SeSocketService:  This should not happen - callback should be set in main.dart');
 
         // Try to process the event directly with KeyExchangeService as a fallback
         try {
-          print(
-              '🔑 SeSocketService: 🔄 Attempting fallback processing with KeyExchangeService...');
+          Logger.info(
+              ' SeSocketService:  Attempting fallback processing with KeyExchangeService...');
 
           // Extract the required parameters from the socket data
           final senderId = data['senderId']?.toString();
@@ -712,22 +729,23 @@ class SeSocketService {
               encryptedData: encryptedData,
               conversationId: conversationId,
             );
-            print(
-                '🔑 SeSocketService: ✅ Fallback processing completed successfully');
+            Logger.success(
+                ' SeSocketService:  Fallback processing completed successfully');
           } else {
-            print(
-                '🔑 SeSocketService: ❌ Invalid user data exchange data: senderId=$senderId, encryptedData=${encryptedData != null}');
+            Logger.error(
+                ' SeSocketService:  Invalid user data exchange data: senderId=$senderId, encryptedData=${encryptedData != null}');
           }
         } catch (e) {
-          print('🔑 SeSocketService: ❌ Fallback processing failed: $e');
-          print('🔑 SeSocketService: 🚨 This user data exchange will be lost!');
+          Logger.error(' SeSocketService:  Fallback processing failed: $e');
+          Logger.debug(
+              ' SeSocketService: 🚨 This user data exchange will be lost!');
         }
       }
     });
 
     // Conversation creation events
     _socket!.on('conversation:created', (data) async {
-      print('💬 SeSocketService: Conversation created event received');
+      Logger.debug('💬 SeSocketService: Conversation created event received');
 
       // Create notification for conversation created
       await _createSocketEventNotification(
@@ -747,7 +765,7 @@ class SeSocketService {
 
     // User deletion events
     _socket!.on('user:deleted', (data) async {
-      print('🗑️ SeSocketService: User deleted event received');
+      Logger.info(' SeSocketService: User deleted event received');
 
       // Create notification for user deleted
       await _createSocketEventNotification(
@@ -766,14 +784,14 @@ class SeSocketService {
 
     // Message events
     _socket!.on('message:acked', (data) {
-      print('✅ SeSocketService: Message acknowledged');
+      Logger.success(' SeSocketService: Message acknowledged');
       final id = data['messageId']?.toString() ?? '';
       if (id.isNotEmpty) onMessageAcked?.call(id);
     });
 
     _socket!.on('message:received', (data) async {
-      print('💬 SeSocketService: Message received');
-      print('💬 SeSocketService: 🔍 Message data: $data');
+      Logger.debug('💬 SeSocketService: Message received');
+      Logger.info('💬 SeSocketService:  Message data: $data');
 
       if (onMessageReceived != null) {
         // Extract sender name from data or use senderId as fallback
@@ -787,18 +805,18 @@ class SeSocketService {
           data['conversationId'] ?? '', // conversationId
           data['messageId'] ?? '', // messageId
         );
-        print(
-            '💬 SeSocketService: ✅ Message received callback executed with sender: $senderName');
+        Logger.success(
+            '💬 SeSocketService:  Message received callback executed with sender: $senderName');
       } else {
-        print(
-            '💬 SeSocketService: ❌ onMessageReceived callback is null - message not processed!');
+        Logger.error(
+            '💬 SeSocketService:  onMessageReceived callback is null - message not processed!');
       }
     });
 
     // Message delete events - API Compliant
     _socket!.on('message:deleted', (data) async {
-      print('🗑️ SeSocketService: Message deleted event received');
-      print('🗑️ SeSocketService: 🔍 Delete data: $data');
+      Logger.info(' SeSocketService: Message deleted event received');
+      Logger.info(' SeSocketService: 🔍 Delete data: $data');
 
       // Create notification for message deleted
       await _createSocketEventNotification(
@@ -817,8 +835,8 @@ class SeSocketService {
     });
 
     _socket!.on('message:all_deleted', (data) async {
-      print('🗑️ SeSocketService: All messages deleted event received');
-      print('🗑️ SeSocketService: 🔍 Delete all data: $data');
+      Logger.info(' SeSocketService: All messages deleted event received');
+      Logger.info(' SeSocketService: 🔍 Delete all data: $data');
 
       // Create notification for all messages deleted
       await _createSocketEventNotification(
@@ -844,8 +862,8 @@ class SeSocketService {
 
     // Presence events - CONSOLIDATED FLOW
     _socket!.on('presence:update', (data) async {
-      print('🟢 SeSocketService: Presence update received');
-      print('🟢 SeSocketService: 🔍 Presence data: $data');
+      Logger.debug('🟢 SeSocketService: Presence update received');
+      Logger.info('🟢 SeSocketService:  Presence data: $data');
 
       // Check if the data is encrypted
       final bool isEncrypted = data['metadata']?['encrypted'] == true;
@@ -858,9 +876,10 @@ class SeSocketService {
           final decrypted =
               await EncryptionService.decryptAesCbcPkcs7(data['encryptedData']);
           decryptedData = decrypted ?? data;
-          print('🟢 SeSocketService: ✅ Decrypted presence update');
+          Logger.success('🟢 SeSocketService:  Decrypted presence update');
         } catch (e) {
-          print('🟢 SeSocketService: ❌ Failed to decrypt presence update: $e');
+          Logger.error(
+              '🟢 SeSocketService:  Failed to decrypt presence update: $e');
           return;
         }
       }
@@ -882,24 +901,24 @@ class SeSocketService {
 
       // Call the main presence callback (mapped to onPresence via setOnOnlineStatusUpdate)
       if (onPresence != null) {
-        print(
+        Logger.debug(
             '🟢 SeSocketService: 🔄 Calling onPresence callback (mapped from onOnlineStatusUpdate)');
         onPresence!(
           decryptedData['fromUserId'] ?? decryptedData['sessionId'] ?? '',
           decryptedData['isOnline'] ?? false,
           decryptedData['timestamp'] ?? '',
         );
-        print('🟢 SeSocketService: ✅ onPresence callback executed');
+        Logger.success('🟢 SeSocketService:  onPresence callback executed');
       } else {
-        print(
-            '🟢 SeSocketService: ⚠️ onPresence callback is null - presence not processed!');
+        Logger.warning(
+            '🟢 SeSocketService:  onPresence callback is null - presence not processed!');
       }
     });
 
     // Contact management events
     _socket!.on('contacts:added', (data) async {
-      print('🔗 SeSocketService: Contact added event received');
-      print('🔗 SeSocketService: 🔍 Contact data: $data');
+      Logger.debug('🔗 SeSocketService: Contact added event received');
+      Logger.info('🔗 SeSocketService:  Contact data: $data');
 
       // Create notification for contact added
       await _createSocketEventNotification(
@@ -916,7 +935,7 @@ class SeSocketService {
       if (onContactAdded != null) {
         onContactAdded!(data);
       } else {
-        print('🔗 SeSocketService: ⚠️ onContactAdded callback is null');
+        Logger.warning('🔗 SeSocketService:  onContactAdded callback is null');
       }
     });
 
@@ -931,14 +950,14 @@ class SeSocketService {
       final bool silent = data['silent'] ?? true; // Usually silent
 
       // Receipt delivered event received
-      print(
-          '📬 SeSocketService: ✅ Recipient has actually processed/viewed the message');
+      Logger.success(
+          '📬 SeSocketService:  Recipient has actually processed/viewed the message');
 
       // CRITICAL: Generate conversation ID if missing (server doesn't always send it)
       if (conversationId == null || conversationId.isEmpty) {
         conversationId =
             _generateConsistentConversationId(fromUserId, toUserId);
-        print(
+        Logger.debug(
             '📬 SeSocketService: 🔧 Generated conversation ID: $conversationId');
       }
 
@@ -989,7 +1008,7 @@ class SeSocketService {
       if (conversationId == null || conversationId.isEmpty) {
         conversationId =
             _generateConsistentConversationId(fromUserId, toUserId);
-        print(
+        Logger.debug(
             '📬 SeSocketService: 🔧 Generated conversation ID: $conversationId');
       }
 
@@ -1039,10 +1058,11 @@ class SeSocketService {
           final decrypted =
               await EncryptionService.decryptAesCbcPkcs7(data['encryptedData']);
           decryptedData = decrypted ?? data;
-          print('📊 SeSocketService: ✅ Decrypted message status update');
+          Logger.success(
+              '📊 SeSocketService:  Decrypted message status update');
         } catch (e) {
-          print(
-              '📊 SeSocketService: ❌ Failed to decrypt message status update: $e');
+          Logger.error(
+              '📊 SeSocketService:  Failed to decrypt message status update: $e');
           return;
         }
       }
@@ -1056,15 +1076,15 @@ class SeSocketService {
       final bool silent = decryptedData['silent'] ?? false;
       final bool wasQueued = decryptedData['wasQueued'] ?? false;
 
-      print(
+      Logger.debug(
           '📊 SeSocketService: [STATUS] Message status update: $messageId -> $status (silent: $silent, queued: $wasQueued)');
 
       // 🆕 FIXED: Filter out delivered/read status updates from message:status_update
       // These should only come through receipt:delivered and receipt:read events
       if (status.toLowerCase() == 'delivered' ||
           status.toLowerCase() == 'read') {
-        print(
-            '📊 SeSocketService: ⚠️ Ignoring delivered/read status from message:status_update - waiting for proper receipt events');
+        Logger.warning(
+            '📊 SeSocketService:  Ignoring delivered/read status from message:status_update - waiting for proper receipt events');
         return; // Don't process delivered/read status from message:status_update
       }
 
@@ -1110,7 +1130,8 @@ class SeSocketService {
       final String? conversationId = data['conversationId'];
       final String? reason = data['reason'];
 
-      print('📬 SeSocketService: Message queued: $messageId (reason: $reason)');
+      Logger.debug(
+          '📬 SeSocketService: Message queued: $messageId (reason: $reason)');
 
       // Call the queued callback if available
       if (onQueued != null) {
@@ -1142,10 +1163,10 @@ class SeSocketService {
           final decrypted =
               await EncryptionService.decryptAesCbcPkcs7(data['encryptedData']);
           decryptedData = decrypted ?? data;
-          print('⌨️ SeSocketService: ✅ Decrypted typing status update');
+          Logger.success(' SeSocketService:  Decrypted typing status update');
         } catch (e) {
-          print(
-              '⌨️ SeSocketService: ❌ Failed to decrypt typing status update: $e');
+          Logger.error(
+              ' SeSocketService:  Failed to decrypt typing status update: $e');
           return;
         }
       }
@@ -1163,15 +1184,15 @@ class SeSocketService {
       final bool autoStopped = decryptedData['autoStopped'] ?? false;
       final bool silent = decryptedData['silent'] ?? false;
 
-      print(
+      Logger.debug(
           '⌨️ SeSocketService: Typing status update: $fromUserId -> $recipientId (delivered: $delivered, autoStopped: $autoStopped)');
-      print('⌨️ SeSocketService: 🔍 Conversation ID: $conversationId');
+      Logger.info(' SeSocketService:  Conversation ID: $conversationId');
 
       // CRITICAL: Only show typing indicator if we are the session that should display it
       final currentSessionId = _sessionId;
       if (currentSessionId != null &&
           showIndicatorOnSessionId == currentSessionId) {
-        print(
+        Logger.debug(
             '⌨️ SeSocketService: ✅ We should show typing indicator (session match)');
 
         // Update local typing status using the direct recipientId from server
@@ -1182,20 +1203,21 @@ class SeSocketService {
         _notifyTypingStatusChange(
             fromUserId, recipientId, isTyping, delivered, autoStopped);
       } else {
-        print(
-            '⌨️ SeSocketService: ℹ️ Not showing typing indicator - session mismatch: current=$currentSessionId, shouldShow=$showIndicatorOnSessionId');
+        Logger.info(
+            ' SeSocketService:  Not showing typing indicator - session mismatch: current=$currentSessionId, shouldShow=$showIndicatorOnSessionId');
       }
 
       // Notify listeners about typing status change (silent)
       if (silent) {
         // Silent updates still need to update the UI
-        print('⌨️ SeSocketService: 🔔 Silent typing update - updating UI only');
+        Logger.debug(
+            ' SeSocketService: 🔔 Silent typing update - updating UI only');
       } else {}
     });
 
     _socket!.on('contacts:removed', (data) async {
-      print('🔗 SeSocketService: Contact removed event received');
-      print('🔗 SeSocketService: 🔍 Contact data: $data');
+      Logger.debug('🔗 SeSocketService: Contact removed event received');
+      Logger.info('🔗 SeSocketService:  Contact data: $data');
 
       // Create notification for contact removed
       await _createSocketEventNotification(
@@ -1212,17 +1234,18 @@ class SeSocketService {
       if (onContactRemoved != null) {
         onContactRemoved!(data);
       } else {
-        print('🔗 SeSocketService: ⚠️ onContactRemoved callback is null');
+        Logger.warning(
+            '🔗 SeSocketService:  onContactRemoved callback is null');
       }
     });
 
     // Typing events - RECIPIENT receives this when someone types
     _socket!.on('typing:update', (data) async {
-      print(
+      Logger.debug(
           '⌨️ SeSocketService: 🔔 TYPING UPDATE EVENT RECEIVED (recipient side)');
-      print('⌨️ SeSocketService: 🔍 Typing data: $data');
-      print(
-          '⌨️ SeSocketService: 🔍 onTyping callback: ${onTyping != null ? 'SET' : 'NULL'}');
+      Logger.info(' SeSocketService:  Typing data: $data');
+      Logger.info(
+          ' SeSocketService:  onTyping callback: ${onTyping != null ? 'SET' : 'NULL'}');
 
       // Check if the data is encrypted
       final bool isEncrypted = data['metadata']?['encrypted'] == true;
@@ -1235,9 +1258,10 @@ class SeSocketService {
           final decrypted =
               await EncryptionService.decryptAesCbcPkcs7(data['encryptedData']);
           decryptedData = decrypted ?? data;
-          print('⌨️ SeSocketService: ✅ Decrypted typing update');
+          Logger.success(' SeSocketService:  Decrypted typing update');
         } catch (e) {
-          print('⌨️ SeSocketService: ❌ Failed to decrypt typing update: $e');
+          Logger.error(
+              ' SeSocketService:  Failed to decrypt typing update: $e');
           return;
         }
       }
@@ -1252,7 +1276,7 @@ class SeSocketService {
 
       if (currentSessionId != null &&
           showIndicatorOnSessionId == currentSessionId) {
-        print(
+        Logger.debug(
             '⌨️ SeSocketService: ✅ We should show typing indicator (session match)');
 
         if (onTyping != null) {
@@ -1261,14 +1285,14 @@ class SeSocketService {
             decryptedData['conversationId'] ?? '',
             decryptedData['isTyping'] ?? false,
           );
-          print('⌨️ SeSocketService: ✅ Typing callback executed');
+          Logger.success(' SeSocketService:  Typing callback executed');
         } else {
-          print(
-              '⌨️ SeSocketService: ❌ onTyping callback is NULL - typing indicator not processed!');
+          Logger.error(
+              ' SeSocketService:  onTyping callback is NULL - typing indicator not processed!');
         }
       } else {
-        print(
-            '⌨️ SeSocketService: ℹ️ Not showing typing indicator - session mismatch: current=$currentSessionId, shouldShow=$showIndicatorOnSessionId');
+        Logger.info(
+            ' SeSocketService:  Not showing typing indicator - session mismatch: current=$currentSessionId, shouldShow=$showIndicatorOnSessionId');
       }
 
       // ✅ FIX: Only call internal handler if we should show the typing indicator
@@ -1284,7 +1308,7 @@ class SeSocketService {
         final currentSessionId = _sessionId;
         if (currentSessionId != null &&
             showIndicatorOnSessionId == currentSessionId) {
-          print(
+          Logger.debug(
               '⌨️ SeSocketService: ✅ We should show typing indicator (session match)');
 
           // Call the internal handler to update SessionChatProvider
@@ -1292,15 +1316,15 @@ class SeSocketService {
           final recipientId = data['recipientId'] ?? '';
           _notifyTypingStatusChange(
               fromUserId, recipientId, isTyping, true, false);
-          print(
-              '⌨️ SeSocketService: ✅ Internal typing status change handler called');
+          Logger.success(
+              ' SeSocketService:  Internal typing status change handler called');
         } else {
-          print(
-              '⌨️ SeSocketService: ℹ️ Not showing typing indicator - session mismatch: current=$currentSessionId, shouldShow=$showIndicatorOnSessionId');
+          Logger.info(
+              ' SeSocketService:  Not showing typing indicator - session mismatch: current=$currentSessionId, shouldShow=$showIndicatorOnSessionId');
         }
       } catch (e) {
-        print(
-            '⌨️ SeSocketService: ❌ Error calling internal typing handler: $e');
+        Logger.error(
+            ' SeSocketService:  Error calling internal typing handler: $e');
       }
     });
 
@@ -1308,40 +1332,41 @@ class SeSocketService {
     _socket!.onAny((event, data) {
       // Always log typing-related events for debugging
       if (event.contains('typing')) {
-        print(
-            '🔍 SeSocketService: 🔔 TYPING EVENT RECEIVED: $event with data: $data');
+        Logger.info(
+            ' SeSocketService:  TYPING EVENT RECEIVED: $event with data: $data');
       }
       // Only log important events, skip routine stats, admin logs, and heartbeat
       else if (!event.startsWith('server_stats') &&
           !event.startsWith('channel_update') &&
           !event.startsWith('heartbeat') &&
           !event.startsWith('admin_log')) {
-        print(
-            '🔍 SeSocketService: DEBUG - Received event: $event with data: $data');
+        Logger.info(
+            ' SeSocketService: DEBUG - Received event: $event with data: $data');
       }
 
       // Special debugging for user data exchange events
       if (event == 'user_data_exchange:data') {
-        print('🔍 SeSocketService: 🔍🔍🔍 USER DATA EXCHANGE EVENT RECEIVED!');
-        print('🔍 SeSocketService: 🔍🔍🔍 Event: $event');
-        print('🔍 SeSocketService: 🔍🔍🔍 Data: $data');
-        print('🔍 SeSocketService: 🔍🔍🔍 Current session ID: $_sessionId');
-        print(
-            '🔍 SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
-        print('🔍 SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
+        Logger.info(
+            ' SeSocketService: 🔍🔍🔍 USER DATA EXCHANGE EVENT RECEIVED!');
+        Logger.info(' SeSocketService: 🔍🔍🔍 Event: $event');
+        Logger.info(' SeSocketService: 🔍🔍🔍 Data: $data');
+        Logger.info(' SeSocketService: 🔍🔍🔍 Current session ID: $_sessionId');
+        Logger.info(
+            ' SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
+        Logger.info(' SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
       }
 
       // Debug ALL key exchange related events
       if (event.contains('user_data') ||
           event.contains('conversation') ||
           event.contains('key_exchange')) {
-        print('🔍 SeSocketService: 🔍🔍🔍 KEY EXCHANGE EVENT RECEIVED!');
-        print('🔍 SeSocketService: 🔍🔍🔍 Event: $event');
-        print('🔍 SeSocketService: 🔍🔍🔍 Data: $data');
-        print('🔍 SeSocketService: 🔍🔍🔍 Current session ID: $_sessionId');
-        print(
-            '🔍 SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
-        print('🔍 SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
+        Logger.info(' SeSocketService: 🔍🔍🔍 KEY EXCHANGE EVENT RECEIVED!');
+        Logger.info(' SeSocketService: 🔍🔍🔍 Event: $event');
+        Logger.info(' SeSocketService: 🔍🔍🔍 Data: $data');
+        Logger.info(' SeSocketService: 🔍🔍🔍 Current session ID: $_sessionId');
+        Logger.info(
+            ' SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
+        Logger.info(' SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
       }
     });
   }
@@ -1349,17 +1374,17 @@ class SeSocketService {
   /// Handle key exchange error events
   Future<void> _handleKeyExchangeError(Map<String, dynamic> errorData) async {
     try {
-      print('🔑 SeSocketService: Handling key exchange error');
+      Logger.debug(' SeSocketService: Handling key exchange error');
 
       final errorCode = errorData['errorCode']?.toString();
       final errorType = errorData['errorType']?.toString();
       final message = errorData['message']?.toString();
       final requestId = errorData['requestId']?.toString();
 
-      print('🔑 SeSocketService: Error Code: $errorCode');
-      print('🔑 SeSocketService: Error Type: $errorType');
-      print('🔑 SeSocketService: Message: $message');
-      print('🔑 SeSocketService: Request ID: $requestId');
+      Logger.debug(' SeSocketService: Error Code: $errorCode');
+      Logger.debug(' SeSocketService: Error Type: $errorType');
+      Logger.debug(' SeSocketService: Message: $message');
+      Logger.debug(' SeSocketService: Request ID: $requestId');
 
       // Create user-friendly error message
       String userMessage = _getUserFriendlyErrorMessage(errorCode, message);
@@ -1368,7 +1393,8 @@ class SeSocketService {
       try {
         KeyExchangeService.instance.handleKeyExchangeError(errorData);
       } catch (e) {
-        print('🔑 SeSocketService: Error notifying KeyExchangeService: $e');
+        Logger.debug(
+            ' SeSocketService: Error notifying KeyExchangeService: $e');
       }
 
       // Create notification for the error
@@ -1381,7 +1407,7 @@ class SeSocketService {
         metadata: errorData,
       );
     } catch (e) {
-      print('🔑 SeSocketService: Error handling key exchange error: $e');
+      Logger.debug(' SeSocketService: Error handling key exchange error: $e');
     }
   }
 
@@ -1412,7 +1438,7 @@ class SeSocketService {
 
   void _scheduleReconnect() {
     if (_reconnectAttempts >= _maxReconnectAttempts) {
-      print('🔌 SeSocketService: Max reconnection attempts reached');
+      Logger.debug(' SeSocketService: Max reconnection attempts reached');
       return;
     }
 
@@ -1420,7 +1446,7 @@ class SeSocketService {
     _reconnectTimer =
         Timer(Duration(seconds: (1 << _reconnectAttempts).clamp(1, 30)), () {
       if (_sessionId != null && !_ready && !_isConnecting) {
-        print('🔌 SeSocketService: 🔄 Attempting reconnection...');
+        Logger.info(' SeSocketService:  Attempting reconnection...');
         connect(_sessionId!);
       }
     });
@@ -1445,7 +1471,7 @@ class SeSocketService {
         'status': 'stable',
         'timestamp': DateTime.now().toIso8601String()
       });
-      print('🔄 SeSocketService: Stability check response sent');
+      Logger.info(' SeSocketService: Stability check response sent');
     }
   }
 
@@ -1456,7 +1482,7 @@ class SeSocketService {
         'sessionId': _sessionId,
         'timestamp': DateTime.now().toIso8601String()
       });
-      print('🏓 SeSocketService: Connection ping response sent');
+      Logger.debug('🏓 SeSocketService: Connection ping response sent');
     }
   }
 
@@ -1490,8 +1516,8 @@ class SeSocketService {
   /// Send presence update to specific users
   void sendPresence(bool isOnline, List<String> toUserIds) {
     if (!isConnected || _sessionId == null) {
-      print(
-          '🔌 SeSocketService: ❌ Cannot send presence update - not connected or no session');
+      Logger.error(
+          ' SeSocketService:  Cannot send presence update - not connected or no session');
       return;
     }
 
@@ -1503,14 +1529,14 @@ class SeSocketService {
         'timestamp': DateTime.now().toIso8601String(),
       };
 
-      print(
-          '🔌 SeSocketService: 🟢 Sending presence update: ${isOnline ? 'online' : 'offline'} to ${toUserIds.length} users');
-      print('🔌 SeSocketService: 🔍 Payload: $payload');
+      Logger.debug(
+          ' SeSocketService: 🟢 Sending presence update: ${isOnline ? 'online' : 'offline'} to ${toUserIds.length} users');
+      Logger.info(' SeSocketService:  Payload: $payload');
 
       _socket!.emit('presence:update', payload);
-      print('🔌 SeSocketService: ✅ Presence update sent successfully');
+      Logger.success(' SeSocketService:  Presence update sent successfully');
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending presence update: $e');
+      Logger.error(' SeSocketService:  Error sending presence update: $e');
       _scheduleReconnect();
     }
   }
@@ -1519,8 +1545,8 @@ class SeSocketService {
   Future<void> sendTyping(
       String recipientId, String conversationId, bool isTyping) async {
     if (!isConnected || _sessionId == null) {
-      print(
-          '🔌 SeSocketService: ❌ Cannot send typing indicator - not connected or no session');
+      Logger.error(
+          ' SeSocketService:  Cannot send typing indicator - not connected or no session');
       return;
     }
 
@@ -1531,7 +1557,7 @@ class SeSocketService {
 
       // Validate that we have a valid sender ID
       if (currentUserId == null || currentUserId.isEmpty) {
-        print('🔌 SeSocketService: ❌ ERROR: Invalid sender session ID');
+        Logger.error(' SeSocketService:  ERROR: Invalid sender session ID');
         return;
       }
 
@@ -1596,20 +1622,20 @@ class SeSocketService {
         'autoStopped': false,
         'timestamp': DateTime.now().toIso8601String(),
       };
-      print(
-          '⌨️ SeSocketService: Typing status tracked: $key -> ${isTyping ? 'typing' : 'stopped'}');
+      Logger.debug(
+          ' SeSocketService: Typing status tracked: $key -> ${isTyping ? 'typing' : 'stopped'}');
 
-      print(
-          '🔌 SeSocketService: ⌨️ Sending typing indicator: ${isTyping ? 'started' : 'stopped'} to $recipientId');
-      print('🔌 SeSocketService: 🔍 Payload: $payload');
-      print(
+      Logger.debug(
+          ' SeSocketService: ⌨️ Sending typing indicator: ${isTyping ? 'started' : 'stopped'} to $recipientId');
+      Logger.info(' SeSocketService:  Payload: $payload');
+      Logger.debug(
           '🔌 SeSocketService: 🔍 conversationId (final): $finalConversationId');
-      print('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
+      Logger.debug('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
 
       _socket!.emit('typing:update', payload);
-      print('🔌 SeSocketService: ✅ Typing indicator sent successfully');
+      Logger.success(' SeSocketService:  Typing indicator sent successfully');
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending typing indicator: $e');
+      Logger.error(' SeSocketService:  Error sending typing indicator: $e');
       _scheduleReconnect();
     }
   }
@@ -1621,14 +1647,14 @@ class SeSocketService {
     required String body,
     String? conversationId, // This will be the consistent conversation ID
   }) async {
-    print('🔌 SeSocketService: 🔧 sendMessage called with:');
-    print('🔌 SeSocketService: 🔍 messageId: $messageId');
-    print('🔌 SeSocketService: 🔍 recipientId: $recipientId');
-    print('🔌 SeSocketService: 🔍 body: $body');
-    print('🔌 SeSocketService: 🔍 conversationId: $conversationId');
+    Logger.debug(' SeSocketService: 🔧 sendMessage called with:');
+    Logger.info(' SeSocketService:  messageId: $messageId');
+    Logger.info(' SeSocketService:  recipientId: $recipientId');
+    Logger.info(' SeSocketService:  body: $body');
+    Logger.info(' SeSocketService:  conversationId: $conversationId');
     if (!isConnected || _sessionId == null) {
-      print(
-          '🔌 SeSocketService: ❌ Cannot send message - not connected or no session');
+      Logger.error(
+          ' SeSocketService:  Cannot send message - not connected or no session');
       return;
     }
 
@@ -1638,7 +1664,7 @@ class SeSocketService {
 
       // Validate that we have a valid sender ID
       if (currentUserId == null || currentUserId.isEmpty) {
-        print('🔌 SeSocketService: ❌ ERROR: Invalid sender session ID');
+        Logger.error(' SeSocketService:  ERROR: Invalid sender session ID');
         return;
       }
 
@@ -1647,11 +1673,11 @@ class SeSocketService {
           ? conversationId!
           : _generateConsistentConversationId(currentUserId, recipientId);
 
-      print('🔌 SeSocketService: 🔍 Passed conversationId: $conversationId');
-      print(
-          '🔌 SeSocketService: 🔍 Generated consistentConversationId: $consistentConversationId');
-      print(
-          '🔌 SeSocketService: 🔍 Using conversationId: $consistentConversationId');
+      Logger.info(' SeSocketService:  Passed conversationId: $conversationId');
+      Logger.info(
+          ' SeSocketService:  Generated consistentConversationId: $consistentConversationId');
+      Logger.info(
+          ' SeSocketService:  Using conversationId: $consistentConversationId');
 
       // Encrypt the message body before sending
       Map<String, String> encryptedResult;
@@ -1665,9 +1691,9 @@ class SeSocketService {
 
         encryptedResult = await EncryptionService.encryptAesCbcPkcs7(
             messageData, recipientId);
-        print('🔌 SeSocketService: ✅ Message encrypted successfully');
+        Logger.success(' SeSocketService:  Message encrypted successfully');
       } catch (e) {
-        print('🔌 SeSocketService: ❌ Failed to encrypt message: $e');
+        Logger.error(' SeSocketService:  Failed to encrypt message: $e');
         return;
       }
 
@@ -1688,19 +1714,20 @@ class SeSocketService {
 
       // Track message locally for status updates
       _messageStatuses[messageId] = 'sent';
-      print('📊 SeSocketService: Message status tracked: $messageId -> sent');
+      Logger.debug(
+          '📊 SeSocketService: Message status tracked: $messageId -> sent');
 
-      print(
-          '🔌 SeSocketService: 📤 Sending message: $messageId to $recipientId');
-      print('🔌 SeSocketService: 🔍 Payload: $payload');
-      print(
+      Logger.debug(
+          ' SeSocketService: 📤 Sending message: $messageId to $recipientId');
+      Logger.info(' SeSocketService:  Payload: $payload');
+      Logger.debug(
           '🔌 SeSocketService: 🔍 conversationId (consistent): $consistentConversationId');
-      print('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
+      Logger.debug('🔌 SeSocketService: 🔍 fromUserId (sender): $_sessionId');
 
       _socket!.emit('message:send', payload);
-      print('🔌 SeSocketService: ✅ Message sent successfully');
+      Logger.success(' SeSocketService:  Message sent successfully');
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending message: $e');
+      Logger.error(' SeSocketService:  Error sending message: $e');
       _scheduleReconnect();
     }
   }
@@ -1740,10 +1767,11 @@ class SeSocketService {
         }
       });
 
-      print(
-          '📬 SeSocketService: ✅ Encrypted read receipt sent: $messageId -> $toUserId');
+      Logger.success(
+          '📬 SeSocketService:  Encrypted read receipt sent: $messageId -> $toUserId');
     } catch (e) {
-      print('📬 SeSocketService: ❌ Error sending encrypted read receipt: $e');
+      Logger.error(
+          '📬 SeSocketService:  Error sending encrypted read receipt: $e');
     }
   }
 
@@ -1763,9 +1791,10 @@ class SeSocketService {
         'timestamp': DateTime.now().toIso8601String()
       });
 
-      print('🗑️ SeSocketService: ✅ Message delete request sent: $messageId');
+      Logger.success(
+          '🗑️ SeSocketService:  Message delete request sent: $messageId');
     } catch (e) {
-      print('🗑️ SeSocketService: ❌ Error sending message delete: $e');
+      Logger.error('🗑️ SeSocketService:  Error sending message delete: $e');
     }
   }
 
@@ -1783,10 +1812,11 @@ class SeSocketService {
         'timestamp': DateTime.now().toIso8601String()
       });
 
-      print(
-          '🗑️ SeSocketService: ✅ Delete all messages request sent: $conversationId');
+      Logger.success(
+          '🗑️ SeSocketService:  Delete all messages request sent: $conversationId');
     } catch (e) {
-      print('🗑️ SeSocketService: ❌ Error sending delete all messages: $e');
+      Logger.error(
+          '🗑️ SeSocketService:  Error sending delete all messages: $e');
     }
   }
 
@@ -1859,19 +1889,20 @@ class SeSocketService {
       {required String recipientId,
       required String encryptedData,
       String? conversationId}) {
-    print('🔑 SeSocketService: 🔍🔍🔍 SENDING USER DATA EXCHANGE EVENT!');
-    print('🔑 SeSocketService: 🔍🔍🔍 Event: user_data_exchange:send');
-    print(
+    Logger.info(' SeSocketService: 🔍🔍 SENDING USER DATA EXCHANGE EVENT!');
+    Logger.info(' SeSocketService: 🔍🔍 Event: user_data_exchange:send');
+    Logger.debug(
         '🔑 SeSocketService: 🔍🔍🔍 Data: {recipientId: $recipientId, senderId: $_sessionId, encryptedData: ${encryptedData.substring(0, 50)}..., conversationId: $conversationId}');
-    print('🔑 SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
-    print('🔑 SeSocketService: 🔍🔍🔍 Socket ready: $_ready');
-    print('🔑 SeSocketService: 🔍🔍🔍 Session ID: $_sessionId');
-    print('🔑 SeSocketService: 🔍🔍🔍 Session confirmed: $_sessionConfirmed');
-    print('🔑 SeSocketService: 🔍🔍🔍 Socket ID: ${_socket?.id}');
+    Logger.info(
+        ' SeSocketService: 🔍🔍 Socket connected: ${_socket?.connected}');
+    Logger.info(' SeSocketService: 🔍🔍 Socket ready: $_ready');
+    Logger.info(' SeSocketService: 🔍🔍 Session ID: $_sessionId');
+    Logger.info(' SeSocketService: 🔍🔍 Session confirmed: $_sessionConfirmed');
+    Logger.info(' SeSocketService: 🔍🔍 Socket ID: ${_socket?.id}');
 
     if (!isConnected || _sessionId == null) {
-      print(
-          '🔑 SeSocketService: ❌ Cannot send - socket not connected or session ID null');
+      Logger.error(
+          ' SeSocketService:  Cannot send - socket not connected or session ID null');
       return;
     }
 
@@ -1882,10 +1913,11 @@ class SeSocketService {
         'encryptedData': encryptedData,
         'conversationId': conversationId ?? ''
       });
-      print('🔑 SeSocketService: ✅ User data exchange event sent successfully');
+      Logger.success(
+          ' SeSocketService:  User data exchange event sent successfully');
     } catch (e) {
-      print(
-          '🔑 SeSocketService: ❌ Failed to send user data exchange event: $e');
+      Logger.error(
+          ' SeSocketService:  Failed to send user data exchange event: $e');
     }
   }
 
@@ -1908,8 +1940,8 @@ class SeSocketService {
   Future<void> disconnect() async {
     // If instance was destroyed, reset it for cleanup
     if (SeSocketService.isDestroyed) {
-      print(
-          '🔌 SeSocketService: 🔄 Instance was destroyed, resetting for cleanup...');
+      Logger.info(
+          ' SeSocketService:  Instance was destroyed, resetting for cleanup...');
       SeSocketService.resetForNewConnection();
     }
 
@@ -1926,7 +1958,7 @@ class SeSocketService {
     try {
       if (_socket != null && _sessionId != null) {
         // CRITICAL: Leave the room/channel before disconnecting
-        print('🔌 SeSocketService: 🚪 Leaving room/channel: $_sessionId');
+        Logger.debug(' SeSocketService: 🚪 Leaving room/channel: $_sessionId');
 
         // Send a final event to notify server we're leaving
         try {
@@ -1939,17 +1971,17 @@ class SeSocketService {
           // Wait a moment for server to process
           await Future.delayed(const Duration(milliseconds: 300));
         } catch (e) {
-          print(
-              '🔌 SeSocketService: ⚠️ Warning - could not send leaving event: $e');
+          Logger.warning(
+              ' SeSocketService:  Warning - could not send leaving event: $e');
         }
 
         // Now disconnect
         _socket!.disconnect();
         _socket!.destroy();
-        print('🔌 SeSocketService: ✅ Socket disconnected and room left');
+        Logger.success(' SeSocketService:  Socket disconnected and room left');
       }
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error during disconnect: $e');
+      Logger.error(' SeSocketService:  Error during disconnect: $e');
     } finally {
       _socket = null;
     }
@@ -1966,19 +1998,20 @@ class SeSocketService {
 
   void setOnTypingIndicator(
       Function(String senderId, bool isTyping)? callback) {
-    print(
-        '🔌 SeSocketService: 🔧 Setting typing indicator callback: ${callback != null ? 'SET' : 'NULL'}');
+    Logger.debug(
+        ' SeSocketService: 🔧 Setting typing indicator callback: ${callback != null ? 'SET' : 'NULL'}');
 
     // Map the existing callback to the new format
     if (callback != null) {
       onTyping = (fromUserId, conversationId, isTyping) {
-        print(
-            '🔌 SeSocketService: 🔧 onTyping callback mapped: $fromUserId -> $isTyping');
+        Logger.debug(
+            ' SeSocketService: 🔧 onTyping callback mapped: $fromUserId -> $isTyping');
         callback(fromUserId, isTyping);
       };
-      print('🔌 SeSocketService: ✅ Typing indicator callback set successfully');
+      Logger.success(
+          ' SeSocketService:  Typing indicator callback set successfully');
     } else {
-      print('🔌 SeSocketService: ⚠️ Typing indicator callback is null');
+      Logger.warning(' SeSocketService:  Typing indicator callback is null');
       onTyping = null;
     }
   }
@@ -1987,22 +2020,22 @@ class SeSocketService {
   void setOnTypingIndicatorEnhanced(
       Function(String senderId, bool isTyping, String showIndicatorOnSessionId)?
           callback) {
-    print(
-        '🔌 SeSocketService: 🔧 Setting ENHANCED typing indicator callback: ${callback != null ? 'SET' : 'NULL'}');
+    Logger.debug(
+        ' SeSocketService: 🔧 Setting ENHANCED typing indicator callback: ${callback != null ? 'SET' : 'NULL'}');
 
     // Map the enhanced callback to the new format
     if (callback != null) {
       onTyping = (fromUserId, conversationId, isTyping) {
-        print(
-            '🔌 SeSocketService: 🔧 Enhanced onTyping callback mapped: $fromUserId -> $isTyping');
+        Logger.debug(
+            ' SeSocketService: 🔧 Enhanced onTyping callback mapped: $fromUserId -> $isTyping');
         callback(fromUserId, isTyping,
             conversationId); // Pass conversationId as showIndicatorOnSessionId for now
       };
-      print(
-          '🔌 SeSocketService: ✅ Enhanced typing indicator callback set successfully');
+      Logger.success(
+          ' SeSocketService:  Enhanced typing indicator callback set successfully');
     } else {
-      print(
-          '🔌 SeSocketService: ⚠️ Enhanced typing indicator callback is null');
+      Logger.warning(
+          ' SeSocketService:  Enhanced typing indicator callback is null');
       onTyping = null;
     }
   }
@@ -2133,16 +2166,16 @@ class SeSocketService {
     // This method is called by some services, so we need to implement it
     // For SeSocketService, initialization happens via connect() method
     if (_sessionId != null) {
-      print(
+      Logger.debug(
           '🔌 SeSocketService: ℹ️ initialize() called, but SeSocketService uses connect() method');
-      print(
+      Logger.debug(
           '🔌 SeSocketService: ℹ️ Please use connect($_sessionId) instead of initialize()');
       // Auto-connect if we have a session ID
       await connect(_sessionId!);
     } else {
-      print(
+      Logger.debug(
           '🔌 SeSocketService: ⚠️ initialize() called but no session ID available');
-      print(
+      Logger.debug(
           '🔌 SeSocketService: ℹ️ Please use connect(sessionId) method instead');
     }
   }
@@ -2182,60 +2215,60 @@ class SeSocketService {
   }
 
   void debugPrintState() {
-    print('🔌 SeSocketService: Debug State:');
-    print('  - Connected: ${_socket?.connected ?? false}');
-    print('  - Ready: $_ready');
-    print('  - Session Confirmed: $_sessionConfirmed');
-    print('  - Session ID: $_sessionId');
-    print('  - Socket ID: ${_socket?.id ?? 'null'}');
-    print('  - Is Connecting: $_isConnecting');
-    print('  - Reconnect Attempts: $_reconnectAttempts');
+    Logger.debug(' SeSocketService: Debug State:');
+    Logger.debug('  - Connected: ${_socket?.connected ?? false}');
+    Logger.debug('  - Ready: $_ready');
+    Logger.debug('  - Session Confirmed: $_sessionConfirmed');
+    Logger.debug('  - Session ID: $_sessionId');
+    Logger.debug('  - Socket ID: ${_socket?.id ?? 'null'}');
+    Logger.debug('  - Is Connecting: $_isConnecting');
+    Logger.debug('  - Reconnect Attempts: $_reconnectAttempts');
   }
 
   // Method to manually check connection health
   void checkConnectionHealth() {
-    print('🔌 SeSocketService: Connection Health Check:');
-    print('  - Socket exists: ${_socket != null}');
+    Logger.debug(' SeSocketService: Connection Health Check:');
+    Logger.debug('  - Socket exists: ${_socket != null}');
     if (_socket != null) {
-      print('  - Socket connected: ${_socket!.connected}');
-      print('  - Socket id: ${_socket!.id}');
+      Logger.debug('  - Socket connected: ${_socket!.connected}');
+      Logger.debug('  - Socket id: ${_socket!.id}');
       try {
         final engine = _socket!.io.engine;
         if (engine != null) {
           final transport = engine.transport;
-          print('  - Socket transport: ${transport?.name ?? 'unknown'}');
+          Logger.debug('  - Socket transport: ${transport?.name ?? 'unknown'}');
         } else {
-          print('  - Socket transport: engine is null');
+          Logger.debug('  - Socket transport: engine is null');
         }
       } catch (e) {
-        print('  - Socket transport: error accessing - $e');
+        Logger.debug('  - Socket transport: error accessing - $e');
       }
     }
-    print('  - Ready state: $_ready');
-    print('  - Session confirmed: $_sessionConfirmed');
-    print('  - Session ID: $_sessionId');
-    print(
+    Logger.debug('  - Ready state: $_ready');
+    Logger.debug('  - Session confirmed: $_sessionConfirmed');
+    Logger.debug('  - Session ID: $_sessionId');
+    Logger.debug(
         '  - Connection state stream active: ${_connectionStateController?.isClosed == false}');
   }
 
   // Method for testing connections (used by main_nav_screen)
   void emit(String event, Map<String, dynamic> data) {
     if (!isConnected || _sessionId == null) {
-      print(
-          '🔌 SeSocketService: ❌ Cannot emit event: Socket not connected or session invalid');
-      print(
-          '🔌 SeSocketService: 🔍 Connection status: isConnected=$isConnected, sessionId=$_sessionId');
+      Logger.error(
+          ' SeSocketService:  Cannot emit event: Socket not connected or session invalid');
+      Logger.info(
+          ' SeSocketService:  Connection status: isConnected=$isConnected, sessionId=$_sessionId');
       return;
     }
 
     // Debug logging for key exchange events
     if (event == 'key_exchange:accept') {
-      print('🔌 SeSocketService: 🔍🔍🔍 SENDING KEY EXCHANGE ACCEPT EVENT!');
-      print('🔌 SeSocketService: 🔍🔍🔍 Event: $event');
-      print('🔌 SeSocketService: 🔍🔍🔍 Data: $data');
-      print(
-          '🔌 SeSocketService: 🔍🔍🔍 Socket connected: ${_socket?.connected}');
-      print('🔌 SeSocketService: 🔍🔍🔍 Session ID: $_sessionId');
+      Logger.info(' SeSocketService: 🔍🔍 SENDING KEY EXCHANGE ACCEPT EVENT!');
+      Logger.info(' SeSocketService: 🔍🔍 Event: $event');
+      Logger.info(' SeSocketService: 🔍🔍 Data: $data');
+      Logger.info(
+          ' SeSocketService: 🔍🔍 Socket connected: ${_socket?.connected}');
+      Logger.info(' SeSocketService: 🔍🔍 Session ID: $_sessionId');
     }
 
     try {
@@ -2243,18 +2276,18 @@ class SeSocketService {
 
       // Confirm the event was sent
       if (event == 'key_exchange:accept') {
-        print(
-            '🔌 SeSocketService: ✅ Key exchange accept event sent via socket');
+        Logger.success(
+            ' SeSocketService:  Key exchange accept event sent via socket');
       }
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error emitting event $event: $e');
-      print(
-          '🔌 SeSocketService: 🔍 This may be due to socket connectivity issues');
+      Logger.error(' SeSocketService:  Error emitting event $event: $e');
+      Logger.info(
+          ' SeSocketService:  This may be due to socket connectivity issues');
 
       // Try to reconnect if there's a connection issue
       if (_socket?.connected == false) {
-        print(
-            '🔌 SeSocketService: 🔄 Attempting to reconnect due to emit failure...');
+        Logger.info(
+            ' SeSocketService:  Attempting to reconnect due to emit failure...');
         _scheduleReconnect();
       }
     }
@@ -2274,13 +2307,13 @@ class SeSocketService {
         'reason': 'account_deletion'
       });
 
-      print(
-          '🔌 SeSocketService: ✅ Session deletion request sent for: $sessionToDelete');
+      Logger.success(
+          ' SeSocketService:  Session deletion request sent for: $sessionToDelete');
 
       // Wait a moment for the server to process the deletion
       await Future.delayed(const Duration(milliseconds: 500));
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending session deletion: $e');
+      Logger.error(' SeSocketService:  Error sending session deletion: $e');
     }
   }
 
@@ -2327,10 +2360,11 @@ class SeSocketService {
           'encryptionType': 'aes-cbc-pkcs7'
         }
       });
-      print(
+      Logger.debug(
           '🔌 SeSocketService: Message status update sent: $messageId -> $status (conversationId: $effectiveConversationId)');
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending message status update: $e');
+      Logger.error(
+          ' SeSocketService:  Error sending message status update: $e');
     }
   }
 
@@ -2355,10 +2389,10 @@ class SeSocketService {
         'timestamp': DateTime.now().toIso8601String(),
         'silent': true, // Usually silent to avoid spam
       });
-      print(
+      Logger.debug(
           '📬 SeSocketService: Delivery receipt sent: $messageId -> $recipientId (conversationId: $effectiveConversationId)');
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending delivery receipt: $e');
+      Logger.error(' SeSocketService:  Error sending delivery receipt: $e');
     }
   }
 
@@ -2381,7 +2415,7 @@ class SeSocketService {
 
   // Method for cleanup (used by realtime_service_manager)
   void dispose() {
-    print('🔌 SeSocketService: 🧹 Disposing socket service...');
+    Logger.info(' SeSocketService:  Disposing socket service...');
 
     // Clean up all timers and resources
     _heartbeatTimer?.cancel();
@@ -2393,8 +2427,8 @@ class SeSocketService {
     try {
       _connectionStateController?.close();
     } catch (e) {
-      print(
-          '🔌 SeSocketService: ⚠️ Warning - stream controller already closed: $e');
+      Logger.warning(
+          ' SeSocketService:  Warning - stream controller already closed: $e');
     }
 
     // Force disconnect socket
@@ -2403,10 +2437,10 @@ class SeSocketService {
         // Disable reconnection to prevent memory leaks
         _socket!.disconnect();
         _socket!.destroy();
-        print('🔌 SeSocketService: ✅ Socket destroyed');
+        Logger.success(' SeSocketService:  Socket destroyed');
       }
     } catch (e) {
-      print('🔌 SeSocketService: ⚠️ Warning - socket cleanup failed: $e');
+      Logger.warning(' SeSocketService:  Warning - socket cleanup failed: $e');
     } finally {
       _socket = null;
     }
@@ -2418,19 +2452,20 @@ class SeSocketService {
     _reconnectAttempts = 0;
     _sessionId = null;
 
-    print('🔌 SeSocketService: ✅ Socket service disposed completely');
+    Logger.success(' SeSocketService:  Socket service disposed completely');
   }
 
   // Force disconnect without sending events (for account deletion)
   Future<void> forceDisconnect() async {
     // If instance was destroyed, reset it for cleanup
     if (SeSocketService.isDestroyed) {
-      print(
-          '🔌 SeSocketService: 🔄 Instance was destroyed, resetting for cleanup...');
+      Logger.info(
+          ' SeSocketService:  Instance was destroyed, resetting for cleanup...');
       SeSocketService.resetForNewConnection();
     }
 
-    print('🔌 SeSocketService: 🚫 Force disconnecting (no events sent)...');
+    Logger.debug(
+        '🔌 SeSocketService: 🚫 Force disconnecting (no events sent)...');
 
     _ready = false;
     _isConnecting = false;
@@ -2447,10 +2482,10 @@ class SeSocketService {
         // Force disconnect without sending events
         _socket!.disconnect();
         _socket!.destroy();
-        print('🔌 SeSocketService: ✅ Force disconnect completed');
+        Logger.success(' SeSocketService:  Force disconnect completed');
       }
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error during force disconnect: $e');
+      Logger.error(' SeSocketService:  Error during force disconnect: $e');
     } finally {
       _socket = null;
     }
@@ -2564,10 +2599,10 @@ class SeSocketService {
     try {
       // Send presence update to all contacts
       sendPresence(isOnline, []); // Empty list means broadcast to all
-      print(
-          '🔌 SeSocketService: User online status sent: ${isOnline ? 'online' : 'offline'}');
+      Logger.debug(
+          ' SeSocketService: User online status sent: ${isOnline ? 'online' : 'offline'}');
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Error sending user online status: $e');
+      Logger.error(' SeSocketService:  Error sending user online status: $e');
     }
   }
 
@@ -2575,52 +2610,55 @@ class SeSocketService {
   void setupContactListeners(List<String> contactSessionIds) {
     if (!isConnected || _sessionId == null) return;
 
-    print(
-        '🔌 SeSocketService: Setting up listeners for ${contactSessionIds.length} contacts');
+    Logger.debug(
+        ' SeSocketService: Setting up listeners for ${contactSessionIds.length} contacts');
 
     // In the new room-based system, we don't need to set up individual contact listeners
     // The server handles routing based on session IDs
     // This method is kept for compatibility but doesn't need to do anything
 
     for (final contactId in contactSessionIds) {
-      print('🔌 SeSocketService: ✅ Listener ready for contact: $contactId');
+      Logger.success(
+          ' SeSocketService:  Listener ready for contact: $contactId');
     }
   }
 
   // Test method to verify socket connection and send test events
   Future<bool> testSocketConnection() async {
     try {
-      print('🔌 SeSocketService: 🧪 Testing socket connection...');
+      Logger.debug(' SeSocketService: 🧪 Testing socket connection...');
 
       if (!isConnected) {
-        print('🔌 SeSocketService: ❌ Socket not connected');
+        Logger.error(' SeSocketService:  Socket not connected');
         return false;
       }
 
       if (_sessionId == null) {
-        print('🔌 SeSocketService: ❌ No session ID');
+        Logger.error(' SeSocketService:  No session ID');
         return false;
       }
 
-      print('🔌 SeSocketService: ✅ Socket connected with session: $_sessionId');
+      Logger.success(
+          ' SeSocketService:  Socket connected with session: $_sessionId');
 
       // Test sending a presence update to ourselves
       try {
         sendPresence(true, [_sessionId!]);
-        print('🔌 SeSocketService: ✅ Test presence update sent successfully');
+        Logger.success(
+            ' SeSocketService:  Test presence update sent successfully');
         return true;
       } catch (e) {
-        print('🔌 SeSocketService: ❌ Test presence update failed: $e');
+        Logger.error(' SeSocketService:  Test presence update failed: $e');
         return false;
       }
     } catch (e) {
-      print('🔌 SeSocketService: ❌ Test connection failed: $e');
+      Logger.error(' SeSocketService:  Test connection failed: $e');
       return false;
     }
   }
 
   void _onSocketConnected() {
-    print('🔌 SeSocketService: ✅ Connected to server');
+    Logger.success(' SeSocketService:  Connected to server');
     _isConnecting = false;
     _ready = false;
     _addConnectionStateEvent(true);
@@ -2629,9 +2667,9 @@ class SeSocketService {
     if (_sessionId != null) {
       try {
         sendPresence(true, []); // Empty array means broadcast to all users
-        print('🔌 SeSocketService: ✅ Online presence sent on connection');
+        Logger.success(' SeSocketService:  Online presence sent on connection');
       } catch (e) {
-        print('🔌 SeSocketService: ⚠️ Failed to send online presence: $e');
+        Logger.warning(' SeSocketService:  Failed to send online presence: $e');
       }
     }
   }
@@ -2640,8 +2678,8 @@ class SeSocketService {
   void _sendOnlinePresence() {
     if (_sessionId != null) {
       sendPresence(true, []); // Empty array means broadcast to all users
-      print(
-          '🔌 SeSocketService: ✅ Online presence sent on session confirmation');
+      Logger.success(
+          ' SeSocketService:  Online presence sent on session confirmation');
     }
   }
 
@@ -2656,15 +2694,15 @@ class SeSocketService {
           'timestamp': DateTime.now().toIso8601String(),
         });
 
-        print(
-            '🔌 SeSocketService: ✅ Session deletion request sent for: $sessionToDelete');
+        Logger.success(
+            ' SeSocketService:  Session deletion request sent for: $sessionToDelete');
       } catch (e) {
-        print(
-            '🔌 SeSocketService: ❌ Error sending session deletion request: $e');
+        Logger.error(
+            ' SeSocketService:  Error sending session deletion request: $e');
       }
     } else {
-      print(
-          '🔌 SeSocketService: ❌ Cannot add contact - not connected or no session');
+      Logger.error(
+          ' SeSocketService:  Cannot add contact - not connected or no session');
     }
   }
 
@@ -2680,13 +2718,13 @@ class SeSocketService {
           'timestamp': DateTime.now().toIso8601String(),
         });
 
-        print('🔗 SeSocketService: ✅ Contact added: $contactSessionId');
+        Logger.success('🔗 SeSocketService:  Contact added: $contactSessionId');
       } catch (e) {
-        print('🔗 SeSocketService: ❌ Error adding contact: $e');
+        Logger.error('🔗 SeSocketService:  Error adding contact: $e');
       }
     } else {
-      print(
-          '🔗 SeSocketService: ❌ Cannot add contact - not connected or no session');
+      Logger.error(
+          '🔗 SeSocketService:  Cannot add contact - not connected or no session');
     }
   }
 
@@ -2700,13 +2738,14 @@ class SeSocketService {
           'timestamp': DateTime.now().toIso8601String(),
         });
 
-        print('🔗 SeSocketService: ✅ Contact removed: $contactSessionId');
+        Logger.success(
+            '🔗 SeSocketService:  Contact removed: $contactSessionId');
       } catch (e) {
-        print('🔗 SeSocketService: ❌ Error removing contact: $e');
+        Logger.error('🔗 SeSocketService:  Error removing contact: $e');
       }
     } else {
-      print(
-          '🔗 SeSocketService: ❌ Cannot remove contact - not connected or no session');
+      Logger.error(
+          '🔗 SeSocketService:  Cannot remove contact - not connected or no session');
     }
   }
 
@@ -2722,13 +2761,14 @@ class SeSocketService {
           'timestamp': DateTime.now().toIso8601String(),
         });
 
-        print('📡 SeSocketService: ✅ Broadcasting presence to all contacts');
+        Logger.success(
+            '📡 SeSocketService:  Broadcasting presence to all contacts');
       } catch (e) {
-        print('📡 SeSocketService: ❌ Error broadcasting presence: $e');
+        Logger.error('📡 SeSocketService:  Error broadcasting presence: $e');
       }
     } else {
-      print(
-          '📡 SeSocketService: ❌ Cannot broadcast presence - not connected or no session');
+      Logger.error(
+          '📡 SeSocketService:  Cannot broadcast presence - not connected or no session');
     }
   }
 
@@ -2746,12 +2786,12 @@ class SeSocketService {
         // If specific users provided, send to them; otherwise broadcast to all contacts
         if (specificUsers != null && specificUsers.isNotEmpty) {
           presenceData['toUserIds'] = specificUsers;
-          print(
+          Logger.debug(
               '📡 SeSocketService: 🟢 Sending presence update: ${isOnline ? 'online' : 'offline'} to ${specificUsers.length} specific users');
         } else {
           presenceData['toUserIds'] =
               []; // Empty array = broadcast to all contacts
-          print(
+          Logger.debug(
               '📡 SeSocketService: 🟢 Broadcasting presence update: ${isOnline ? 'online' : 'offline'} to all contacts');
         }
 
@@ -2771,16 +2811,17 @@ class SeSocketService {
           }
         };
 
-        print('📡 SeSocketService: 🔍 Presence payload: $payload');
+        Logger.info('📡 SeSocketService:  Presence payload: $payload');
         _socket!.emit('presence:update', payload);
-        print('📡 SeSocketService: ✅ Presence update sent successfully');
+        Logger.success(
+            '📡 SeSocketService:  Presence update sent successfully');
       } catch (e) {
-        print('📡 SeSocketService: ❌ Error sending presence update: $e');
+        Logger.error('📡 SeSocketService:  Error sending presence update: $e');
         _scheduleReconnect();
       }
     } else {
-      print(
-          '📡 SeSocketService: ❌ Cannot send presence update - not connected or no session');
+      Logger.error(
+          '📡 SeSocketService:  Cannot send presence update - not connected or no session');
     }
   }
 
@@ -2796,15 +2837,15 @@ class SeSocketService {
 
         _socket!.emit('presence:request', payload);
 
-        print(
-            '🔌 SeSocketService: ✅ Presence status requested for ${contactIds.length} contacts');
+        Logger.success(
+            ' SeSocketService:  Presence status requested for ${contactIds.length} contacts');
       } catch (e) {
-        print('🔌 SeSocketService: ❌ Error requesting presence status: $e');
+        Logger.error(' SeSocketService:  Error requesting presence status: $e');
         _scheduleReconnect();
       }
     } else {
-      print(
-          '🔌 SeSocketService: ❌ Cannot request presence status - socket not connected');
+      Logger.error(
+          ' SeSocketService:  Cannot request presence status - socket not connected');
     }
   }
 
@@ -2816,7 +2857,7 @@ class SeSocketService {
   void _updateMessageStatus(String messageId, String status, String recipientId,
       {String? conversationId}) {
     _messageStatuses[messageId] = status;
-    print(
+    Logger.debug(
         '📊 SeSocketService: Message status updated: $messageId -> $status (conversationId: $conversationId)');
   }
 
@@ -2829,8 +2870,8 @@ class SeSocketService {
       'autoStopped': autoStopped,
       'timestamp': DateTime.now().toIso8601String(),
     };
-    print(
-        '⌨️ SeSocketService: Typing status updated: $key -> delivered: $delivered, autoStopped: $autoStopped');
+    Logger.debug(
+        ' SeSocketService: Typing status updated: $key -> delivered: $delivered, autoStopped: $autoStopped');
   }
 
   // Status getters
@@ -2846,7 +2887,7 @@ class SeSocketService {
   // Notify listeners (implement these based on your notification system)
   void _notifyMessageStatusChange(
       String messageId, String status, String recipientId) {
-    print(
+    Logger.debug(
         '📊 SeSocketService: Notifying message status change: $messageId -> $status');
 
     // Notify the message status change callbacks
@@ -2859,7 +2900,7 @@ class SeSocketService {
 
   void _notifyTypingStatusChange(String fromUserId, String recipientId,
       bool isTyping, bool delivered, bool autoStopped) {
-    print(
+    Logger.debug(
         '⌨️ SeSocketService: Notifying typing status change: $fromUserId -> $recipientId (delivered: $delivered)');
 
     // CRITICAL FIX: Typing indicators should ONLY show on the RECIPIENT's side
@@ -2874,8 +2915,8 @@ class SeSocketService {
         final currentUserId = SeSessionService().currentSessionId;
         if (currentUserId != null && currentUserId == fromUserId) {
           // ❌ WE ARE THE SENDER - Don't show typing indicator to ourselves
-          print(
-              '⌨️ SeSocketService: ⚠️ Ignoring own typing indicator - we are the sender: $fromUserId');
+          Logger.warning(
+              ' SeSocketService:  Ignoring own typing indicator - we are the sender: $fromUserId');
           return;
         }
 
@@ -2888,45 +2929,45 @@ class SeSocketService {
           // Method 1: Direct user ID match
           if (currentRecipientId == fromUserId) {
             shouldUpdate = true;
-            print(
-                '⌨️ SeSocketService: ✅ Direct user ID match for typing indicator');
+            Logger.success(
+                ' SeSocketService:  Direct user ID match for typing indicator');
           }
           // Method 2: Conversation ID match (if currentRecipientId is a conversation ID)
           else if (currentRecipientId.startsWith('chat_') &&
               ConversationIdGenerator.isParticipant(
                   currentRecipientId, fromUserId)) {
             shouldUpdate = true;
-            print(
-                '⌨️ SeSocketService: ✅ Conversation ID match for typing indicator');
+            Logger.success(
+                ' SeSocketService:  Conversation ID match for typing indicator');
           }
           // Method 3: Recipient ID match (if recipientId is a conversation ID)
           else if (recipientId.startsWith('chat_') &&
               ConversationIdGenerator.isParticipant(recipientId, fromUserId)) {
             shouldUpdate = true;
-            print(
-                '⌨️ SeSocketService: ✅ Recipient ID match for typing indicator');
+            Logger.success(
+                ' SeSocketService:  Recipient ID match for typing indicator');
           }
 
           if (shouldUpdate) {
             // ✅ Update the typing indicator on the RECIPIENT's side
             sessionChatProvider.updateRecipientTypingState(isTyping);
-            print(
-                '⌨️ SeSocketService: ✅ Typing status updated for current conversation: $fromUserId -> $isTyping');
+            Logger.success(
+                ' SeSocketService:  Typing status updated for current conversation: $fromUserId -> $isTyping');
           } else {
-            print(
+            Logger.debug(
                 '⌨️ SeSocketService: ℹ️ Typing indicator from different conversation: $fromUserId -> $recipientId (current: $currentRecipientId)');
           }
         } else {
-          print(
-              '⌨️ SeSocketService: ℹ️ No current recipient set, cannot update typing status');
+          Logger.info(
+              ' SeSocketService:  No current recipient set, cannot update typing status');
         }
       } else {
-        print(
-            '⌨️ SeSocketService: ⚠️ No context available for typing status update');
+        Logger.warning(
+            ' SeSocketService:  No context available for typing status update');
       }
     } catch (e) {
-      print(
-          '⌨️ SeSocketService: ❌ Error updating typing status via SessionChatProvider: $e');
+      Logger.error(
+          ' SeSocketService:  Error updating typing status via SessionChatProvider: $e');
     }
   }
 

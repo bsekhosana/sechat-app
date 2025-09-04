@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
+import '/../core/utils/logger.dart';
 
 /// Enum for different message types
 enum MessageType {
@@ -269,8 +270,8 @@ class Message {
         final Map<String, dynamic> parsed = jsonDecode(value);
         return parsed;
       } catch (e) {
-        print('💾 Message: ❌ Failed to parse content JSON: $e');
-        print('💾 Message: 🔍 Raw content: $value');
+        Logger.error('💾 Message:  Failed to parse content JSON: $e');
+        Logger.info('💾 Message:  Raw content: $value');
         return {};
       }
     }
@@ -287,8 +288,8 @@ class Message {
         final Map<String, dynamic> parsed = jsonDecode(value);
         return parsed;
       } catch (e) {
-        print('💾 Message: ❌ Failed to parse metadata JSON: $e');
-        print('💾 Message: 🔍 Raw metadata: $value');
+        Logger.error('💾 Message:  Failed to parse metadata JSON: $e');
+        Logger.info('💾 Message:  Raw metadata: $value');
         return null;
       }
     }

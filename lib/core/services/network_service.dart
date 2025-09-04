@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import '/..//../core/utils/logger.dart';
 
 class NetworkService extends ChangeNotifier {
   static NetworkService? _instance;
@@ -37,7 +38,7 @@ class NetworkService extends ChangeNotifier {
         _updateConnectionStatus(result);
       },
       onError: (error) {
-        print('🌐 NetworkService: Connectivity error: $error');
+        Logger.debug('🌐 NetworkService: Connectivity error: $error');
         _handleConnectionLoss('Network connectivity error');
       },
     );
@@ -83,11 +84,11 @@ class NetworkService extends ChangeNotifier {
         _lastError = null;
         _isReconnecting = false;
         _stopReconnectionPolling();
-        print('🌐 NetworkService: Network connected via ${result.name}');
+        Logger.debug('🌐 NetworkService: Network connected via ${result.name}');
 
         // Only notify if this was a reconnection and we haven't already notified
         if (!wasConnected && !_hasNotifiedReconnection) {
-          print('🌐 NetworkService: Network reconnection successful');
+          Logger.debug('🌐 NetworkService: Network reconnection successful');
           _hasNotifiedReconnection = true;
           _handleInternetReconnection();
         }
@@ -101,7 +102,7 @@ class NetworkService extends ChangeNotifier {
 
     // Always notify listeners when status changes
     if (wasConnected != _isConnected) {
-      print(
+      Logger.debug(
           '🌐 NetworkService: Connection status changed from $wasConnected to $_isConnected');
       notifyListeners();
     }
@@ -115,7 +116,7 @@ class NetworkService extends ChangeNotifier {
     _lastConnectionLoss = DateTime.now();
     _hasNotifiedDisconnection = false;
     _startReconnectionPolling();
-    print('🌐 NetworkService: Connection lost - $reason');
+    Logger.debug('🌐 NetworkService: Connection lost - $reason');
 
     if (wasConnected) {
       notifyListeners();
@@ -130,7 +131,7 @@ class NetworkService extends ChangeNotifier {
     _lastReconnection = DateTime.now();
     _hasNotifiedReconnection = true;
     _stopReconnectionPolling();
-    print('🌐 NetworkService: Internet reconnection successful');
+    Logger.debug('🌐 NetworkService: Internet reconnection successful');
 
     // Reset the flag after a delay to allow for future reconnections
     Timer(const Duration(seconds: 5), () {
@@ -145,7 +146,7 @@ class NetworkService extends ChangeNotifier {
 
     _reconnectionCountdown = 30;
     _isReconnecting = true;
-    print('🌐 NetworkService: Starting 30-second reconnection polling');
+    Logger.debug('🌐 NetworkService: Starting 30-second reconnection polling');
 
     _reconnectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_isConnected) {
@@ -172,25 +173,25 @@ class NetworkService extends ChangeNotifier {
     _reconnectionTimer = null;
     _reconnectionCountdown = 0;
     _isReconnecting = false;
-    print('🌐 NetworkService: Stopped reconnection polling');
+    Logger.debug('🌐 NetworkService: Stopped reconnection polling');
     notifyListeners();
   }
 
   void _attemptReconnection() async {
-    print('🌐 NetworkService: Attempting reconnection...');
+    Logger.debug('🌐 NetworkService: Attempting reconnection...');
     try {
       final results = await _connectivity.checkConnectivity();
       final result =
           results.isNotEmpty ? results.first : ConnectivityResult.none;
       _updateConnectionStatus(result);
     } catch (e) {
-      print('🌐 NetworkService: Reconnection attempt failed: $e');
+      Logger.debug('🌐 NetworkService: Reconnection attempt failed: $e');
     }
   }
 
   // Method to handle successful reconnection
   void handleSuccessfulReconnection() {
-    print('🌐 NetworkService: Handling successful reconnection');
+    Logger.debug('🌐 NetworkService: Handling successful reconnection');
     _isReconnecting = false;
     _lastError = null;
     _stopReconnectionPolling();
@@ -205,7 +206,7 @@ class NetworkService extends ChangeNotifier {
       _isConnected = false;
       _lastError = 'Server connection failed';
       _startReconnectionPolling();
-      print('🌐 NetworkService: API connection error detected: $error');
+      Logger.debug('🌐 NetworkService: API connection error detected: $error');
       notifyListeners();
     }
   }
@@ -217,7 +218,7 @@ class NetworkService extends ChangeNotifier {
           results.isNotEmpty ? results.first : ConnectivityResult.none;
       _updateConnectionStatus(result);
     } catch (e) {
-      print('🌐 NetworkService: Error checking connectivity: $e');
+      Logger.debug('🌐 NetworkService: Error checking connectivity: $e');
       _isConnected = false;
       _lastError = 'Failed to check network status';
       _startReconnectionPolling();
@@ -237,7 +238,7 @@ class NetworkService extends ChangeNotifier {
 
   // Manual reconnection trigger
   void triggerReconnection() {
-    print('🌐 NetworkService: Manual reconnection triggered');
+    Logger.debug('🌐 NetworkService: Manual reconnection triggered');
     _reconnectionCountdown =
         0; // Reset countdown to trigger immediate reconnection
     _attemptReconnection();

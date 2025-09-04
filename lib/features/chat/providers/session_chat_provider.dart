@@ -16,6 +16,7 @@ import 'chat_list_provider.dart';
 import '../../../core/utils/conversation_id_generator.dart';
 import 'dart:async';
 import 'dart:convert';
+import '/../core/utils/logger.dart';
 
 class SessionChatProvider extends ChangeNotifier {
   final SeSocketService _socketService = SeSocketService.instance;
@@ -64,18 +65,20 @@ class SessionChatProvider extends ChangeNotifier {
         final contactService = ContactService.instance;
         final contact = contactService.getContact(_currentRecipientId!);
         if (contact != null) {
-          print(
-              '🔍 SessionChatProvider: isRecipientOnline getter called: ${contact.isOnline} (from ContactService, recipient: $_currentRecipientId)');
+          Logger.debug(
+              'isRecipientOnline getter called: ${contact.isOnline} (from ContactService, recipient: $_currentRecipientId)',
+              'SessionChatProvider');
           return contact.isOnline;
         }
       } catch (e) {
-        print(
-            '🔍 SessionChatProvider: ⚠️ ContactService not available, using local status: $e');
+        Logger.warning(
+            '🔍 SessionChatProvider:  ContactService not available, using local status: $e');
       }
     }
 
-    print(
-        '🔍 SessionChatProvider: isRecipientOnline getter called: $_isRecipientOnline (local status, recipient: $_currentRecipientId)');
+    Logger.debug(
+        'isRecipientOnline getter called: $_isRecipientOnline (local status, recipient: $_currentRecipientId)',
+        'SessionChatProvider');
     return _isRecipientOnline;
   }
 
@@ -90,7 +93,7 @@ class SessionChatProvider extends ChangeNotifier {
       if (currentUserId != null) {
         _currentConversationId = _generateConsistentConversationId(
             currentUserId, _currentRecipientId!);
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: 🔧 Generated conversation ID: $_currentConversationId');
       }
     }
@@ -111,8 +114,8 @@ class SessionChatProvider extends ChangeNotifier {
       if (currentUserId != null) {
         _currentConversationId = _generateConsistentConversationId(
             currentUserId, _currentRecipientId!);
-        print(
-            '📱 SessionChatProvider: ✅ Set conversation ID: $_currentConversationId');
+        Logger.success(
+            '📱 SessionChatProvider:  Set conversation ID: $_currentConversationId');
       }
     }
   }
@@ -144,29 +147,30 @@ class SessionChatProvider extends ChangeNotifier {
   /// Setup listener for UnifiedMessageService updates
   void _setupMessageServiceListener() {
     // Listen to UnifiedMessageService for new messages using ChangeNotifier
-    print(
-        '📱 SessionChatProvider: 🔍 Setting up listener on UnifiedMessageService instance: ${_messageService.hashCode}');
+    Logger.info(
+        '📱 SessionChatProvider:  Setting up listener on UnifiedMessageService instance: ${_messageService.hashCode}');
     _messageService.addListener(_onMessageServiceUpdate);
-    print('📱 SessionChatProvider: ✅ Message service listener setup');
+    Logger.success('📱 SessionChatProvider:  Message service listener setup');
   }
 
   /// Stop message service listener
   void _stopMessageServiceListener() {
     _messageService.removeListener(_onMessageServiceUpdate);
-    print('📱 SessionChatProvider: ✅ Message service listener stopped');
+    Logger.success('📱 SessionChatProvider:  Message service listener stopped');
   }
 
   /// Handle UnifiedMessageService updates
   void _onMessageServiceUpdate() {
-    print('📱 SessionChatProvider: 🔔 UnifiedMessageService update received');
-    print(
-        '📱 SessionChatProvider: 🔍 Current conversation ID: $_currentConversationId');
+    Logger.debug(
+        '📱 SessionChatProvider:  UnifiedMessageService update received');
+    Logger.info(
+        '📱 SessionChatProvider:  Current conversation ID: $_currentConversationId');
     if (_currentConversationId != null) {
-      print('📱 SessionChatProvider: 🔄 Triggering database refresh...');
+      Logger.info('📱 SessionChatProvider:  Triggering database refresh...');
       _refreshMessagesFromDatabase();
     } else {
-      print(
-          '📱 SessionChatProvider: ⚠️ No current conversation ID, skipping refresh');
+      Logger.warning(
+          '📱 SessionChatProvider:  No current conversation ID, skipping refresh');
     }
   }
 
@@ -175,13 +179,13 @@ class SessionChatProvider extends ChangeNotifier {
     try {
       if (_currentConversationId == null) return;
 
-      print(
-          '📱 SessionChatProvider: 🔄 Refreshing messages from database for conversation: $_currentConversationId');
+      Logger.info(
+          '📱 SessionChatProvider:  Refreshing messages from database for conversation: $_currentConversationId');
 
       final loadedMessages = await _messageStorage
           .getMessages(_currentConversationId!, limit: 100);
-      print(
-          '📱 SessionChatProvider: 🔄 Loaded ${loadedMessages.length} messages from database');
+      Logger.info(
+          '📱 SessionChatProvider:  Loaded ${loadedMessages.length} messages from database');
 
       // Check if we have new messages
       final currentMessageIds = _messages.map((m) => m.id).toSet();
@@ -189,24 +193,24 @@ class SessionChatProvider extends ChangeNotifier {
           .where((m) => !currentMessageIds.contains(m.id))
           .toList();
 
-      print(
-          '📱 SessionChatProvider: 🔄 Current messages in memory: ${_messages.length}');
-      print(
-          '📱 SessionChatProvider: 🔄 New messages found: ${newMessages.length}');
+      Logger.info(
+          '📱 SessionChatProvider:  Current messages in memory: ${_messages.length}');
+      Logger.info(
+          '📱 SessionChatProvider:  New messages found: ${newMessages.length}');
 
       if (newMessages.isNotEmpty) {
-        print(
-            '📱 SessionChatProvider: 🔄 Found ${newMessages.length} new messages from database');
+        Logger.info(
+            '📱 SessionChatProvider:  Found ${newMessages.length} new messages from database');
 
         // Debug: Log the content of new messages
         for (final message in newMessages) {
-          print('📱 SessionChatProvider: 🔄 New message: ${message.id}');
-          print(
+          Logger.info('📱 SessionChatProvider:  New message: ${message.id}');
+          Logger.debug(
               '📱 SessionChatProvider: 🔄 Message content keys: ${message.content.keys.toList()}');
-          print(
-              '📱 SessionChatProvider: 🔄 Message text: ${message.content['text']}');
+          Logger.info(
+              '📱 SessionChatProvider:  Message text: ${message.content['text']}');
           if (message.content.containsKey('encryptedText')) {
-            print(
+            Logger.debug(
                 '📱 SessionChatProvider: 🔄 Message was encrypted: ${message.content['encryptedText']?.toString().length ?? 0} chars');
           }
         }
@@ -225,14 +229,15 @@ class SessionChatProvider extends ChangeNotifier {
 
         // Notify listeners for UI update
         notifyListeners();
-        print(
-            '📱 SessionChatProvider: ✅ Notified listeners after adding ${newMessages.length} new messages');
+        Logger.success(
+            '📱 SessionChatProvider:  Notified listeners after adding ${newMessages.length} new messages');
       } else {
-        print('📱 SessionChatProvider: ℹ️ No new messages found in database');
+        Logger.info(
+            '📱 SessionChatProvider:  No new messages found in database');
       }
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error refreshing messages from database: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error refreshing messages from database: $e');
     }
   }
 
@@ -244,7 +249,7 @@ class SessionChatProvider extends ChangeNotifier {
       String conversationId,
       String messageId) async {
     try {
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: 🔔 Chat message callback received: $senderName -> $message (ID: $messageId)');
 
       // Check if this message belongs to the current conversation
@@ -277,39 +282,39 @@ class SessionChatProvider extends ChangeNotifier {
         // CRITICAL: Don't create a new message here - let UnifiedMessageService handle it
         // The message should already be saved to the database by the time this callback is called
         // Just refresh from database to get the decrypted content
-        print(
-            '📱 SessionChatProvider: 🔄 Message belongs to current conversation, refreshing from database');
+        Logger.info(
+            '📱 SessionChatProvider:  Message belongs to current conversation, refreshing from database');
         _refreshMessagesFromDatabase();
 
         // 🆕 CRITICAL: Send immediate read receipt since user is currently in chat
         // CRITICAL FIX: Don't send immediate read receipts
         // According to SeChat API docs, read receipts should only be sent when user actually reads
         // The server will handle the proper receipt:read event flow
-        print(
-            '📱 SessionChatProvider: ℹ️ Message received - read receipts will be sent via proper server flow');
+        Logger.info(
+            '📱 SessionChatProvider:  Message received - read receipts will be sent via proper server flow');
 
         // CRITICAL: Notify listeners to trigger auto-scroll to bottom
         notifyListeners();
       } else {
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: ℹ️ Message not for current conversation: $conversationId (current: $_currentConversationId)');
       }
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error handling chat message callback: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error handling chat message callback: $e');
     }
   }
 
   /// CRITICAL: Method to trigger auto-scroll to bottom when new messages arrive
   void _triggerAutoScrollToBottom() {
     // This will be called by the UI to scroll to bottom after messages update
-    print('📱 SessionChatProvider: 🔄 Triggering auto-scroll to bottom');
+    Logger.info('📱 SessionChatProvider:  Triggering auto-scroll to bottom');
     notifyListeners();
   }
 
   /// CRITICAL: Public method for UI to trigger auto-scroll to bottom
   void triggerAutoScrollToBottom() {
-    print('📱 SessionChatProvider: 🔄 Public auto-scroll trigger called');
+    Logger.info('📱 SessionChatProvider:  Public auto-scroll trigger called');
     _triggerAutoScrollToBottom();
   }
 
@@ -321,8 +326,8 @@ class SessionChatProvider extends ChangeNotifier {
   SessionChatProvider() {
     // ChannelSocketService uses an event-driven system instead of callbacks
     // Event listeners are set up when the service initializes
-    print(
-        '📱 SessionChatProvider: ✅ Provider created - using channel-based socket system');
+    Logger.success(
+        '📱 SessionChatProvider:  Provider created - using channel-based socket system');
   }
 
   /// Update recipient online status from external source (e.g., ChatListProvider)
@@ -331,23 +336,23 @@ class SessionChatProvider extends ChangeNotifier {
     required bool isOnline,
     DateTime? lastSeen,
   }) {
-    print(
-        '🔌 SessionChatProvider: 🔍 updateRecipientStatus called: $recipientId -> $isOnline');
-    print(
-        '🔌 SessionChatProvider: 🔍 Current recipient ID: $_currentRecipientId');
+    Logger.info(
+        ' SessionChatProvider:  updateRecipientStatus called: $recipientId -> $isOnline');
+    Logger.info(
+        ' SessionChatProvider:  Current recipient ID: $_currentRecipientId');
 
     if (_currentRecipientId == recipientId) {
       final oldStatus = _isRecipientOnline;
       _isRecipientOnline = isOnline;
       _recipientLastSeen = lastSeen;
       notifyListeners();
-      print(
-          '🔌 SessionChatProvider: ✅ Recipient status updated: $oldStatus -> $isOnline');
-      print(
+      Logger.success(
+          ' SessionChatProvider:  Recipient status updated: $oldStatus -> $isOnline');
+      Logger.debug(
           '🔌 SessionChatProvider: 🔔 notifyListeners() called for presence update');
     } else {
-      print(
-          '🔌 SessionChatProvider: ⚠️ Recipient ID mismatch: expected $_currentRecipientId, got $recipientId');
+      Logger.warning(
+          ' SessionChatProvider:  Recipient ID mismatch: expected $_currentRecipientId, got $recipientId');
     }
   }
 
@@ -356,8 +361,8 @@ class SessionChatProvider extends ChangeNotifier {
     if (_currentRecipientId != null) {
       _isRecipientTyping = isTyping;
       notifyListeners();
-      print(
-          '🔌 SessionChatProvider: ✅ Recipient typing state updated: $isTyping');
+      Logger.success(
+          ' SessionChatProvider:  Recipient typing state updated: $isTyping');
     }
   }
 
@@ -365,8 +370,8 @@ class SessionChatProvider extends ChangeNotifier {
   Future<void> _handleTypingIndicatorFromSocket(
       String senderId, bool isTyping) async {
     try {
-      print(
-          '🔌 SessionChatProvider: Typing indicator callback received: $senderId -> $isTyping');
+      Logger.debug(
+          ' SessionChatProvider: Typing indicator callback received: $senderId -> $isTyping');
 
       // FIXED: Allow bidirectional typing indicators for better user experience
       // Only prevent users from seeing their own typing indicator if they're not in a chat
@@ -375,13 +380,13 @@ class SessionChatProvider extends ChangeNotifier {
         // If we're in an active chat, we might want to show our own typing state
         // This allows for better UX in group chats or when switching between users
         if (_currentRecipientId == null) {
-          print(
+          Logger.debug(
               '📱 SessionChatProvider: ⚠️ Ignoring own typing indicator (no active chat)');
           return;
         }
         // If we have an active chat, process the typing indicator for UI consistency
-        print(
-            '📱 SessionChatProvider: ℹ️ Processing own typing indicator in active chat');
+        Logger.info(
+            '📱 SessionChatProvider:  Processing own typing indicator in active chat');
       }
 
       // Update typing state for the sender
@@ -394,15 +399,15 @@ class SessionChatProvider extends ChangeNotifier {
       // If this is the current recipient, update the recipient typing state
       if (_currentRecipientId == senderId) {
         _isRecipientTyping = isTyping;
-        print(
-            '📱 SessionChatProvider: ✅ Updated current recipient typing state: $isTyping');
+        Logger.success(
+            '📱 SessionChatProvider:  Updated current recipient typing state: $isTyping');
       }
 
       // Notify listeners to update UI
       notifyListeners();
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error handling typing indicator callback: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error handling typing indicator callback: $e');
     }
   }
 
@@ -410,14 +415,14 @@ class SessionChatProvider extends ChangeNotifier {
   void _handleOnlineStatusUpdateFromSocket(
       String senderId, bool isOnline, String? lastSeen) {
     try {
-      print(
+      Logger.debug(
           '🔌 SessionChatProvider: 🔔 Online status callback received: $senderId -> $isOnline (lastSeen: $lastSeen)');
 
       // CRITICAL: Prevent sender from processing their own online status update
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId != null && senderId == currentUserId) {
-        print(
-            '📱 SessionChatProvider: ⚠️ Ignoring own online status update from: $senderId');
+        Logger.warning(
+            '📱 SessionChatProvider:  Ignoring own online status update from: $senderId');
         return; // Don't process own online status update
       }
 
@@ -452,16 +457,16 @@ class SessionChatProvider extends ChangeNotifier {
           _recipientLastSeen = lastSeen != null
               ? DateTime.parse(lastSeen)
               : _recipientLastSeen; // Keep existing lastSeen if no new one provided
-          print(
-              '📱 SessionChatProvider: ✅ Updated current recipient online state: $isOnline');
+          Logger.success(
+              '📱 SessionChatProvider:  Updated current recipient online state: $isOnline');
         }
 
         // Notify listeners to update UI
         notifyListeners();
       }
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error handling online status callback: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error handling online status callback: $e');
     }
   }
 
@@ -486,11 +491,11 @@ class SessionChatProvider extends ChangeNotifier {
       // Use the current conversation ID to ensure consistency
       final conversationId = _currentConversationId ?? recipientId;
 
-      print(
-          '📱 SessionChatProvider: 🔍 Sending message with conversation ID: $conversationId');
-      print(
-          '📱 SessionChatProvider: 🔍 Current conversation ID: $_currentConversationId');
-      print('📱 SessionChatProvider: 🔍 Recipient ID: $recipientId');
+      Logger.info(
+          '📱 SessionChatProvider:  Sending message with conversation ID: $conversationId');
+      Logger.info(
+          '📱 SessionChatProvider:  Current conversation ID: $_currentConversationId');
+      Logger.info('📱 SessionChatProvider:  Recipient ID: $recipientId');
 
       final message = Message(
         id: messageId,
@@ -510,8 +515,8 @@ class SessionChatProvider extends ChangeNotifier {
         },
       );
 
-      print(
-          '📱 SessionChatProvider: 🔍 Message created: ${message.id} for conversation: ${message.conversationId}');
+      Logger.info(
+          '📱 SessionChatProvider:  Message created: ${message.id} for conversation: ${message.conversationId}');
 
       // Add message to chat using conversation ID
       await _addMessageToChat(conversationId, message);
@@ -540,8 +545,8 @@ class SessionChatProvider extends ChangeNotifier {
               lastMessage: {'text': content, 'id': messageId},
               lastMessageAt: DateTime.now(),
             );
-            print(
-                '📱 SessionChatProvider: ✅ Updated existing chat in chat list');
+            Logger.success(
+                '📱 SessionChatProvider:  Updated existing chat in chat list');
           } else {
             // Create new chat entry if it doesn't exist
             final newChat = Chat(
@@ -561,14 +566,15 @@ class SessionChatProvider extends ChangeNotifier {
               lastMessageAt: DateTime.now(),
             );
             _chats.add(newChat);
-            print('📱 SessionChatProvider: ✅ Added new chat to chat list');
+            Logger.success(
+                '📱 SessionChatProvider:  Added new chat to chat list');
           }
 
           // Notify listeners to update UI
           notifyListeners();
         }
       } catch (e) {
-        print('📱 SessionChatProvider: ⚠️ Error updating chat list: $e');
+        Logger.warning('📱 SessionChatProvider:  Error updating chat list: $e');
       }
 
       // Send message via unified message service (API-compliant)
@@ -581,11 +587,11 @@ class SessionChatProvider extends ChangeNotifier {
       );
 
       if (sendResult.success) {
-        print(
-            '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $conversationId');
+        Logger.success(
+            '📱 SessionChatProvider:  Message sent successfully with conversation ID: $conversationId');
       } else {
-        print(
-            '📱 SessionChatProvider: ❌ Message send failed: ${sendResult.error}');
+        Logger.error(
+            '📱 SessionChatProvider:  Message send failed: ${sendResult.error}');
         throw Exception('Message send failed: ${sendResult.error}');
       }
 
@@ -596,7 +602,7 @@ class SessionChatProvider extends ChangeNotifier {
       _error = 'Failed to send message: $e';
       _isLoading = false;
       notifyListeners();
-      print('📱 SessionChatProvider: ❌ Failed to send message: $e');
+      Logger.error('📱 SessionChatProvider:  Failed to send message: $e');
       rethrow;
     }
   }
@@ -612,26 +618,27 @@ class SessionChatProvider extends ChangeNotifier {
 
       // Validate recipient ID
       if (actualRecipientId.isEmpty || actualRecipientId == 'unknown') {
-        print(
-            '📱 SessionChatProvider: ❌ Invalid recipient ID for typing indicator: $actualRecipientId');
+        Logger.error(
+            '📱 SessionChatProvider:  Invalid recipient ID for typing indicator: $actualRecipientId');
         return;
       }
 
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: 🔍 Sending typing indicator to: $actualRecipientId (isTyping: $isTyping)');
 
       // Check socket connection first
       if (!_socketService.isConnected) {
-        print(
-            '📱 SessionChatProvider: ⚠️ Socket not connected, cannot send typing indicator');
+        Logger.warning(
+            '📱 SessionChatProvider:  Socket not connected, cannot send typing indicator');
 
         // Try to test the connection
         final testResult = await _socketService.testSocketConnection();
         if (testResult) {
-          print(
-              '📱 SessionChatProvider: ✅ Socket connection test passed, retrying...');
+          Logger.success(
+              '📱 SessionChatProvider:  Socket connection test passed, retrying...');
         } else {
-          print('📱 SessionChatProvider: ❌ Socket connection test failed');
+          Logger.error(
+              '📱 SessionChatProvider:  Socket connection test failed');
           return;
         }
       }
@@ -639,8 +646,8 @@ class SessionChatProvider extends ChangeNotifier {
       // SIMPLIFIED: Just use the conversation ID directly
       final conversationId = _currentConversationId ?? 'unknown';
 
-      print(
-          '📱 SessionChatProvider: 🔍 Using conversation ID: $conversationId for typing indicator');
+      Logger.info(
+          '📱 SessionChatProvider:  Using conversation ID: $conversationId for typing indicator');
 
       // Send typing indicator via socket service
       _socketService.sendTyping(
@@ -649,11 +656,11 @@ class SessionChatProvider extends ChangeNotifier {
         isTyping,
       );
 
-      print(
-          '📱 SessionChatProvider: ✅ Typing indicator sent via socket: $actualRecipientId - $isTyping');
+      Logger.success(
+          '📱 SessionChatProvider:  Typing indicator sent via socket: $actualRecipientId - $isTyping');
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error sending typing indicator to $recipientId: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error sending typing indicator to $recipientId: $e');
     }
   }
 
@@ -706,11 +713,12 @@ class SessionChatProvider extends ChangeNotifier {
       //   conversationId: conversationId,
       // );
 
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: Message received via silent notification: $senderId');
       notifyListeners();
     } catch (e) {
-      print('📱 SessionChatProvider: Error handling message received: $e');
+      Logger.debug(
+          '📱 SessionChatProvider: Error handling message received: $e');
     }
   }
 
@@ -729,7 +737,7 @@ class SessionChatProvider extends ChangeNotifier {
       } else if (isTypingValue is String) {
         isTyping = isTypingValue == '1' || isTypingValue == 'true';
       } else {
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: Invalid isTyping value type: ${isTypingValue.runtimeType}');
         return;
       }
@@ -740,11 +748,12 @@ class SessionChatProvider extends ChangeNotifier {
         _typingUsers.remove(senderId);
       }
 
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: Typing indicator received via silent notification: $senderId - $isTyping');
       notifyListeners();
     } catch (e) {
-      print('📱 SessionChatProvider: Error handling typing indicator: $e');
+      Logger.debug(
+          '📱 SessionChatProvider: Error handling typing indicator: $e');
     }
   }
 
@@ -763,7 +772,7 @@ class SessionChatProvider extends ChangeNotifier {
       } else if (isOnlineValue is String) {
         isOnline = isOnlineValue == '1' || isOnlineValue == 'true';
       } else {
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: Invalid isOnline value type: ${isOnlineValue.runtimeType}');
         return;
       }
@@ -790,12 +799,13 @@ class SessionChatProvider extends ChangeNotifier {
           );
         }
 
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: Online status update received via silent notification: $senderId - $isOnline');
         notifyListeners();
       }
     } catch (e) {
-      print('📱 SessionChatProvider: Error handling online status update: $e');
+      Logger.debug(
+          '📱 SessionChatProvider: Error handling online status update: $e');
     }
   }
 
@@ -814,7 +824,7 @@ class SessionChatProvider extends ChangeNotifier {
       _messages.add(message);
       // CRITICAL: Sort messages by timestamp DESCENDING (newest first) for bottom-up display
       _messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: ✅ Message added to messages list: ${message.id} (conversationId: $effectiveChatId)');
 
       // CRITICAL: Trigger auto-scroll to bottom for new messages
@@ -826,24 +836,24 @@ class SessionChatProvider extends ChangeNotifier {
         // BUT ONLY if the recipient is actually online
         if (isRecipientOnline) {
           sendDeliveryReceiptToSender(message.id, message.senderId);
-          print(
+          Logger.debug(
               '📬 SessionChatProvider: ✅ Auto-sent delivery receipt for incoming message: ${message.id} (recipient online)');
         } else {
-          print(
-              '📬 SessionChatProvider: ⚠️ Not auto-sending delivery receipt - recipient is offline: $_currentRecipientId');
+          Logger.warning(
+              '📬 SessionChatProvider:  Not auto-sending delivery receipt - recipient is offline: $_currentRecipientId');
         }
 
         // CRITICAL FIX: Don't send immediate read receipts
         // According to SeChat API docs, read receipts should only be sent when user actually reads
         // The server will handle the proper receipt:read event flow
-        print(
-            '👁️ SessionChatProvider: ℹ️ Message added - read receipts will be sent via proper server flow');
+        Logger.info(
+            '👁️ SessionChatProvider:  Message added - read receipts will be sent via proper server flow');
       }
     } else {
-      print(
-          '📱 SessionChatProvider: ℹ️ Message not added to messages list - not current conversation and not own message');
-      print(
-          '📱 SessionChatProvider: ℹ️ Current conversation: $_currentConversationId, Message chat: $chatId, Is own message: $isOwnMessage');
+      Logger.info(
+          '📱 SessionChatProvider:  Message not added to messages list - not current conversation and not own message');
+      Logger.info(
+          '📱 SessionChatProvider:  Current conversation: $_currentConversationId, Message chat: $chatId, Is own message: $isOwnMessage');
     }
 
     // Update the chat's last message
@@ -855,9 +865,10 @@ class SessionChatProvider extends ChangeNotifier {
         lastMessage: _convertToMessageMap(message),
         updatedAt: message.timestamp,
       );
-      print('📱 SessionChatProvider: ✅ Updated existing chat: $chatId');
+      Logger.success('📱 SessionChatProvider:  Updated existing chat: $chatId');
     } else {
-      print('📱 SessionChatProvider: ℹ️ Chat not found for message: $chatId');
+      Logger.info(
+          '📱 SessionChatProvider:  Chat not found for message: $chatId');
     }
 
     // Notify listeners to update UI
@@ -866,8 +877,8 @@ class SessionChatProvider extends ChangeNotifier {
 
   // Update or create chat
   void _updateOrCreateChat(String conversationId, Message message) {
-    print(
-        '📱 SessionChatProvider: 🔍 Updating/creating chat for conversation: $conversationId');
+    Logger.info(
+        '📱 SessionChatProvider:  Updating/creating chat for conversation: $conversationId');
 
     // First try to find by conversation ID
     int existingChatIndex =
@@ -880,8 +891,8 @@ class SessionChatProvider extends ChangeNotifier {
           chat.user2Id == recipientId || chat.otherUser?['id'] == recipientId);
 
       if (existingChatIndex != -1) {
-        print(
-            '📱 SessionChatProvider: 🔍 Found existing chat by recipient ID: $recipientId');
+        Logger.info(
+            '📱 SessionChatProvider:  Found existing chat by recipient ID: $recipientId');
         // Update the existing chat's ID to match the new conversation ID
         final existingChat = _chats[existingChatIndex];
         _chats[existingChatIndex] = existingChat.copyWith(id: conversationId);
@@ -896,12 +907,13 @@ class SessionChatProvider extends ChangeNotifier {
         lastMessage: _convertToMessageMap(message),
         updatedAt: message.timestamp,
       );
-      print('📱 SessionChatProvider: ✅ Updated existing chat: $conversationId');
+      Logger.success(
+          '📱 SessionChatProvider:  Updated existing chat: $conversationId');
     } else {
       // Create new chat - extract recipient ID from conversation ID
       final recipientId = _extractRecipientIdFromConversationId(conversationId);
-      print(
-          '📱 SessionChatProvider: 🔍 Creating new chat for recipient: $recipientId');
+      Logger.info(
+          '📱 SessionChatProvider:  Creating new chat for recipient: $recipientId');
 
       final user = _chatUsers[recipientId] ??
           User(
@@ -930,7 +942,8 @@ class SessionChatProvider extends ChangeNotifier {
       );
 
       _chats.add(chat);
-      print('📱 SessionChatProvider: ✅ Created new chat: $conversationId');
+      Logger.success(
+          '📱 SessionChatProvider:  Created new chat: $conversationId');
     }
 
     // Notify listeners to update UI
@@ -972,7 +985,7 @@ class SessionChatProvider extends ChangeNotifier {
   // Mark message as read
   Future<void> markMessageAsRead(String messageId, String senderId) async {
     try {
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: 📊 Message marked as read: $messageId from $senderId');
 
       // Update local message status in storage
@@ -994,17 +1007,18 @@ class SessionChatProvider extends ChangeNotifier {
       if (isRecipientOnline) {
         final socketService = SeSocketService.instance;
         await socketService.sendReadReceipt(senderId, messageId);
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: ✅ Read receipt sent to sender: $messageId (recipient online)');
       } else {
-        print(
-            '📱 SessionChatProvider: ⚠️ Not sending read receipt - recipient is offline: $_currentRecipientId');
+        Logger.warning(
+            '📱 SessionChatProvider:  Not sending read receipt - recipient is offline: $_currentRecipientId');
       }
 
-      print(
-          '📱 SessionChatProvider: ✅ Message marked as read and status sent: $messageId');
+      Logger.success(
+          '📱 SessionChatProvider:  Message marked as read and status sent: $messageId');
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error marking message as read: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error marking message as read: $e');
     }
   }
 
@@ -1033,15 +1047,16 @@ class SessionChatProvider extends ChangeNotifier {
       if (currentUserId != null) {
         _currentConversationId =
             _generateConsistentConversationId(currentUserId, recipientId);
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: 🔧 Generated consistent conversation ID: $_currentConversationId');
-        print('📱 SessionChatProvider: 🔍 From widget: $conversationId');
-        print('📱 SessionChatProvider: 🔍 Generated: $_currentConversationId');
+        Logger.info('📱 SessionChatProvider:  From widget: $conversationId');
+        Logger.info(
+            '📱 SessionChatProvider:  Generated: $_currentConversationId');
       } else {
         // Fallback to widget conversation ID if no current user
         _currentConversationId = conversationId;
-        print(
-            '📱 SessionChatProvider: ⚠️ Using widget conversation ID as fallback: $_currentConversationId');
+        Logger.warning(
+            '📱 SessionChatProvider:  Using widget conversation ID as fallback: $_currentConversationId');
       }
 
       // Ensure conversation ID is always set and consistent
@@ -1064,19 +1079,19 @@ class SessionChatProvider extends ChangeNotifier {
 
       // Note: ChatListProvider registration will be handled by the ChatScreen
       // when it has access to the BuildContext
-      print(
-          '📱 SessionChatProvider: ℹ️ ChatListProvider registration will be handled by ChatScreen');
+      Logger.info(
+          '📱 SessionChatProvider:  ChatListProvider registration will be handled by ChatScreen');
 
       _isLoading = false;
       notifyListeners();
 
-      print(
-          '📱 SessionChatProvider: ✅ Initialized for conversation: $_currentConversationId');
+      Logger.success(
+          '📱 SessionChatProvider:  Initialized for conversation: $_currentConversationId');
     } catch (e) {
       _error = 'Failed to initialize chat: $e';
       _isLoading = false;
       notifyListeners();
-      print('📱 SessionChatProvider: ❌ Failed to initialize: $e');
+      Logger.error('📱 SessionChatProvider:  Failed to initialize: $e');
     }
   }
 
@@ -1090,26 +1105,26 @@ class SessionChatProvider extends ChangeNotifier {
   /// Load messages for a specific conversation
   Future<void> _loadMessagesForConversation(String conversationId) async {
     try {
-      print(
-          '📱 SessionChatProvider: 🔄 Loading messages for conversation: $conversationId');
+      Logger.info(
+          '📱 SessionChatProvider:  Loading messages for conversation: $conversationId');
 
       // Load messages from MessageStorageService
       final messageStorageService = MessageStorageService.instance;
       final loadedMessages =
           await messageStorageService.getMessages(conversationId, limit: 100);
 
-      print(
-          '📱 SessionChatProvider: 🔄 Loaded ${loadedMessages.length} messages from database');
+      Logger.info(
+          '📱 SessionChatProvider:  Loaded ${loadedMessages.length} messages from database');
 
       // Debug: Log the content of loaded messages
       for (final message in loadedMessages) {
-        print('📱 SessionChatProvider: 🔄 Loaded message: ${message.id}');
-        print(
+        Logger.info('📱 SessionChatProvider:  Loaded message: ${message.id}');
+        Logger.debug(
             '📱 SessionChatProvider: 🔄 Message content keys: ${message.content.keys.toList()}');
-        print(
-            '📱 SessionChatProvider: 🔄 Message text: ${message.content['text']}');
-        print(
-            '📱 SessionChatProvider: 🔄 Message encryptedText: ${message.content['encryptedText']}');
+        Logger.info(
+            '📱 SessionChatProvider:  Message text: ${message.content['text']}');
+        Logger.info(
+            '📱 SessionChatProvider:  Message encryptedText: ${message.content['encryptedText']}');
       }
 
       // Merge with existing messages to avoid duplicates
@@ -1118,8 +1133,8 @@ class SessionChatProvider extends ChangeNotifier {
           .where((m) => !existingMessageIds.contains(m.id))
           .toList();
 
-      print(
-          '📱 SessionChatProvider: 🔄 New messages to add: ${newMessages.length}');
+      Logger.info(
+          '📱 SessionChatProvider:  New messages to add: ${newMessages.length}');
 
       // Add new messages to existing list
       _messages.addAll(newMessages);
@@ -1127,19 +1142,19 @@ class SessionChatProvider extends ChangeNotifier {
       // CRITICAL: Sort messages by timestamp ASCENDING (oldest first) for natural chat flow
       _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: Loaded ${loadedMessages.length} messages for conversation: $conversationId');
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: Total messages in memory: ${_messages.length}');
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error loading messages: $e');
+      Logger.error('📱 SessionChatProvider:  Error loading messages: $e');
       // Don't clear existing messages on error
     }
   }
 
   /// Manually trigger message refresh (for testing)
   Future<void> manualRefreshMessages() async {
-    print('📱 SessionChatProvider: 🔄 Manual refresh triggered');
+    Logger.info('📱 SessionChatProvider:  Manual refresh triggered');
     await _refreshMessagesFromDatabase();
   }
 
@@ -1163,27 +1178,29 @@ class SessionChatProvider extends ChangeNotifier {
         // Note: We'll rely on the main.dart callback to update recipient status
         // when the ChatListProvider receives online status updates
         // The status will be updated via updateRecipientStatus() when presence updates arrive
-        print(
-            '📱 SessionChatProvider: ℹ️ Recipient status will be updated via socket callbacks');
+        Logger.info(
+            '📱 SessionChatProvider:  Recipient status will be updated via socket callbacks');
       } catch (e) {
-        print('📱 SessionChatProvider: ⚠️ ChatListProvider not available: $e');
+        Logger.warning(
+            '📱 SessionChatProvider:  ChatListProvider not available: $e');
       }
 
-      print('📱 SessionChatProvider: Loaded recipient data for: $recipientId');
+      Logger.debug(
+          '📱 SessionChatProvider: Loaded recipient data for: $recipientId');
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error loading recipient data: $e');
+      Logger.error('📱 SessionChatProvider:  Error loading recipient data: $e');
     }
   }
 
   /// Mark conversation as read
   Future<void> markAsRead() async {
     try {
-      print(
+      Logger.debug(
           '👁️ SessionChatProvider: 🔄 markAsRead() called for recipient: $_currentRecipientId');
-      print(
-          '👁️ SessionChatProvider: 🔍 Current conversation ID: $_currentConversationId');
-      print(
-          '👁️ SessionChatProvider: 🔍 Messages in memory: ${_messages.length}');
+      Logger.info(
+          '👁️ SessionChatProvider:  Current conversation ID: $_currentConversationId');
+      Logger.info(
+          '👁️ SessionChatProvider:  Messages in memory: ${_messages.length}');
 
       if (_currentRecipientId != null) {
         // Marking messages as read
@@ -1199,10 +1216,11 @@ class SessionChatProvider extends ChangeNotifier {
         }
 
         // Also mark messages currently in memory as read (for immediate UI update)
-        print('👁️ SessionChatProvider: ✅ Messages marked as read in database');
+        Logger.success(
+            '👁️ SessionChatProvider:  Messages marked as read in database');
 
-        print(
-            '📱 SessionChatProvider: ✅ Marking messages as read and sending read receipts');
+        Logger.success(
+            '📱 SessionChatProvider:  Marking messages as read and sending read receipts');
 
         // 🆕 FIXED: Send delivery receipts for messages sent BY others (bidirectional status updates)
         // This ensures the sender gets "delivered" status when we view their message
@@ -1218,8 +1236,8 @@ class SessionChatProvider extends ChangeNotifier {
             }
           }
         } else {
-          print(
-              '👁️ SessionChatProvider: ⚠️ Not sending delivery receipts - recipient is offline: $_currentRecipientId');
+          Logger.warning(
+              '👁️ SessionChatProvider:  Not sending delivery receipts - recipient is offline: $_currentRecipientId');
         }
 
         // 🆕 FIXED: Send read receipts for messages sent BY others (bidirectional status updates)
@@ -1235,12 +1253,12 @@ class SessionChatProvider extends ChangeNotifier {
             }
           }
         } else {
-          print(
-              '👁️ SessionChatProvider: ⚠️ Not sending read receipts - recipient is offline: $_currentRecipientId');
+          Logger.warning(
+              '👁️ SessionChatProvider:  Not sending read receipts - recipient is offline: $_currentRecipientId');
         }
 
-        print(
-            '👁️ SessionChatProvider: ✅ Read receipts sent for all unread messages');
+        Logger.success(
+            '👁️ SessionChatProvider:  Read receipts sent for all unread messages');
 
         // Update unread count
         _unreadCounts[_currentConversationId ?? ''] = 0;
@@ -1249,7 +1267,8 @@ class SessionChatProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error marking conversation as read: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error marking conversation as read: $e');
     }
   }
 
@@ -1259,10 +1278,10 @@ class SessionChatProvider extends ChangeNotifier {
       if (_currentConversationId != null) {
         await _loadMessagesForConversation(_currentConversationId!);
         notifyListeners();
-        print('📱 SessionChatProvider: ✅ Messages refreshed');
+        Logger.success('📱 SessionChatProvider:  Messages refreshed');
       }
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error refreshing messages: $e');
+      Logger.error('📱 SessionChatProvider:  Error refreshing messages: $e');
     }
   }
 
@@ -1273,14 +1292,15 @@ class SessionChatProvider extends ChangeNotifier {
         _isRecipientOnline = isOnline;
         _recipientLastSeen = lastSeen;
 
-        print(
-            '📱 SessionChatProvider: ✅ Recipient presence updated: online=$isOnline, lastSeen=$lastSeen');
+        Logger.success(
+            '📱 SessionChatProvider:  Recipient presence updated: online=$isOnline, lastSeen=$lastSeen');
 
         // Notify listeners to update UI
         notifyListeners();
       }
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error updating recipient presence: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error updating recipient presence: $e');
     }
   }
 
@@ -1295,11 +1315,11 @@ class SessionChatProvider extends ChangeNotifier {
       if (_currentRecipientId != null && _currentRecipientId != currentUserId) {
         // Send typing indicator to other user via socket
         await sendTypingIndicator(_currentRecipientId!, isTyping);
-        print(
-            '📱 SessionChatProvider: ✅ Typing indicator sent to recipient: $_currentRecipientId');
+        Logger.success(
+            '📱 SessionChatProvider:  Typing indicator sent to recipient: $_currentRecipientId');
       } else {
-        print(
-            '📱 SessionChatProvider: ⚠️ No valid recipient for typing indicator');
+        Logger.warning(
+            '📱 SessionChatProvider:  No valid recipient for typing indicator');
       }
 
       // DON'T update _isRecipientTyping here - that should only be updated
@@ -1308,9 +1328,10 @@ class SessionChatProvider extends ChangeNotifier {
 
       // Only notify listeners for UI updates (like input field state)
       notifyListeners();
-      print('📱 SessionChatProvider: Typing indicator sent: $isTyping');
+      Logger.debug('📱 SessionChatProvider: Typing indicator sent: $isTyping');
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error updating typing indicator: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error updating typing indicator: $e');
     }
   }
 
@@ -1324,19 +1345,19 @@ class SessionChatProvider extends ChangeNotifier {
         final contactService = ContactService.instance;
         final contact = contactService.getContact(userId);
         if (contact != null) {
-          print(
-              '📱 SessionChatProvider: ✅ Using ContactService presence for $userId: ${contact.isOnline}');
+          Logger.success(
+              '📱 SessionChatProvider:  Using ContactService presence for $userId: ${contact.isOnline}');
           return contact.isOnline;
         }
       } catch (e) {
-        print(
-            '📱 SessionChatProvider: ⚠️ ContactService not available, falling back: $e');
+        Logger.warning(
+            '📱 SessionChatProvider:  ContactService not available, falling back: $e');
       }
 
       // Method 1: Check if this is the current recipient and we have their status
       if (userId == _currentRecipientId) {
         if (isRecipientOnline) {
-          print(
+          Logger.debug(
               '📱 SessionChatProvider: ✅ Current recipient $userId is online (from ContactService)');
           return true;
         }
@@ -1345,7 +1366,7 @@ class SessionChatProvider extends ChangeNotifier {
               DateTime.now().difference(_recipientLastSeen!);
           // Consider user online if last seen within last 5 minutes
           if (timeSinceLastSeen.inMinutes < 5) {
-            print(
+            Logger.debug(
                 '📱 SessionChatProvider: ✅ Current recipient $userId recently active (lastSeen: $_recipientLastSeen)');
             return true;
           }
@@ -1358,21 +1379,22 @@ class SessionChatProvider extends ChangeNotifier {
         // If we have an active socket connection, assume the user might be online
         // This is a fallback method
         if (socketService.isConnected) {
-          print(
+          Logger.debug(
               '📱 SessionChatProvider: ℹ️ User $userId status unknown, socket connected (assuming online)');
           return true;
         }
       } catch (e) {
-        print('📱 SessionChatProvider: ⚠️ Socket service check failed: $e');
+        Logger.warning(
+            '📱 SessionChatProvider:  Socket service check failed: $e');
       }
 
       // Default: Assume offline if no presence information available
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: ℹ️ User $userId assumed offline (no presence data)');
       return false;
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error checking online status for user $userId: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error checking online status for user $userId: $e');
       return false; // Assume offline on error
     }
   }
@@ -1389,8 +1411,8 @@ class SessionChatProvider extends ChangeNotifier {
 
       // CRITICAL: Prevent status downgrades - status can only progress forward
       if (!_isStatusProgressionValid(currentStatus, newStatus)) {
-        print(
-            '📱 SessionChatProvider: ❌ Status downgrade blocked: $currentStatus -> $newStatus for message: $messageId');
+        Logger.error(
+            '📱 SessionChatProvider:  Status downgrade blocked: $currentStatus -> $newStatus for message: $messageId');
         return false;
       }
 
@@ -1400,29 +1422,29 @@ class SessionChatProvider extends ChangeNotifier {
         // Local status changes are NOT allowed for sent messages
         if (newStatus == MessageStatus.delivered) {
           // Only allow "delivered" status when we receive a proper receipt from recipient
-          print(
+          Logger.debug(
               '📱 SessionChatProvider: ✅ Valid delivery status update for message: $messageId (sent by us, from socket)');
           return true;
         } else if (newStatus == MessageStatus.read) {
           // Only allow "read" status when we receive a proper read receipt from recipient
-          print(
+          Logger.debug(
               '📱 SessionChatProvider: ✅ Valid read status update for message: $messageId (sent by us, from socket)');
           return true;
         } else if (newStatus == MessageStatus.sent) {
           // Allow "sent" status from server acknowledgment
-          print(
+          Logger.debug(
               '📱 SessionChatProvider: ✅ Valid sent status update for message: $messageId (sent by us, from server)');
           return true;
         } else {
           // Block any other status updates for messages sent by us
-          print(
+          Logger.debug(
               '📱 SessionChatProvider: ❌ Invalid status update for message: $messageId (sent by us, status: $newStatus)');
           return false;
         }
       } else if (currentUserId != null &&
           message.recipientId == currentUserId) {
         // This is a message sent TO us - we can update status locally
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: ✅ Valid status update for message: $messageId (sent to us)');
         return true;
       }
@@ -1430,8 +1452,8 @@ class SessionChatProvider extends ChangeNotifier {
       // Default: allow status updates for unknown message ownership
       return true;
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error validating message status update: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error validating message status update: $e');
       return false;
     }
   }
@@ -1468,8 +1490,8 @@ class SessionChatProvider extends ChangeNotifier {
     try {
       // 🆕 ADD THIS: Check if recipient is actually online before sending delivery receipt
       if (!isRecipientOnline) {
-        print(
-            '📬 SessionChatProvider: ⚠️ Not sending delivery receipt - recipient is offline: $_currentRecipientId');
+        Logger.warning(
+            '📬 SessionChatProvider:  Not sending delivery receipt - recipient is offline: $_currentRecipientId');
         return; // Don't send delivery receipt if recipient is offline
       }
 
@@ -1483,11 +1505,11 @@ class SessionChatProvider extends ChangeNotifier {
             _currentConversationId, // ✅ Pass the actual conversation ID
       );
 
-      print(
+      Logger.debug(
           '📬 SessionChatProvider: ✅ Delivery receipt sent to sender: $senderId for message: $messageId (conversationId: $_currentConversationId)');
     } catch (e) {
-      print(
-          '📬 SessionChatProvider: ❌ Failed to send delivery receipt to sender: $e');
+      Logger.error(
+          '📬 SessionChatProvider:  Failed to send delivery receipt to sender: $e');
     }
   }
 
@@ -1496,21 +1518,21 @@ class SessionChatProvider extends ChangeNotifier {
   Future<void> sendReadReceiptToSender(
       String messageId, String senderId) async {
     try {
-      print(
-          '👁️ SessionChatProvider: 🔄 Attempting to send read receipt for message: $messageId to sender: $senderId');
+      Logger.info(
+          '👁️ SessionChatProvider:  Attempting to send read receipt for message: $messageId to sender: $senderId');
 
       // 🆕 CRITICAL: Validate that we're not sending read receipt to ourselves
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId != null && senderId == currentUserId) {
-        print(
-            '👁️ SessionChatProvider: ❌ Cannot send read receipt to self: $senderId');
+        Logger.error(
+            '👁️ SessionChatProvider:  Cannot send read receipt to self: $senderId');
         return;
       }
 
       // 🆕 ADD THIS: Check if recipient is actually online before sending read receipt
       if (!isRecipientOnline) {
-        print(
-            '👁️ SessionChatProvider: ⚠️ Not sending read receipt - recipient is offline: $_currentRecipientId');
+        Logger.warning(
+            '👁️ SessionChatProvider:  Not sending read receipt - recipient is offline: $_currentRecipientId');
         return; // Don't send read receipt if recipient is offline
       }
 
@@ -1519,21 +1541,22 @@ class SessionChatProvider extends ChangeNotifier {
       // Send read receipt to the sender
       await socketService.sendReadReceipt(senderId, messageId);
 
-      print(
-          '👁️ SessionChatProvider: ✅ Read receipt sent to sender: $senderId for message: $messageId');
+      Logger.success(
+          '👁️ SessionChatProvider:  Read receipt sent to sender: $senderId for message: $messageId');
     } catch (e) {
-      print(
-          '👁️ SessionChatProvider: ❌ Failed to send read receipt to sender: $e');
+      Logger.error(
+          '👁️ SessionChatProvider:  Failed to send read receipt to sender: $e');
     }
   }
 
   /// Send text message
   Future<void> sendTextMessage(String content) async {
-    print('📱 SessionChatProvider: 🔧 sendTextMessage called with: "$content"');
-    print(
-        '📱 SessionChatProvider: 🔍 _currentRecipientId: $_currentRecipientId');
-    print(
-        '📱 SessionChatProvider: 🔍 _currentConversationId: $_currentConversationId');
+    Logger.debug(
+        '📱 SessionChatProvider: 🔧 sendTextMessage called with: "$content"');
+    Logger.info(
+        '📱 SessionChatProvider:  _currentRecipientId: $_currentRecipientId');
+    Logger.info(
+        '📱 SessionChatProvider:  _currentConversationId: $_currentConversationId');
 
     try {
       _isLoading = true;
@@ -1545,15 +1568,15 @@ class SessionChatProvider extends ChangeNotifier {
 
       // Validate content
       if (content.trim().isEmpty) {
-        print('📱 SessionChatProvider: ❌ Message content is empty');
+        Logger.error('📱 SessionChatProvider:  Message content is empty');
         throw Exception('Message content cannot be empty');
       }
 
       final recipientId = _currentRecipientId!;
-      print('📱 SessionChatProvider: 🔍 Using recipientId: $recipientId');
+      Logger.info('📱 SessionChatProvider:  Using recipientId: $recipientId');
 
-      print(
-          '📱 SessionChatProvider: 🚀 Sending text message to $recipientId in conversation $_currentConversationId');
+      Logger.info(
+          '📱 SessionChatProvider:  Sending text message to $recipientId in conversation $_currentConversationId');
 
       // Generate message ID
       final messageId =
@@ -1579,33 +1602,34 @@ class SessionChatProvider extends ChangeNotifier {
       try {
         _updateChatListWithMessage(recipientId, content, messageId);
       } catch (e) {
-        print('📱 SessionChatProvider: ⚠️ Error updating chat list: $e');
+        Logger.warning('📱 SessionChatProvider:  Error updating chat list: $e');
       }
 
       // Check socket connection before sending
       if (!_socketService.isConnected) {
-        print(
-            '📱 SessionChatProvider: ⚠️ Socket not connected, attempting to reconnect...');
+        Logger.warning(
+            '📱 SessionChatProvider:  Socket not connected, attempting to reconnect...');
 
         // Try to test the connection first
         final testResult = await _socketService.testSocketConnection();
         if (testResult) {
-          print(
-              '📱 SessionChatProvider: ✅ Socket connection test passed, retrying...');
+          Logger.success(
+              '📱 SessionChatProvider:  Socket connection test passed, retrying...');
         } else {
-          print('📱 SessionChatProvider: ❌ Socket connection test failed');
+          Logger.error(
+              '📱 SessionChatProvider:  Socket connection test failed');
           throw Exception(
               'Socket not connected. Please check your internet connection and try again.');
         }
       }
 
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: 🔧 Calling _messageService.sendMessage...');
-      print('📱 SessionChatProvider: 🔍 messageId: $messageId');
-      print('📱 SessionChatProvider: 🔍 recipientId: $recipientId');
-      print('📱 SessionChatProvider: 🔍 body: $content');
-      print(
-          '📱 SessionChatProvider: 🔍 conversationId: $_currentConversationId');
+      Logger.info('📱 SessionChatProvider:  messageId: $messageId');
+      Logger.info('📱 SessionChatProvider:  recipientId: $recipientId');
+      Logger.info('📱 SessionChatProvider:  body: $content');
+      Logger.info(
+          '📱 SessionChatProvider:  conversationId: $_currentConversationId');
 
       // Send message via unified message service (API-compliant)
       final sendResult = await _messageService.sendMessage(
@@ -1616,11 +1640,11 @@ class SessionChatProvider extends ChangeNotifier {
             _currentConversationId!, // Use the consistent conversation ID
       );
 
-      print('📱 SessionChatProvider: 🔍 sendResult: $sendResult');
+      Logger.info('📱 SessionChatProvider:  sendResult: $sendResult');
 
       if (sendResult.success) {
-        print(
-            '📱 SessionChatProvider: ✅ Message sent successfully with conversation ID: $_currentConversationId');
+        Logger.success(
+            '📱 SessionChatProvider:  Message sent successfully with conversation ID: $_currentConversationId');
 
         // Update message status to 'sent' after successful send
         final messageIndex = _messages.indexWhere((msg) => msg.id == messageId);
@@ -1634,18 +1658,18 @@ class SessionChatProvider extends ChangeNotifier {
           await messageStorageService.updateMessageStatus(
               messageId, MessageStatus.sent);
 
-          print(
-              '📱 SessionChatProvider: ✅ Message status updated to sent: $messageId');
+          Logger.success(
+              '📱 SessionChatProvider:  Message status updated to sent: $messageId');
           notifyListeners(); // Update UI immediately
         }
 
         // Note: Chat list update will be handled by the ChatScreen
         // when it has access to the BuildContext
-        print(
-            '📱 SessionChatProvider: ℹ️ Chat list update will be handled by ChatScreen');
+        Logger.info(
+            '📱 SessionChatProvider:  Chat list update will be handled by ChatScreen');
       } else {
-        print(
-            '📱 SessionChatProvider: ❌ Message send failed: ${sendResult.error}');
+        Logger.error(
+            '📱 SessionChatProvider:  Message send failed: ${sendResult.error}');
         throw Exception('Message send failed: ${sendResult.error}');
       }
 
@@ -1653,15 +1677,16 @@ class SessionChatProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Exception caught in sendTextMessage: $e');
-      print('📱 SessionChatProvider: 🔍 Exception type: ${e.runtimeType}');
-      print('📱 SessionChatProvider: 🔍 Stack trace: ${StackTrace.current}');
+      Logger.error(
+          '📱 SessionChatProvider:  Exception caught in sendTextMessage: $e');
+      Logger.info('📱 SessionChatProvider:  Exception type: ${e.runtimeType}');
+      Logger.info(
+          '📱 SessionChatProvider:  Stack trace: ${StackTrace.current}');
 
       _error = 'Failed to send message: $e';
       _isLoading = false;
       notifyListeners();
-      print('📱 SessionChatProvider: ❌ Failed to send message: $e');
+      Logger.error('📱 SessionChatProvider:  Failed to send message: $e');
       rethrow;
     }
   }
@@ -1681,8 +1706,8 @@ class SessionChatProvider extends ChangeNotifier {
           lastMessage: {'text': content, 'id': messageId},
           lastMessageAt: DateTime.now(),
         );
-        print(
-            '📱 SessionChatProvider: ✅ Updated existing chat with new message');
+        Logger.success(
+            '📱 SessionChatProvider:  Updated existing chat with new message');
       } else {
         // Create new chat
         final currentUserId = SeSessionService().currentSessionId ?? 'unknown';
@@ -1703,13 +1728,13 @@ class SessionChatProvider extends ChangeNotifier {
           lastMessageAt: DateTime.now(),
         );
         _chats.add(newChat);
-        print('📱 SessionChatProvider: ✅ Added new chat to chat list');
+        Logger.success('📱 SessionChatProvider:  Added new chat to chat list');
       }
 
       // Notify listeners to update UI
       notifyListeners();
     } catch (e) {
-      print('📱 SessionChatProvider: ⚠️ Error updating chat list: $e');
+      Logger.warning('📱 SessionChatProvider:  Error updating chat list: $e');
     }
   }
 
@@ -1723,10 +1748,11 @@ class SessionChatProvider extends ChangeNotifier {
   Future<void> toggleMuteNotifications() async {
     try {
       // For now, just log the action. In a real implementation, this would update conversation settings
-      print('📱 SessionChatProvider: Toggle mute notifications called');
+      Logger.debug('📱 SessionChatProvider: Toggle mute notifications called');
       // TODO: Implement actual mute functionality
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error toggling mute notifications: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error toggling mute notifications: $e');
     }
   }
 
@@ -1735,36 +1761,38 @@ class SessionChatProvider extends ChangeNotifier {
     try {
       // Check if already initialized
       if (_typingService != null) {
-        print('📱 SessionChatProvider: ℹ️ Typing service already initialized');
+        Logger.info(
+            '📱 SessionChatProvider:  Typing service already initialized');
         return;
       }
 
-      print('📱 SessionChatProvider: 🔧 Setting up realtime typing service...');
+      Logger.debug(
+          '📱 SessionChatProvider: 🔧 Setting up realtime typing service...');
 
       // Initialize typing service
       _typingService = RealtimeServiceManager().typing;
-      print(
+      Logger.debug(
           '📱 SessionChatProvider: 🔧 Typing service instance: ${_typingService != null}');
 
       // Listen for typing updates from peers
       _typingService!.typingStream.listen((update) {
-        print(
-            '📱 SessionChatProvider: 🔔 Typing update from realtime service: ${update.source} -> ${update.isTyping} in conversation ${update.conversationId}');
-        print(
-            '📱 SessionChatProvider: 🔍 Current conversation ID: $_currentConversationId');
+        Logger.debug(
+            '📱 SessionChatProvider:  Typing update from realtime service: ${update.source} -> ${update.isTyping} in conversation ${update.conversationId}');
+        Logger.info(
+            '📱 SessionChatProvider:  Current conversation ID: $_currentConversationId');
 
         // Handle typing updates from peers (server/other users)
         if (update.source == 'peer' || update.source == 'server') {
           if (update.conversationId == _currentConversationId) {
             _isRecipientTyping = update.isTyping;
-            print(
-                '📱 SessionChatProvider: ✅ Updating recipient typing state: $_isRecipientTyping');
+            Logger.success(
+                '📱 SessionChatProvider:  Updating recipient typing state: $_isRecipientTyping');
             notifyListeners();
-            print(
-                '📱 SessionChatProvider: ✅ Typing indicator updated via realtime service: ${update.isTyping}');
+            Logger.success(
+                '📱 SessionChatProvider:  Typing indicator updated via realtime service: ${update.isTyping}');
           } else {
-            print(
-                '📱 SessionChatProvider: ℹ️ Typing update for different conversation: ${update.conversationId} vs $_currentConversationId');
+            Logger.info(
+                '📱 SessionChatProvider:  Typing update for different conversation: ${update.conversationId} vs $_currentConversationId');
           }
         }
         // Handle local typing updates (for UI consistency)
@@ -1772,33 +1800,35 @@ class SessionChatProvider extends ChangeNotifier {
           if (update.conversationId == _currentConversationId) {
             // Local typing updates are handled by the socket callback
             // This is just for logging and debugging
-            print(
-                '📱 SessionChatProvider: ℹ️ Local typing update received: ${update.isTyping}');
+            Logger.info(
+                '📱 SessionChatProvider:  Local typing update received: ${update.isTyping}');
           }
         }
       });
 
-      print('📱 SessionChatProvider: ✅ Typing service set up successfully');
+      Logger.success(
+          '📱 SessionChatProvider:  Typing service set up successfully');
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Failed to set up typing service: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Failed to set up typing service: $e');
     }
   }
 
   /// Setup socket callbacks for message status updates
   void _setupSocketCallbacks() {
     try {
-      print('📱 SessionChatProvider: 🔧 Setting up socket callbacks...');
+      Logger.debug('📱 SessionChatProvider: 🔧 Setting up socket callbacks...');
 
       // Set up message acknowledgment callback
       _socketService.setOnMessageAcked((messageId) {
-        print(
-            '📱 SessionChatProvider: ✅ Message acknowledged by server: $messageId');
+        Logger.success(
+            '📱 SessionChatProvider:  Message acknowledged by server: $messageId');
 
         // CRITICAL FIX: Don't update status locally on acknowledgment
         // According to SeChat API docs, we should only update status on receipt events
         // The server will send receipt:delivered and receipt:read events for status updates
-        print(
-            '📱 SessionChatProvider: ℹ️ Message acknowledged - waiting for receipt events for status updates');
+        Logger.info(
+            '📱 SessionChatProvider:  Message acknowledged - waiting for receipt events for status updates');
       });
 
       // NOTE: Message received callback is handled by main.dart to avoid conflicts
@@ -1814,9 +1844,11 @@ class SessionChatProvider extends ChangeNotifier {
         }
       });
 
-      print('📱 SessionChatProvider: ✅ Socket callbacks set up successfully');
+      Logger.success(
+          '📱 SessionChatProvider:  Socket callbacks set up successfully');
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Failed to set up socket callbacks: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Failed to set up socket callbacks: $e');
     }
   }
 
@@ -1849,13 +1881,14 @@ class SessionChatProvider extends ChangeNotifier {
   /// Test method to manually trigger typing indicator for debugging
   void testTypingIndicator(bool isTyping) {
     try {
-      print('📱 SessionChatProvider: 🧪 Testing typing indicator: $isTyping');
-      print(
-          '📱 SessionChatProvider: 🔍 Current recipient ID: $_currentRecipientId');
-      print(
-          '📱 SessionChatProvider: 🔍 Current conversation ID: $_currentConversationId');
-      print(
-          '📱 SessionChatProvider: 🔍 Typing service available: ${_typingService != null}');
+      Logger.debug(
+          '📱 SessionChatProvider: 🧪 Testing typing indicator: $isTyping');
+      Logger.info(
+          '📱 SessionChatProvider:  Current recipient ID: $_currentRecipientId');
+      Logger.info(
+          '📱 SessionChatProvider:  Current conversation ID: $_currentConversationId');
+      Logger.info(
+          '📱 SessionChatProvider:  Typing service available: ${_typingService != null}');
 
       if (_typingService != null &&
           _currentConversationId != null &&
@@ -1866,14 +1899,15 @@ class SessionChatProvider extends ChangeNotifier {
         } else {
           _typingService!.stopTyping(_currentConversationId!);
         }
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: 🧪 Test typing indicator sent: $isTyping');
       } else {
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: 🧪 Cannot test typing indicator - missing dependencies');
       }
     } catch (e) {
-      print('📱 SessionChatProvider: 🧪 Error testing typing indicator: $e');
+      Logger.debug(
+          '📱 SessionChatProvider: 🧪 Error testing typing indicator: $e');
     }
   }
 
@@ -1881,10 +1915,11 @@ class SessionChatProvider extends ChangeNotifier {
   void sendPresenceUpdate(bool isOnline, List<String> toUserIds) {
     try {
       _socketService.sendPresence(isOnline, toUserIds);
-      print(
-          '📱 SessionChatProvider: ✅ Presence update sent: ${isOnline ? 'online' : 'offline'} to ${toUserIds.length} users');
+      Logger.success(
+          '📱 SessionChatProvider:  Presence update sent: ${isOnline ? 'online' : 'offline'} to ${toUserIds.length} users');
     } catch (e) {
-      print('📱 SessionChatProvider: ❌ Error sending presence update: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error sending presence update: $e');
     }
   }
 
@@ -1898,14 +1933,14 @@ class SessionChatProvider extends ChangeNotifier {
   /// Register this provider with ChatListProvider for real-time updates
   void registerWithChatListProvider(ChatListProvider chatListProvider) {
     chatListProvider.setActiveSessionChatProvider(this);
-    print(
-        '📱 SessionChatProvider: ✅ Registered with ChatListProvider for real-time updates');
+    Logger.success(
+        '📱 SessionChatProvider:  Registered with ChatListProvider for real-time updates');
   }
 
   /// Unregister this provider from ChatListProvider
   void unregisterFromChatListProvider(ChatListProvider chatListProvider) {
     chatListProvider.setActiveSessionChatProvider(null);
-    print('📱 SessionChatProvider: ❌ Unregistered from ChatListProvider');
+    Logger.error('📱 SessionChatProvider:  Unregistered from ChatListProvider');
   }
 
   /// Get current conversation ID for external use
@@ -1917,26 +1952,26 @@ class SessionChatProvider extends ChangeNotifier {
   /// Mark that user has entered the chat screen
   void markUserEnteredChatScreen() {
     _isUserOnChatScreen = true;
-    print(
-        '📱 SessionChatProvider: ✅ User entered chat screen for conversation: $_currentConversationId');
+    Logger.success(
+        '📱 SessionChatProvider:  User entered chat screen for conversation: $_currentConversationId');
   }
 
   /// Mark that user has left the chat screen
   void markUserLeftChatScreen() {
     _isUserOnChatScreen = false;
-    print(
-        '📱 SessionChatProvider: ❌ User left chat screen for conversation: $_currentConversationId');
+    Logger.error(
+        '📱 SessionChatProvider:  User left chat screen for conversation: $_currentConversationId');
   }
 
   /// Handle real-time message status updates (called from ChatListProvider)
   Future<void> handleMessageStatusUpdate(MessageStatusUpdate update) async {
     try {
-      print(
-          '📱 SessionChatProvider: 🔄 Processing status update: ${update.messageId} -> ${update.status}');
-      print(
-          '📱 SessionChatProvider: 🔍 Current messages in memory: ${_messages.length}');
-      print(
-          '📱 SessionChatProvider: 🔍 Looking for message: ${update.messageId}');
+      Logger.info(
+          '📱 SessionChatProvider:  Processing status update: ${update.messageId} -> ${update.status}');
+      Logger.info(
+          '📱 SessionChatProvider:  Current messages in memory: ${_messages.length}');
+      Logger.info(
+          '📱 SessionChatProvider:  Looking for message: ${update.messageId}');
 
       // Process message status update
 
@@ -1945,19 +1980,19 @@ class SessionChatProvider extends ChangeNotifier {
           _messages.indexWhere((msg) => msg.id == update.messageId);
 
       if (messageIndex != -1) {
-        print(
-            '📱 SessionChatProvider: ✅ Message found at index: $messageIndex');
-        print(
-            '📱 SessionChatProvider: 🔍 Current status: ${_messages[messageIndex].status}');
+        Logger.success(
+            '📱 SessionChatProvider:  Message found at index: $messageIndex');
+        Logger.info(
+            '📱 SessionChatProvider:  Current status: ${_messages[messageIndex].status}');
 
         // CRITICAL: Validate the status update before applying it
         final newStatus = _convertDeliveryStatusToMessageStatus(update.status);
-        print(
-            '📱 SessionChatProvider: 🔍 Converting status: ${update.status} -> $newStatus');
+        Logger.info(
+            '📱 SessionChatProvider:  Converting status: ${update.status} -> $newStatus');
 
         if (!_validateMessageStatusUpdate(update.messageId, newStatus)) {
-          print(
-              '📱 SessionChatProvider: ⚠️ Status update validation failed for message: ${update.messageId} -> ${update.status}');
+          Logger.warning(
+              '📱 SessionChatProvider:  Status update validation failed for message: ${update.messageId} -> ${update.status}');
           return;
         }
 
@@ -1966,10 +2001,10 @@ class SessionChatProvider extends ChangeNotifier {
         _messages[messageIndex] = _messages[messageIndex].copyWith(
           status: newStatus,
         );
-        print(
-            '📱 SessionChatProvider: ✅ Message status updated in memory: $oldStatus -> $newStatus');
-        print(
-            '📱 SessionChatProvider: 🔍 Message status after update: ${_messages[messageIndex].status}');
+        Logger.success(
+            '📱 SessionChatProvider:  Message status updated in memory: $oldStatus -> $newStatus');
+        Logger.info(
+            '📱 SessionChatProvider:  Message status after update: ${_messages[messageIndex].status}');
 
         // Update the message status in the database
         final messageStorageService = MessageStorageService.instance;
@@ -1977,26 +2012,26 @@ class SessionChatProvider extends ChangeNotifier {
           update.messageId,
           newStatus,
         );
-        print(
-            '📱 SessionChatProvider: ✅ Message status updated in database: $newStatus');
+        Logger.success(
+            '📱 SessionChatProvider:  Message status updated in database: $newStatus');
 
         // Status updated successfully
 
         // Notify listeners to update the UI immediately
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: 🔔 Calling notifyListeners() to update UI');
         notifyListeners();
-        print(
+        Logger.debug(
             '📱 SessionChatProvider: ✅ notifyListeners() called successfully');
       } else {
-        print(
-            '📱 SessionChatProvider: ⚠️ Message not found in memory: ${update.messageId}');
-        print(
+        Logger.warning(
+            '📱 SessionChatProvider:  Message not found in memory: ${update.messageId}');
+        Logger.debug(
             '📱 SessionChatProvider: 🔍 Available message IDs: ${_messages.map((m) => m.id).toList()}');
       }
     } catch (e) {
-      print(
-          '📱 SessionChatProvider: ❌ Error handling message status update: $e');
+      Logger.error(
+          '📱 SessionChatProvider:  Error handling message status update: $e');
     }
   }
 

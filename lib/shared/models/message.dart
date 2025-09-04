@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '/../core/utils/logger.dart';
 
 enum MessageType { text, image, voice, file }
 
@@ -104,7 +105,7 @@ class Message {
         encryptionVersion: data['encryption_version'],
       );
     } catch (e) {
-      print('📱 Message.fromJson error: $e for data: $json');
+      Logger.debug('📱 Message.fromJson error: $e for data: $json');
       // Return a default message with available data
       return Message(
         id: json['id']?.toString() ??

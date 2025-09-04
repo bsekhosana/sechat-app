@@ -7,6 +7,7 @@ import '../providers/chat_list_provider.dart';
 import '../providers/session_chat_provider.dart';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/contact_service.dart';
+import '/../core/utils/logger.dart';
 
 /// Widget for displaying a single chat conversation item in the list
 class ChatListItem extends StatefulWidget {
@@ -76,7 +77,7 @@ class _ChatListItemState extends State<ChatListItem> {
         });
       }
     } catch (e) {
-      print('📱 ChatListItem: ❌ Error loading latest message: $e');
+      Logger.error('📱 ChatListItem:  Error loading latest message: $e');
       if (mounted) {
         setState(() {
           _isLoadingMessage = false;
@@ -127,20 +128,20 @@ class _ChatListItemState extends State<ChatListItem> {
         // Get real-time presence information from ContactService
         final otherParticipantId =
             widget.conversation.getOtherParticipantId(currentUserId);
-        print(
-            '🔍 ChatListItem: Other participant ID: $otherParticipantId for conversation: ${widget.conversation.id}');
+        Logger.info(
+            ' ChatListItem: Other participant ID: $otherParticipantId for conversation: ${widget.conversation.id}');
 
         final contact = otherParticipantId != null
             ? contactService.getContact(otherParticipantId)
             : null;
-        print(
-            '🔍 ChatListItem: Contact found: ${contact != null ? '${contact!.sessionId}:${contact.isOnline}' : 'null'}');
+        Logger.info(
+            ' ChatListItem: Contact found: ${contact != null ? '${contact!.sessionId}:${contact.isOnline}' : 'null'}');
 
         // 🆕 FIXED: Use real-time online status from ChatListProvider instead of static data
         final isOnline =
             provider.getRecipientOnlineStatus(otherParticipantId ?? '');
         final lastSeen = contact?.lastSeen ?? widget.conversation.lastSeen;
-        print(
+        Logger.debug(
             '🔍 ChatListItem: Final presence: isOnline=$isOnline (real-time from provider, contact: ${contact?.isOnline}, conversation: ${widget.conversation.isOnline})');
 
         return Container(
@@ -393,7 +394,7 @@ class _ChatListItemState extends State<ChatListItem> {
       final sessionService = SeSessionService();
       return sessionService.currentSessionId ?? 'unknown_user';
     } catch (e) {
-      print('ChatListItem: ❌ Error getting current user ID: $e');
+      Logger.error('ChatListItem:  Error getting current user ID: $e');
       return 'unknown_user';
     }
   }
@@ -459,17 +460,17 @@ class _ChatListItemState extends State<ChatListItem> {
                 targetMessage.senderId == currentUserId) {
               latestMessage = targetMessage;
               messageStatus = targetMessage.status;
-              print(
-                  '🔍 ChatListItem: Found target message from current user in SessionChatProvider: ${targetMessage.id}, status: ${targetMessage.status}');
+              Logger.info(
+                  ' ChatListItem: Found target message from current user in SessionChatProvider: ${targetMessage.id}, status: ${targetMessage.status}');
             } else {
-              print(
-                  '🔍 ChatListItem: Target message not found or not from current user: $messageId');
+              Logger.info(
+                  ' ChatListItem: Target message not found or not from current user: $messageId');
             }
           }
         } else {
           // If we're not in this conversation, don't use SessionChatProvider data
           // This prevents showing status for messages from other conversations
-          print(
+          Logger.debug(
               '🔍 ChatListItem: Not in this conversation (${widget.conversation.id}), using database fallback');
         }
 
@@ -483,15 +484,15 @@ class _ChatListItemState extends State<ChatListItem> {
 
                 // Only show status for messages sent by current user
                 if (message.senderId == currentUserId) {
-                  print(
-                      '🔍 ChatListItem: Showing status for message from current user: ${message.id}, status: ${message.status}');
+                  Logger.info(
+                      ' ChatListItem: Showing status for message from current user: ${message.id}, status: ${message.status}');
                   return Container(
                     margin: const EdgeInsets.only(left: 4),
                     child: _buildStatusIcon(message.status),
                   );
                 } else {
-                  print(
-                      '🔍 ChatListItem: Not showing status - message not from current user: ${message.senderId} != $currentUserId');
+                  Logger.info(
+                      ' ChatListItem: Not showing status - message not from current user: ${message.senderId} != $currentUserId');
                 }
               }
 
@@ -503,8 +504,8 @@ class _ChatListItemState extends State<ChatListItem> {
 
         // If we found a message from current user in SessionChatProvider, show its status
         if (messageStatus != null) {
-          print(
-              '🔍 ChatListItem: Showing status for message from current user: ${latestMessage!.id}, status: $messageStatus');
+          Logger.info(
+              ' ChatListItem: Showing status for message from current user: ${latestMessage!.id}, status: $messageStatus');
           return Container(
             margin: const EdgeInsets.only(left: 4),
             child: _buildStatusIcon(messageStatus),
@@ -552,17 +553,17 @@ class _ChatListItemState extends State<ChatListItem> {
                 targetMessage.senderId == currentUserId) {
               latestMessage = targetMessage;
               messageStatus = targetMessage.status;
-              print(
-                  '🔍 ChatListItem: Found target message from current user in SessionChatProvider: ${targetMessage.id}, status: ${targetMessage.status}');
+              Logger.info(
+                  ' ChatListItem: Found target message from current user in SessionChatProvider: ${targetMessage.id}, status: ${targetMessage.status}');
             } else {
-              print(
-                  '🔍 ChatListItem: Target message not found or not from current user: $messageId');
+              Logger.info(
+                  ' ChatListItem: Target message not found or not from current user: $messageId');
             }
           }
         } else {
           // If we're not in this conversation, don't use SessionChatProvider data
           // This prevents showing status for messages from other conversations
-          print(
+          Logger.debug(
               '🔍 ChatListItem: Not in this conversation (${widget.conversation.id}), using database fallback');
         }
 

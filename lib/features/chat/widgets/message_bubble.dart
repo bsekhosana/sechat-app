@@ -6,6 +6,7 @@ import '../providers/session_chat_provider.dart';
 import 'text_message_bubble.dart';
 import 'reply_message_bubble.dart';
 import 'system_message_bubble.dart';
+import '/../core/utils/logger.dart';
 
 /// Main message bubble widget that handles text-based message types only
 class MessageBubble extends StatelessWidget {
@@ -37,8 +38,8 @@ class MessageBubble extends StatelessWidget {
 
         // Debug: Log status changes for current user's messages
         if (isFromCurrentUser && realTimeMessage.status != message.status) {
-          print(
-              '🔄 MessageBubble: Status changed for ${message.id}: ${message.status} -> ${realTimeMessage.status}');
+          Logger.info(
+              ' MessageBubble: Status changed for ${message.id}: ${message.status} -> ${realTimeMessage.status}');
         }
 
         return _buildMessageBubble(context, realTimeMessage);

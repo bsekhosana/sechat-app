@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/chat_conversation.dart';
+import '/../core/utils/logger.dart';
 
 /// Comprehensive chat settings screen for conversation configuration
 class ChatSettingsScreen extends StatefulWidget {
@@ -268,8 +269,8 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
       // 2. Send settings update to server
       // 3. Update conversation metadata
 
-      print(
-          '🔒 Update privacy settings: $_readReceiptsEnabled, $_typingIndicatorsEnabled, $_lastSeenEnabled');
+      Logger.debug(
+          ' Update privacy settings: $_readReceiptsEnabled, $_typingIndicatorsEnabled, $_lastSeenEnabled');
 
       // Show success message
       ScaffoldMessenger.of(context).showSnackBar(
@@ -279,7 +280,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
         ),
       );
     } catch (e) {
-      print('🔒 Error updating privacy settings: $e');
+      Logger.debug(' Error updating privacy settings: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to update privacy settings: $e'),
@@ -315,7 +316,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
 
     if (confirmed == true) {
       // TODO: Implement block user functionality
-      print('🚫 Block user option selected');
+      Logger.debug('🚫 Block user option selected');
 
       if (mounted) {
         Navigator.pop(context); // Return to chat list
@@ -351,7 +352,7 @@ class _ChatSettingsScreenState extends State<ChatSettingsScreen> {
 
     if (confirmed == true) {
       // TODO: Implement delete conversation functionality
-      print('🗑️ Delete conversation option selected');
+      Logger.info(' Delete conversation option selected');
 
       if (mounted) {
         Navigator.pop(context); // Return to chat list

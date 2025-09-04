@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'package:sechat_app/core/services/se_session_service.dart';
+import '/..//../core/utils/logger.dart';
 
 /// Global service for guarding socket operations with connectivity checks and auto-retry
 class SocketGuardService {
@@ -42,13 +43,14 @@ class SocketGuardService {
     try {
       // Check if socket is ready
       if (isSocketReady) {
-        print('🔒 SocketGuard: ✅ Socket ready for operation: $operationName');
+        Logger.success(
+            ' SocketGuard:  Socket ready for operation: $operationName');
         return true;
       }
 
-      print(
-          '🔒 SocketGuard: ⚠️ Socket not ready for operation: $operationName');
-      print('🔒 SocketGuard: 🔍 Connection status: ${connectionStatus.name}');
+      Logger.warning(
+          ' SocketGuard:  Socket not ready for operation: $operationName');
+      Logger.info(' SocketGuard:  Connection status: ${connectionStatus.name}');
 
       // Show connection status widget if requested
       if (showRetryDialog) {
@@ -62,7 +64,7 @@ class SocketGuardService {
 
       return false;
     } catch (e) {
-      print('🔒 SocketGuard: ❌ Error in guardSocketOperation: $e');
+      Logger.error(' SocketGuard:  Error in guardSocketOperation: $e');
       return false;
     }
   }
@@ -78,8 +80,8 @@ class SocketGuardService {
         attempts++;
         _retryAttempts[retryKey] = attempts;
 
-        print(
-            '🔒 SocketGuard: 🔄 Attempt $attempts/$_maxRetries to connect for: $operationName');
+        Logger.info(
+            ' SocketGuard:  Attempt $attempts/$_maxRetries to connect for: $operationName');
 
         // Try to connect
         final sessionId = SeSessionService().currentSessionId;
@@ -92,8 +94,8 @@ class SocketGuardService {
 
         // Check if connection is now ready
         if (isSocketReady) {
-          print(
-              '🔒 SocketGuard: ✅ Connection successful after $attempts attempts for: $operationName');
+          Logger.success(
+              ' SocketGuard:  Connection successful after $attempts attempts for: $operationName');
           _retryAttempts.remove(retryKey);
           return true;
         }
@@ -105,13 +107,13 @@ class SocketGuardService {
       }
 
       if (attempts >= _maxRetries) {
-        print('🔒 SocketGuard: ❌ Max retries reached for: $operationName');
+        Logger.error(' SocketGuard:  Max retries reached for: $operationName');
         _retryAttempts.remove(retryKey);
       }
 
       return false;
     } catch (e) {
-      print('🔒 SocketGuard: ❌ Error during connection retry: $e');
+      Logger.error(' SocketGuard:  Error during connection retry: $e');
       return false;
     }
   }

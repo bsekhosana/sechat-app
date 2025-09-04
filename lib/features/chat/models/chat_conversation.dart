@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 import 'message.dart';
+import '/..//../core/utils/logger.dart';
 
 /// Chat conversation model for managing 1-on-1 conversations
 class ChatConversation {
@@ -387,8 +388,8 @@ class ChatConversation {
         final Map<String, dynamic> parsed = jsonDecode(value);
         return parsed;
       } catch (e) {
-        print('💾 ChatConversation: ❌ Failed to parse metadata JSON: $e');
-        print('💾 ChatConversation: 🔍 Raw metadata: $value');
+        Logger.error('💾 ChatConversation:  Failed to parse metadata JSON: $e');
+        Logger.info('💾 ChatConversation:  Raw metadata: $value');
         return null;
       }
     }

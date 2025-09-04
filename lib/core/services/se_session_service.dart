@@ -16,6 +16,7 @@ import 'se_socket_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'global_user_service.dart';
+import '/..//../core/utils/logger.dart';
 
 class SessionData {
   final String sessionId;
@@ -199,7 +200,7 @@ class SeSessionService {
       await _persistMessages();
       return true;
     } catch (e) {
-      print('Error restoring session from backup: $e');
+      Logger.debug('Error restoring session from backup: $e');
       return false;
     }
   }
@@ -334,11 +335,12 @@ class SeSessionService {
       // Update current session
       _currentSession = sessionData;
 
-      print('🔍 SeSessionService: Session data persisted successfully');
-      print('🔍 SeSessionService: Session ID: ${sessionData.sessionId}');
-      print('🔍 SeSessionService: Display Name: ${sessionData.displayName}');
+      Logger.info(' SeSessionService: Session data persisted successfully');
+      Logger.info(' SeSessionService: Session ID: ${sessionData.sessionId}');
+      Logger.info(
+          ' SeSessionService: Display Name: ${sessionData.displayName}');
     } catch (e) {
-      print('🔍 SeSessionService: Error persisting session data: $e');
+      Logger.info(' SeSessionService: Error persisting session data: $e');
       rethrow;
     }
   }
@@ -399,13 +401,13 @@ class SeSessionService {
 
           return sessionData;
         } catch (e) {
-          print('🔍 SeSessionService: Error reconstructing session: $e');
+          Logger.info(' SeSessionService: Error reconstructing session: $e');
         }
       }
 
       return null;
     } catch (e) {
-      print('🔍 SeSessionService: Error loading session: $e');
+      Logger.info(' SeSessionService: Error loading session: $e');
       return null;
     }
   }
@@ -416,22 +418,23 @@ class SeSessionService {
       if (_currentSession == null) return;
 
       final publicKeyBytes = base64.decode(_currentSession!.publicKey);
-      print(
-          '🔍 SeSessionService: Checking key format: ${publicKeyBytes.length} bytes');
+      Logger.info(
+          ' SeSessionService: Checking key format: ${publicKeyBytes.length} bytes');
 
       // If keys are in old 256-byte format, regenerate them
       if (publicKeyBytes.length == 256) {
-        print(
-            '🔍 SeSessionService: ⚠️ Detected old 256-byte key format, regenerating...');
+        Logger.warning(
+            '🔍 SeSessionService:  Detected old 256-byte key format, regenerating...');
         await regenerateProperKeys();
       } else if (publicKeyBytes.length == 32) {
-        print('🔍 SeSessionService: ✅ Keys are in correct 32-byte format');
+        Logger.success(
+            '🔍 SeSessionService:  Keys are in correct 32-byte format');
       } else {
-        print(
-            '🔍 SeSessionService: ⚠️ Unexpected key length: ${publicKeyBytes.length} bytes');
+        Logger.warning(
+            '🔍 SeSessionService:  Unexpected key length: ${publicKeyBytes.length} bytes');
       }
     } catch (e) {
-      print('🔍 SeSessionService: Error checking key formats: $e');
+      Logger.info(' SeSessionService: Error checking key formats: $e');
     }
   }
 
@@ -519,11 +522,11 @@ class SeSessionService {
         session.displayName.isNotEmpty &&
         session.encryptedPrivateKey.isNotEmpty &&
         session.isLoggedIn) {
-      print('🔍 SeSessionService: User is logged in');
+      Logger.info(' SeSessionService: User is logged in');
       return true;
     }
 
-    print('🔍 SeSessionService: Session found but user is not logged in');
+    Logger.info(' SeSessionService: Session found but user is not logged in');
     return false;
   }
 
@@ -535,11 +538,11 @@ class SeSessionService {
     // A session is considered "logged in" if it has a password hash
     // This indicates the user has successfully logged in at least once
     if (session.passwordHash != null && session.passwordHash!.isNotEmpty) {
-      print('🔍 SeSessionService: Session has been logged in before');
+      Logger.info(' SeSessionService: Session has been logged in before');
       return true;
     }
 
-    print('🔍 SeSessionService: Session exists but has not been logged in');
+    Logger.info(' SeSessionService: Session exists but has not been logged in');
     return false;
   }
 
@@ -567,7 +570,7 @@ class SeSessionService {
     // User can still receive push notifications even when logged out
     // Token is only deregistered when account is deleted
 
-    print(
+    Logger.debug(
         '🔍 SeSessionService: User logged out successfully (device token preserved)');
     return true;
   }
@@ -610,7 +613,7 @@ class SeSessionService {
       result['isLoggedIn'] = session.isLoggedIn;
     }
 
-    print('🔍 SeSessionService: Session persistence validation: $result');
+    Logger.info(' SeSessionService: Session persistence validation: $result');
     return result;
   }
 
@@ -639,9 +642,9 @@ class SeSessionService {
       _currentSession = null;
       _messageCache.clear();
 
-      print('🔍 SeSessionService: Session data completely removed');
+      Logger.info(' SeSessionService: Session data completely removed');
     } catch (e) {
-      print('🔍 SeSessionService: Error deleting session: $e');
+      Logger.info(' SeSessionService: Error deleting session: $e');
       rethrow;
     }
   }
@@ -649,97 +652,101 @@ class SeSessionService {
   /// Clear all provider data (in-memory state) - call this from UI layer after deleteAccount
   static Future<void> clearAllProviderData() async {
     try {
-      print('🗑️ SeSessionService: 🧹 Clearing all provider data...');
+      Logger.info(' SeSessionService: 🧹 Clearing all provider data...');
 
       // This method should be called from the UI layer where Provider context is available
       // The actual implementation will be in the UI layer to avoid circular dependencies
 
-      print(
-          '🗑️ SeSessionService: ℹ️ Provider cleanup method called - implement in UI layer');
+      Logger.info(
+          ' SeSessionService: ℹ️ Provider cleanup method called - implement in UI layer');
     } catch (e) {
-      print('🗑️ SeSessionService: ❌ Error in provider cleanup method: $e');
+      Logger.error(
+          '🗑️ SeSessionService:  Error in provider cleanup method: $e');
     }
   }
 
   /// Delete account completely - clears ALL data including database, shared prefs, and secure storage
   Future<void> deleteAccount() async {
     try {
-      print('🗑️ SeSessionService: Starting complete account deletion...');
+      Logger.info(' SeSessionService: Starting complete account deletion...');
 
       // 1. Clear all notification service data (now handled by socket service)
       try {
         // CRITICAL: Properly disconnect socket service and leave channel
         final socketService = SeSocketService.instance;
         if (socketService.isConnected) {
-          print('🗑️ SeSessionService: 🔌 Disconnecting socket service...');
+          Logger.info(' SeSessionService:  Disconnecting socket service...');
 
           // Send session deletion request to server before disconnecting
           try {
             await socketService.deleteSessionOnServer();
-            print(
-                '🗑️ SeSessionService: ✅ Session deletion request sent to server');
+            Logger.success(
+                '🗑️ SeSessionService:  Session deletion request sent to server');
           } catch (e) {
-            print(
-                '🗑️ SeSessionService: ⚠️ Warning - server session deletion failed: $e');
+            Logger.warning(
+                '🗑️ SeSessionService:  Warning - server session deletion failed: $e');
           }
 
           // Disconnect socket service
           await socketService.forceDisconnect();
-          print('🗑️ SeSessionService: ✅ Socket service force disconnected');
+          Logger.success(
+              '🗑️ SeSessionService:  Socket service force disconnected');
 
           // CRITICAL: Destroy the socket service instance completely
           try {
             SeSocketService.destroyInstance();
-            print(
-                '🗑️ SeSessionService: ✅ Socket service instance completely destroyed');
+            Logger.success(
+                '🗑️ SeSessionService:  Socket service instance completely destroyed');
           } catch (e) {
-            print(
-                '🗑️ SeSessionService: ⚠️ Warning - socket instance destruction failed: $e');
+            Logger.warning(
+                '🗑️ SeSessionService:  Warning - socket instance destruction failed: $e');
           }
 
           // Reset the service for future connections
           try {
             SeSocketService.resetForNewConnection();
-            print(
-                '🗑️ SeSessionService: ✅ Socket service reset for future connections');
+            Logger.success(
+                '🗑️ SeSessionService:  Socket service reset for future connections');
           } catch (e) {
-            print(
-                '🗑️ SeSessionService: ⚠️ Warning - socket service reset failed: $e');
+            Logger.warning(
+                '🗑️ SeSessionService:  Warning - socket service reset failed: $e');
           }
 
           // Additional cleanup: Clear any remaining socket references
           try {
             // Force garbage collection if possible
-            print('🗑️ SeSessionService: 🧹 Clearing socket references...');
+            Logger.info(' SeSessionService: 🧹 Clearing socket references...');
             // The socket service is now completely destroyed
           } catch (e) {
-            print(
-                '🗑️ SeSessionService: ⚠️ Warning - socket reference cleanup failed: $e');
+            Logger.warning(
+                '🗑️ SeSessionService:  Warning - socket reference cleanup failed: $e');
           }
         } else {
-          print('🗑️ SeSessionService: ℹ️ Socket service already disconnected');
+          Logger.info(
+              ' SeSessionService: ℹ️ Socket service already disconnected');
         }
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ❌ Error during socket service cleanup: $e');
+        Logger.error(
+            '🗑️ SeSessionService:  Error during socket service cleanup: $e');
       }
 
       // 2. Clear all database data
       try {
         await MessageStorageService.instance.forceRecreateDatabase();
-        print(
-            '🗑️ SeSessionService: ✅ Database completely cleared and recreated');
+        Logger.success(
+            '🗑️ SeSessionService:  Database completely cleared and recreated');
       } catch (e) {
-        print('🗑️ SeSessionService: ⚠️ Warning - database cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - database cleanup failed: $e');
       }
 
       // 3. Clear all shared preferences (including session data)
       try {
         await _prefsService.clear();
-        print('🗑️ SeSessionService: ✅ All shared preferences cleared');
+        Logger.success('🗑️ SeSessionService:  All shared preferences cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - shared preferences cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - shared preferences cleanup failed: $e');
       }
 
       // 4. Clear all secure storage (encryption keys, etc.)
@@ -749,57 +756,58 @@ class SeSessionService {
         for (final key in secureKeys.keys) {
           await storage.delete(key: key);
         }
-        print('🗑️ SeSessionService: ✅ All secure storage cleared');
+        Logger.success('🗑️ SeSessionService:  All secure storage cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - secure storage cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - secure storage cleanup failed: $e');
       }
 
       // 4.5. Clear all encryption keys specifically
       try {
         await EncryptionService.clearAllRecipientPublicKeys();
-        print('🗑️ SeSessionService: ✅ All encryption keys cleared');
+        Logger.success('🗑️ SeSessionService:  All encryption keys cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - encryption key cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - encryption key cleanup failed: $e');
       }
 
       // 5. Clear all provider data (in-memory state)
       // Note: This will be called separately from the UI layer to avoid circular dependencies
-      print(
-          '🗑️ SeSessionService: ℹ️ Provider cleanup will be handled by UI layer');
+      Logger.info(
+          ' SeSessionService: ℹ️ Provider cleanup will be handled by UI layer');
 
       // 6. Clear all temporary files and directories
       try {
         await LocalStorageService.instance.cleanupTempFiles();
-        print('🗑️ SeSessionService: ✅ Temporary files cleared');
+        Logger.success('🗑️ SeSessionService:  Temporary files cleared');
 
         // Clear image directory if it exists
         final appDocumentsDir = await getApplicationDocumentsDirectory();
         final imagesDir = Directory('${appDocumentsDir.path}/sechat_images');
         if (await imagesDir.exists()) {
           await imagesDir.delete(recursive: true);
-          print('🗑️ SeSessionService: ✅ Image directory cleared');
+          Logger.success('🗑️ SeSessionService:  Image directory cleared');
         }
 
         // Clear temp directory if it exists
         final tempDir = Directory('${appDocumentsDir.path}/sechat_temp');
         if (await tempDir.exists()) {
           await tempDir.delete(recursive: true);
-          print('🗑️ SeSessionService: ✅ Temp directory cleared');
+          Logger.success('🗑️ SeSessionService:  Temp directory cleared');
         }
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - file storage cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - file storage cleanup failed: $e');
       }
 
       // 7. Clear all key exchange service data
       try {
         await KeyExchangeService.instance.clearAllPendingExchanges();
-        print('🗑️ SeSessionService: ✅ Key exchange service data cleared');
+        Logger.success(
+            '🗑️ SeSessionService:  Key exchange service data cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - key exchange service cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - key exchange service cleanup failed: $e');
       }
 
       // 8. Clear all indicator service data
@@ -808,40 +816,41 @@ class SeSessionService {
         indicatorService.clearChatIndicator();
         indicatorService.clearNotificationIndicator();
         indicatorService.clearKeyExchangeIndicator();
-        print('🗑️ SeSessionService: ✅ Indicator service data cleared');
+        Logger.success('🗑️ SeSessionService:  Indicator service data cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - indicator service cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - indicator service cleanup failed: $e');
       }
 
       // 9. Clear all notifications
       try {
         // NotificationManagerService removed, using new local notification system
         // Notifications cleared by new local notification system
-        print('🗑️ SeSessionService: ✅ Notifications handled by new system');
+        Logger.success(
+            '🗑️ SeSessionService:  Notifications handled by new system');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - notification cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - notification cleanup failed: $e');
       }
 
       // 10. Clear all online status service data
       try {
         // OnlineStatusService doesn't have a clear method, but data will be cleared when service is reinitialized
-        print(
-            '🗑️ SeSessionService: ℹ️ Online status service data will be cleared on next initialization');
+        Logger.info(
+            ' SeSessionService: ℹ️ Online status service data will be cleared on next initialization');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - online status service cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - online status service cleanup failed: $e');
       }
 
       // 11. Clear all optimized notification service data (now handled by socket service)
       try {
         // Socket service cleanup will be handled automatically
-        print(
-            '🗑️ SeSessionService: ✅ Socket service cleanup handled automatically');
+        Logger.success(
+            '🗑️ SeSessionService:  Socket service cleanup handled automatically');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - socket service cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - socket service cleanup failed: $e');
       }
 
       // 12. Clear all provider states (if accessible)
@@ -849,10 +858,10 @@ class SeSessionService {
         // Clear any cached provider states
         _currentSession = null;
         _messageCache.clear();
-        print('🗑️ SeSessionService: ✅ Provider states cleared');
+        Logger.success('🗑️ SeSessionService:  Provider states cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - provider state cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - provider state cleanup failed: $e');
       }
 
       // 12.5. Clear GlobalUserService cached data
@@ -861,39 +870,40 @@ class SeSessionService {
         // by calling deleteSessionIdentity which clears the session
         final globalUserService = GlobalUserService.instance;
         await globalUserService.deleteSessionIdentity();
-        print('🗑️ SeSessionService: ✅ GlobalUserService data cleared');
+        Logger.success('🗑️ SeSessionService:  GlobalUserService data cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - GlobalUserService cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - GlobalUserService cleanup failed: $e');
       }
 
       // 12.6. Clear any other service cached data
       try {
         // Clear any remaining cached data from other services
         // This ensures no data persists between account deletions
-        print('🗑️ SeSessionService: ✅ Additional service data cleared');
+        Logger.success(
+            '🗑️ SeSessionService:  Additional service data cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - additional service cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - additional service cleanup failed: $e');
       }
 
       // 13. Unregister device token from AirNotifier
       try {
         await unregisterDeviceToken();
-        print(
-            '🗑️ SeSessionService: ✅ Device token unregistered from AirNotifier');
+        Logger.success(
+            '🗑️ SeSessionService:  Device token unregistered from AirNotifier');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - device token unregistration failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - device token unregistration failed: $e');
       }
 
-      print(
-          '🗑️ SeSessionService: ✅ Complete account deletion finished successfully');
-      print(
-          '🗑️ SeSessionService: ℹ️ All data has been cleared - user can now create a fresh account');
+      Logger.success(
+          '🗑️ SeSessionService:  Complete account deletion finished successfully');
+      Logger.info(
+          ' SeSessionService: ℹ️ All data has been cleared - user can now create a fresh account');
     } catch (e) {
-      print(
-          '🗑️ SeSessionService: ❌ Error during complete account deletion: $e');
+      Logger.error(
+          '🗑️ SeSessionService:  Error during complete account deletion: $e');
       rethrow;
     }
   }
@@ -901,14 +911,16 @@ class SeSessionService {
   /// Delete all chat conversations and messages (without deleting account)
   Future<void> deleteAllChats() async {
     try {
-      print('🗑️ SeSessionService: 🗑️ Starting complete chat deletion...');
+      Logger.info(' SeSessionService: 🗑️ Starting complete chat deletion...');
 
       // 1. Clear all database data (conversations and messages)
       try {
         await MessageStorageService.instance.deleteAllChats();
-        print('🗑️ SeSessionService: ✅ All chats deleted from database');
+        Logger.success(
+            '🗑️ SeSessionService:  All chats deleted from database');
       } catch (e) {
-        print('🗑️ SeSessionService: ❌ Error deleting chats from database: $e');
+        Logger.error(
+            '🗑️ SeSessionService:  Error deleting chats from database: $e');
         rethrow;
       }
 
@@ -917,25 +929,26 @@ class SeSessionService {
         await _prefsService.remove('chats');
         await _prefsService.remove('messages');
         await _prefsService.remove('conversations');
-        print('🗑️ SeSessionService: ✅ Chat-related preferences cleared');
+        Logger.success(
+            '🗑️ SeSessionService:  Chat-related preferences cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - chat preferences cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - chat preferences cleanup failed: $e');
       }
 
       // 3. Clear chat indicators
       try {
         final indicatorService = IndicatorService();
         indicatorService.clearChatIndicator();
-        print('🗑️ SeSessionService: ✅ Chat indicators cleared');
+        Logger.success('🗑️ SeSessionService:  Chat indicators cleared');
       } catch (e) {
-        print(
-            '🗑️ SeSessionService: ⚠️ Warning - chat indicators cleanup failed: $e');
+        Logger.warning(
+            '🗑️ SeSessionService:  Warning - chat indicators cleanup failed: $e');
       }
 
-      print('🗑️ SeSessionService: 🗑️ All chats permanently deleted');
+      Logger.info(' SeSessionService: 🗑️ All chats permanently deleted');
     } catch (e) {
-      print('🗑️ SeSessionService: ❌ Error during chat deletion: $e');
+      Logger.error('🗑️ SeSessionService:  Error during chat deletion: $e');
       rethrow;
     }
   }
@@ -1036,7 +1049,7 @@ class SeSessionService {
               .toList();
         }
       } catch (e) {
-        print('Error loading messages: $e');
+        Logger.debug('Error loading messages: $e');
       }
     }
   }
@@ -1056,7 +1069,7 @@ class SeSessionService {
       await decryptPrivateKey(_currentSession!.encryptedPrivateKey);
       return true;
     } catch (e) {
-      print('Session integrity check failed: $e');
+      Logger.debug('Session integrity check failed: $e');
       return false;
     }
   }
@@ -1120,27 +1133,27 @@ class SeSessionService {
   /// Initialize notification services with current session
   Future<void> initializeNotificationServices() async {
     try {
-      print(
+      Logger.debug(
           '🔍 SeSessionService: Skipping legacy notification services init (socket-only mode)');
       if (currentSession == null) {
-        print('🔍 SeSessionService: No session available for socket init');
+        Logger.info(' SeSessionService: No session available for socket init');
         return;
       }
       // Socket service is initialized elsewhere (main/auth flow)
-      print(
-          '🔍 SeSessionService: ✅ Socket mode active for session: ${currentSession!.sessionId}');
+      Logger.success(
+          '🔍 SeSessionService:  Socket mode active for session: ${currentSession!.sessionId}');
     } catch (e) {
-      print('🔍 SeSessionService: Error during socket-mode init: $e');
+      Logger.info(' SeSessionService: Error during socket-mode init: $e');
     }
   }
 
   /// Register device token with current session (not used in socket mode)
   Future<void> registerDeviceToken(String deviceToken) async {
     try {
-      print(
-          '🔍 SeSessionService: registerDeviceToken ignored in socket-only mode');
+      Logger.info(
+          ' SeSessionService: registerDeviceToken ignored in socket-only mode');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔍 SeSessionService: Error (ignored) registering device token: $e');
     }
   }
@@ -1148,10 +1161,10 @@ class SeSessionService {
   /// Unregister device token from current session (not used in socket mode)
   Future<void> unregisterDeviceToken() async {
     try {
-      print(
-          '🔍 SeSessionService: unregisterDeviceToken ignored in socket-only mode');
+      Logger.info(
+          ' SeSessionService: unregisterDeviceToken ignored in socket-only mode');
     } catch (e) {
-      print(
+      Logger.debug(
           '🔍 SeSessionService: Error (ignored) unregistering device token: $e');
     }
   }
@@ -1172,12 +1185,12 @@ class SeSessionService {
         return false;
       }
       // In socket-only mode, configuration is tied to having a session
-      print(
-          '🔍 SeSessionService: Socket mode notification config OK for session: ${currentSession!.sessionId}');
+      Logger.info(
+          ' SeSessionService: Socket mode notification config OK for session: ${currentSession!.sessionId}');
       return true;
     } catch (e) {
-      print(
-          '🔍 SeSessionService: Error checking socket-mode notification config: $e');
+      Logger.info(
+          ' SeSessionService: Error checking socket-mode notification config: $e');
       return false;
     }
   }
@@ -1185,11 +1198,12 @@ class SeSessionService {
   /// Regenerate proper AES keys for existing session (fixes old 256-byte keys)
   Future<void> regenerateProperKeys() async {
     try {
-      print(
-          '🔄 SeSessionService: Regenerating proper AES keys for current session');
+      Logger.info(
+          ' SeSessionService: Regenerating proper AES keys for current session');
 
       if (_currentSession == null) {
-        print('🔄 SeSessionService: No current session to regenerate keys for');
+        Logger.info(
+            ' SeSessionService: No current session to regenerate keys for');
         return;
       }
 
@@ -1217,11 +1231,12 @@ class SeSessionService {
       // Save the updated session
       await _storeSession(_currentSession!);
 
-      print('🔄 SeSessionService: ✅ Proper AES keys regenerated and saved');
-      print(
+      Logger.success(
+          '🔄 SeSessionService:  Proper AES keys regenerated and saved');
+      Logger.debug(
           '🔄 SeSessionService: New public key length: ${base64.decode(newKeyPair['publicKey']!).length} bytes');
     } catch (e) {
-      print('🔄 SeSessionService: ❌ Error regenerating keys: $e');
+      Logger.error('🔄 SeSessionService:  Error regenerating keys: $e');
     }
   }
 
@@ -1229,23 +1244,24 @@ class SeSessionService {
   Future<String?> getDecryptedPrivateKey() async {
     try {
       if (_currentSession == null) {
-        print('🔍 SeSessionService: No current session available');
+        Logger.info(' SeSessionService: No current session available');
         return null;
       }
 
       if (_currentSession!.encryptedPrivateKey.isEmpty) {
-        print(
-            '🔍 SeSessionService: No encrypted private key in current session');
+        Logger.info(
+            ' SeSessionService: No encrypted private key in current session');
         return null;
       }
 
       final decryptedKey =
           await decryptPrivateKey(_currentSession!.encryptedPrivateKey);
-      print(
-          '🔍 SeSessionService: ✅ Successfully retrieved decrypted private key');
+      Logger.success(
+          '🔍 SeSessionService:  Successfully retrieved decrypted private key');
       return decryptedKey;
     } catch (e) {
-      print('🔍 SeSessionService: ❌ Error getting decrypted private key: $e');
+      Logger.error(
+          '🔍 SeSessionService:  Error getting decrypted private key: $e');
       return null;
     }
   }

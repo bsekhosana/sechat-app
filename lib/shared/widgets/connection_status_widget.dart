@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/services/se_session_service.dart';
 import '../../core/services/network_service.dart';
+import '/../core/utils/logger.dart';
 
 class ConnectionStatusWidget extends StatefulWidget {
   const ConnectionStatusWidget({super.key});
@@ -118,7 +119,7 @@ class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
 
   Future<void> _attemptReconnect() async {
     try {
-      print('ConnectionStatusWidget: Attempting to reconnect...');
+      Logger.debug('ConnectionStatusWidget: Attempting to reconnect...');
 
       // Check if session exists and try to initialize notification services
       final seSessionService = SeSessionService();
@@ -132,7 +133,7 @@ class _ConnectionStatusWidgetState extends State<ConnectionStatusWidget> {
       // Refresh connection status
       _checkConnectionStatus();
     } catch (e) {
-      print('ConnectionStatusWidget: Reconnection failed: $e');
+      Logger.debug('ConnectionStatusWidget: Reconnection failed: $e');
       // Show error message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

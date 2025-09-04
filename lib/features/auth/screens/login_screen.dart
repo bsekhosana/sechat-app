@@ -10,6 +10,7 @@ import 'package:sechat_app/features/chat/screens/chat_screen.dart';
 import 'package:sechat_app/shared/widgets/app_icon.dart';
 import 'package:sechat_app/shared/widgets/custom_textfield.dart';
 import 'package:sechat_app/shared/widgets/custom_elevated_button.dart';
+import '/../core/utils/logger.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -48,9 +49,9 @@ class _LoginScreenState extends State<LoginScreen> {
         _displayNameController.text = session.displayName;
         _sessionDisplayName = session.displayName;
       });
-      print('🔍 LoginScreen: Loaded display name: ${session.displayName}');
+      Logger.info(' LoginScreen: Loaded display name: ${session.displayName}');
     } else {
-      print('🔍 LoginScreen: No session found');
+      Logger.info(' LoginScreen: No session found');
     }
   }
 
@@ -400,8 +401,8 @@ class _LoginScreenState extends State<LoginScreen> {
             final currentSessionId = seSessionService.currentSessionId;
             if (currentSessionId != null) {
               await socketService.connect(currentSessionId);
-              print(
-                  '🔌 LoginScreen: ✅ Socket connection initiated for session: $currentSessionId');
+              Logger.success(
+                  ' LoginScreen:  Socket connection initiated for session: $currentSessionId');
 
               // Wait a moment for connection to establish
               await Future.delayed(const Duration(seconds: 2));
@@ -409,17 +410,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
             // Check if socket is connected
             if (socketService.isConnected) {
-              print('🔌 LoginScreen: ✅ Socket connected successfully');
+              Logger.success(' LoginScreen:  Socket connected successfully');
 
               // Send online status via realtime service
               try {
                 // Initialize realtime services
                 try {
                   await RealtimeServiceManager().initialize();
-                  print('🔌 LoginScreen: ✅ Realtime services initialized');
+                  Logger.success(
+                      ' LoginScreen:  Realtime services initialized');
                 } catch (e) {
-                  print(
-                      '🔌 LoginScreen: ⚠️ Failed to initialize realtime services: $e');
+                  Logger.warning(
+                      ' LoginScreen:  Failed to initialize realtime services: $e');
                   // Show error message to user
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -445,15 +447,16 @@ class _LoginScreenState extends State<LoginScreen> {
               } catch (e) {
                 // Fallback to direct socket service
                 await socketService.sendUserOnlineStatus(true);
-                print('🔌 LoginScreen: ✅ Online status sent via fallback');
+                Logger.success(
+                    ' LoginScreen:  Online status sent via fallback');
               }
             } else {
-              print(
-                  '🔌 LoginScreen: ⚠️ Socket connection failed, but continuing with login');
+              Logger.warning(
+                  ' LoginScreen:  Socket connection failed, but continuing with login');
             }
           } catch (e) {
-            print(
-                '🔌 LoginScreen: ⚠️ Error connecting to socket: $e, but continuing with login');
+            Logger.warning(
+                ' LoginScreen:  Error connecting to socket: $e, but continuing with login');
           }
 
           // Navigate to main app

@@ -9,6 +9,7 @@ import '../widgets/message_bubble.dart';
 import '../widgets/chat_input_area.dart';
 import '../widgets/chat_header.dart';
 import '../widgets/typing_indicator.dart';
+import '/../core/utils/logger.dart';
 
 /// Main screen for individual chat conversations
 class ChatScreen extends StatefulWidget {
@@ -286,14 +287,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         final currentPosition = _scrollController.position.pixels;
         // Only auto-scroll if we're not already at the bottom
         if (currentPosition < _scrollController.position.maxScrollExtent - 10) {
-          print(
-              '📱 ChatScreen: 🔄 Auto-scrolling to bottom for initial message load');
+          Logger.info(
+              '📱 ChatScreen:  Auto-scrolling to bottom for initial message load');
           _scrollToBottom();
         }
       }
     });
 
-    // print('🟢 ChatScreen: 🔍 Messages: ${provider.messages}');
+    // Logger.info('🟢 ChatScreen:  Messages: ${provider.messages}');
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SlideTransition(
@@ -372,19 +373,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   /// Send text message
   Future<void> _sendTextMessage(
       String text, SessionChatProvider provider) async {
-    print('📱 ChatScreen: 🔧 _sendTextMessage called with: "$text"');
-    print('📱 ChatScreen: 🔍 provider: ${provider.hashCode}');
-    print('📱 ChatScreen: 🔍 provider type: ${provider.runtimeType}');
+    Logger.debug('📱 ChatScreen: 🔧 _sendTextMessage called with: "$text"');
+    Logger.info('📱 ChatScreen:  provider: ${provider.hashCode}');
+    Logger.info('📱 ChatScreen:  provider type: ${provider.runtimeType}');
 
     if (text.trim().isEmpty) {
-      print('📱 ChatScreen: ❌ Text is empty, returning early');
+      Logger.error('📱 ChatScreen:  Text is empty, returning early');
       return;
     }
 
     try {
-      print('📱 ChatScreen: 🔧 Calling provider.sendTextMessage...');
+      Logger.debug('📱 ChatScreen: 🔧 Calling provider.sendTextMessage...');
       await provider.sendTextMessage(text.trim());
-      print('📱 ChatScreen: ✅ provider.sendTextMessage completed successfully');
+      Logger.success(
+          '📱 ChatScreen:  provider.sendTextMessage completed successfully');
       _textController.clear();
 
       // CRITICAL: Update chat list to show sent message as latest
@@ -415,14 +417,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             messageType: MessageType.text,
           );
 
-          print(
+          Logger.debug(
               '📱 ChatScreen: ✅ Chat list updated with sent message: ${sentMessage.id} (status: ${sentMessage.status})');
         } else {
-          print(
-              '📱 ChatScreen: ⚠️ Could not find sent message for chat list update');
+          Logger.warning(
+              '📱 ChatScreen:  Could not find sent message for chat list update');
         }
       } catch (e) {
-        print('📱 ChatScreen: ⚠️ Could not update chat list: $e');
+        Logger.warning('📱 ChatScreen:  Could not update chat list: $e');
       }
 
       // CRITICAL: Scroll to bottom after sending message
@@ -431,7 +433,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         _scrollToBottom();
       });
     } catch (e) {
-      print('📱 ChatScreen: ❌ Error in _sendTextMessage: $e');
+      Logger.error('📱 ChatScreen:  Error in _sendTextMessage: $e');
       _showErrorSnackBar('Failed to send message: $e');
     }
   }
@@ -459,8 +461,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
         if (latestMessage.senderId != currentUserId) {
           // This is an incoming message, auto-scroll to bottom
-          print(
-              '📱 ChatScreen: 🔄 Auto-scrolling for incoming message from ${latestMessage.senderId}');
+          Logger.info(
+              '📱 ChatScreen:  Auto-scrolling for incoming message from ${latestMessage.senderId}');
           if (isInitialCall) {
             _scrollToBottom();
           } else {
@@ -478,8 +480,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     if (_scrollController.hasClients) {
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentPosition = _scrollController.position.pixels;
-      print(
-          '📱 ChatScreen: 🔄 Scrolling to bottom: current=$currentPosition, max=$maxScroll');
+      Logger.info(
+          '📱 ChatScreen:  Scrolling to bottom: current=$currentPosition, max=$maxScroll');
 
       // Only scroll if we're not already at the bottom
       if (currentPosition < maxScroll - 10) {
@@ -494,16 +496,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             curve: Curves.easeOut,
           )
               .then((_) {
-            print('📱 ChatScreen: ✅ Scrolled to bottom successfully');
+            Logger.success('📱 ChatScreen:  Scrolled to bottom successfully');
           }).catchError((e) {
-            print('📱 ChatScreen: ❌ Error scrolling to bottom: $e');
+            Logger.error('📱 ChatScreen:  Error scrolling to bottom: $e');
           });
         }
       } else {
-        print('📱 ChatScreen: ℹ️ Already at bottom, no need to scroll');
+        Logger.info('📱 ChatScreen:  Already at bottom, no need to scroll');
       }
     } else {
-      print('📱 ChatScreen: ⚠️ ScrollController has no clients yet');
+      Logger.warning('📱 ChatScreen:  ScrollController has no clients yet');
     }
   }
 
@@ -613,7 +615,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ),
               onChanged: (value) {
                 // TODO: Implement actual search logic
-                print('🔍 Searching for: $value');
+                Logger.info(' Searching for: $value');
               },
             ),
             const SizedBox(height: 16),
@@ -673,7 +675,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             onPressed: () {
               Navigator.pop(context);
               // TODO: Implement actual chat deletion logic
-              print('🗑️ Delete chat confirmed');
+              Logger.info(' Delete chat confirmed');
               Navigator.pop(context); // Go back to previous screen
             },
             child: Text(
@@ -720,7 +722,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             onPressed: () {
               Navigator.pop(context);
               // TODO: Implement actual conversation deletion logic
-              print('🗑️ Delete conversation confirmed');
+              Logger.info(' Delete conversation confirmed');
               Navigator.pop(context); // Go back to previous screen
             },
             child: Text(
@@ -861,7 +863,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
 
-    print('💬 Reply to message: ${message.id}');
+    Logger.debug('💬 Reply to message: ${message.id}');
   }
 
   /// Handle forward message
@@ -897,7 +899,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
 
-    print('📤 Forward message: ${message.id}');
+    Logger.debug('📤 Forward message: ${message.id}');
   }
 
   /// Handle copy message
@@ -915,7 +917,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
 
-    print('📋 Copy message: ${message.id}');
+    Logger.debug('📋 Copy message: ${message.id}');
   }
 
   /// Handle delete message
@@ -926,7 +928,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     // 2. Sending delete request to server
     // 3. Updating UI
 
-    print('🗑️ Delete message confirmed: ${message.id}');
+    Logger.info(' Delete message confirmed: ${message.id}');
 
     // Show success message
     ScaffoldMessenger.of(context).showSnackBar(

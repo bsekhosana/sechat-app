@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/services/se_socket_service.dart';
 import '../../core/services/se_session_service.dart';
+import '/../core/utils/logger.dart';
 
 /// Provider to manage socket connection status across all screens
 class SocketStatusProvider extends ChangeNotifier {
@@ -93,7 +94,7 @@ class SocketStatusProvider extends ChangeNotifier {
       _reconnectionAttempts++;
       notifyListeners();
 
-      print(
+      Logger.debug(
           'SocketStatusProvider: Attempting to reconnect (attempt $_reconnectionAttempts)...');
 
       // Try to reconnect
@@ -106,14 +107,14 @@ class SocketStatusProvider extends ChangeNotifier {
       _checkSocketStatus();
 
       if (_isConnected) {
-        print('SocketStatusProvider: ✅ Reconnection successful');
+        Logger.success('SocketStatusProvider:  Reconnection successful');
         return true;
       } else {
-        print('SocketStatusProvider: ❌ Reconnection failed');
+        Logger.error('SocketStatusProvider:  Reconnection failed');
         return false;
       }
     } catch (e) {
-      print('SocketStatusProvider: ❌ Reconnection error: $e');
+      Logger.error('SocketStatusProvider:  Reconnection error: $e');
       _isConnecting = false;
       notifyListeners();
       return false;
@@ -128,7 +129,7 @@ class SocketStatusProvider extends ChangeNotifier {
   /// Reset the provider state (used when account is deleted/created)
   void resetState() {
     try {
-      print('🔌 SocketStatusProvider: 🔄 Resetting provider state...');
+      Logger.info(' SocketStatusProvider:  Resetting provider state...');
 
       // Reset all state variables
       _isConnected = false;
@@ -145,9 +146,9 @@ class SocketStatusProvider extends ChangeNotifier {
       // Notify listeners
       notifyListeners();
 
-      print('🔌 SocketStatusProvider: ✅ Provider state reset');
+      Logger.success(' SocketStatusProvider:  Provider state reset');
     } catch (e) {
-      print('🔌 SocketStatusProvider: ❌ Error resetting state: $e');
+      Logger.error(' SocketStatusProvider:  Error resetting state: $e');
     }
   }
 

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// SSL Configuration for handling certificate verification
 class SSLConfig {
@@ -34,7 +35,7 @@ class _DevelopmentHttpOverrides extends HttpOverrides {
     // Bypass SSL certificate verification for development
     client.badCertificateCallback =
         (X509Certificate cert, String host, int port) {
-      print(
+      Logger.debug(
           '🔒 SSL: Bypassing certificate verification for $host:$port (development mode)');
       return true; // Accept all certificates in development
     };
@@ -42,5 +43,3 @@ class _DevelopmentHttpOverrides extends HttpOverrides {
     return client;
   }
 }
-
-

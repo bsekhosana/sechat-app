@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/services/se_socket_service.dart';
+import '/../core/utils/logger.dart';
 
 class SocketConnectionStatusWidget extends StatefulWidget {
   const SocketConnectionStatusWidget({super.key});
@@ -78,7 +79,7 @@ class _SocketConnectionStatusWidgetState
 
   Future<void> _attemptReconnect() async {
     try {
-      print('SocketConnectionStatusWidget: Attempting to reconnect...');
+      Logger.debug('SocketConnectionStatusWidget: Attempting to reconnect...');
 
       // Use the channel socket service to reconnect
       await _socketService.initialize();
@@ -86,7 +87,7 @@ class _SocketConnectionStatusWidgetState
       // Refresh status after reconnection attempt
       _checkSocketStatus();
     } catch (e) {
-      print('SocketConnectionStatusWidget: Reconnection failed: $e');
+      Logger.debug('SocketConnectionStatusWidget: Reconnection failed: $e');
       // Show error message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

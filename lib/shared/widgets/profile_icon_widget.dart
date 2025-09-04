@@ -16,6 +16,7 @@ import '../../core/utils/store_link_resolver.dart';
 import '../../core/services/global_user_service.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
 import 'package:sechat_app/shared/providers/socket_status_provider.dart';
+import '/../core/utils/logger.dart';
 
 class ProfileIconWidget extends StatefulWidget {
   const ProfileIconWidget({super.key});
@@ -531,8 +532,8 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
       // CRITICAL: Clear all chats and messages while preserving conversations
       try {
-        print(
-            '🗑️ ProfileIconWidget: 🗄️ Clearing all database chats and messages...');
+        Logger.info(
+            ' ProfileIconWidget: 🗄️ Clearing all database chats and messages...');
 
         // Clear all database data (conversations and messages)
         final messageStorageService = MessageStorageService.instance;
@@ -541,17 +542,18 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
         // Clean up any malformed conversation IDs
         await messageStorageService.cleanupMalformedConversationIds();
 
-        print('🗑️ ProfileIconWidget: ✅ Database chats and messages cleared');
+        Logger.success(
+            '🗑️ ProfileIconWidget:  Database chats and messages cleared');
       } catch (e) {
-        print(
-            '🗑️ ProfileIconWidget: ⚠️ Warning - database cleanup failed: $e');
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - database cleanup failed: $e');
         // Continue with chat deletion even if database cleanup fails
       }
 
       // Clear chat-related shared preferences
       try {
-        print(
-            '🗑️ ProfileIconWidget: 🔍 Clearing chat-related shared preferences...');
+        Logger.info(
+            ' ProfileIconWidget: 🔍 Clearing chat-related shared preferences...');
         final prefsService = SeSharedPreferenceService();
 
         // Remove specific chat-related keys
@@ -562,76 +564,77 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
         await prefsService.remove('unread_count');
         await prefsService.remove('last_message_at');
 
-        print(
-            '🗑️ ProfileIconWidget: ✅ Chat-related shared preferences cleared');
+        Logger.success(
+            '🗑️ ProfileIconWidget:  Chat-related shared preferences cleared');
       } catch (e) {
-        print(
-            '🗑️ ProfileIconWidget: ⚠️ Warning - shared preferences cleanup failed: $e');
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - shared preferences cleanup failed: $e');
         // Continue with chat deletion even if shared preferences cleanup fails
       }
 
       // Clear local storage service chat data
       try {
-        print(
-            '🗑️ ProfileIconWidget: 📱 Clearing local storage service chat data...');
+        Logger.info(
+            ' ProfileIconWidget: 📱 Clearing local storage service chat data...');
         final localStorageService = LocalStorageService.instance;
         await localStorageService.clearAllData();
-        print(
-            '🗑️ ProfileIconWidget: ✅ Local storage service chat data cleared');
+        Logger.success(
+            '🗑️ ProfileIconWidget:  Local storage service chat data cleared');
       } catch (e) {
-        print(
-            '🗑️ ProfileIconWidget: ⚠️ Warning - local storage service cleanup failed: $e');
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - local storage service cleanup failed: $e');
         // Continue with chat deletion even if local storage service cleanup fails
       }
 
       // Clear all provider data to prevent old conversations from showing
       if (mounted) {
         try {
-          print('🗑️ ProfileIconWidget: 🧹 Clearing all provider data...');
+          Logger.info(' ProfileIconWidget: 🧹 Clearing all provider data...');
 
           // Clear ChatListProvider
           final chatListProvider =
               Provider.of<ChatListProvider>(context, listen: false);
           chatListProvider.clearAllData();
-          print('🗑️ ProfileIconWidget: ✅ ChatListProvider cleared');
+          Logger.success('🗑️ ProfileIconWidget:  ChatListProvider cleared');
 
           // Clear KeyExchangeRequestProvider
           final keyExchangeProvider =
               Provider.of<KeyExchangeRequestProvider>(context, listen: false);
           keyExchangeProvider.clearAllData();
-          print('🗑️ ProfileIconWidget: ✅ KeyExchangeRequestProvider cleared');
+          Logger.success(
+              '🗑️ ProfileIconWidget:  KeyExchangeRequestProvider cleared');
 
           // Clear IndicatorService
           final indicatorService =
               Provider.of<IndicatorService>(context, listen: false);
           indicatorService.clearAllIndicators();
-          print('🗑️ ProfileIconWidget: ✅ IndicatorService cleared');
+          Logger.success('🗑️ ProfileIconWidget:  IndicatorService cleared');
 
           // Clear SocketStatusProvider
           final socketStatusProvider =
               Provider.of<SocketStatusProvider>(context, listen: false);
           socketStatusProvider.resetState();
-          print('🗑️ ProfileIconWidget: ✅ SocketStatusProvider reset');
+          Logger.success('🗑️ ProfileIconWidget:  SocketStatusProvider reset');
 
-          print('🗑️ ProfileIconWidget: ✅ All provider data cleared');
+          Logger.success('🗑️ ProfileIconWidget:  All provider data cleared');
         } catch (e) {
-          print(
-              '🗑️ ProfileIconWidget: ⚠️ Warning - provider cleanup failed: $e');
+          Logger.warning(
+              '🗑️ ProfileIconWidget:  Warning - provider cleanup failed: $e');
           // Don't fail the chat deletion if provider cleanup fails
         }
       }
 
       // Use the comprehensive chat deletion method from SeSessionService as backup
       try {
-        print(
-            '🗑️ ProfileIconWidget: 🔄 Using SeSessionService.deleteAllChats as backup...');
+        Logger.info(
+            ' ProfileIconWidget: 🔄 Using SeSessionService.deleteAllChats as backup...');
         final seSessionService = SeSessionService();
         await seSessionService.deleteAllChats();
-        print(
-            '🗑️ ProfileIconWidget: ✅ SeSessionService.deleteAllChats completed');
+        Logger.success(
+            '🗑️ ProfileIconWidget:  SeSessionService.deleteAllChats completed');
       } catch (e) {
-        print(
-            '🗑️ ProfileIconWidget: ⚠️ Warning - SeSessionService.deleteAllChats failed: $e');
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - SeSessionService.deleteAllChats failed: $e');
         // This is just a backup, so don't fail if it doesn't work
       }
 
@@ -686,7 +689,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
 
       // CRITICAL: Clear all data from database and shared preferences BEFORE calling SeSessionService
       try {
-        print('🗑️ ProfileIconWidget: 🗄️ Clearing all database data...');
+        Logger.info(' ProfileIconWidget: 🗄️ Clearing all database data...');
 
         // Clear all database data (conversations and messages)
         final messageStorageService = MessageStorageService.instance;
@@ -695,66 +698,68 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
         // Clean up any malformed conversation IDs
         await messageStorageService.cleanupMalformedConversationIds();
 
-        print('🗑️ ProfileIconWidget: ✅ Database cleared');
+        Logger.success('🗑️ ProfileIconWidget:  Database cleared');
 
         // Force recreate database to ensure clean state
         await messageStorageService.forceRecreateDatabase();
-        print('🗑️ ProfileIconWidget: ✅ Database recreated');
+        Logger.success('🗑️ ProfileIconWidget:  Database recreated');
       } catch (e) {
-        print(
-            '🗑️ ProfileIconWidget: ⚠️ Warning - database cleanup failed: $e');
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - database cleanup failed: $e');
         // Continue with account deletion even if database cleanup fails
       }
 
       // Clear all shared preferences
       try {
-        print('🗑️ ProfileIconWidget: 🔍 Clearing all shared preferences...');
+        Logger.info(
+            ' ProfileIconWidget: 🔍 Clearing all shared preferences...');
         final prefsService = SeSharedPreferenceService();
         await prefsService.clear();
-        print('🗑️ ProfileIconWidget: ✅ Shared preferences cleared');
+        Logger.success('🗑️ ProfileIconWidget:  Shared preferences cleared');
       } catch (e) {
-        print(
-            '🗑️ ProfileIconWidget: ⚠️ Warning - shared preferences cleanup failed: $e');
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - shared preferences cleanup failed: $e');
         // Continue with account deletion even if shared preferences cleanup fails
       }
 
       // Clear all local storage service data
       try {
-        print(
-            '🗑️ ProfileIconWidget: 📱 Clearing all local storage service data...');
+        Logger.info(
+            ' ProfileIconWidget: 📱 Clearing all local storage service data...');
         final localStorageService = LocalStorageService.instance;
         await localStorageService.clearAllData();
-        print('🗑️ ProfileIconWidget: ✅ Local storage service cleared');
+        Logger.success('🗑️ ProfileIconWidget:  Local storage service cleared');
       } catch (e) {
-        print(
-            '🗑️ ProfileIconWidget: ⚠️ Warning - local storage service cleanup failed: $e');
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - local storage service cleanup failed: $e');
         // Continue with account deletion even if local storage service cleanup fails
       }
 
       // Clear all temporary files and directories
       try {
-        print(
-            '🗑️ ProfileIconWidget: 🗂️ Clearing all temporary files and directories...');
+        Logger.info(
+            ' ProfileIconWidget: 🗂️ Clearing all temporary files and directories...');
         final appDocumentsDir = await getApplicationDocumentsDirectory();
 
         // Clear image directory if it exists
         final imagesDir = Directory('${appDocumentsDir.path}/sechat_images');
         if (await imagesDir.exists()) {
           await imagesDir.delete(recursive: true);
-          print('🗑️ ProfileIconWidget: ✅ Image directory cleared');
+          Logger.success('🗑️ ProfileIconWidget:  Image directory cleared');
         }
 
         // Clear temp directory if it exists
         final tempDir = Directory('${appDocumentsDir.path}/sechat_temp');
         if (await tempDir.exists()) {
           await tempDir.delete(recursive: true);
-          print('🗑️ ProfileIconWidget: ✅ Temp directory cleared');
+          Logger.success('🗑️ ProfileIconWidget:  Temp directory cleared');
         }
 
-        print(
-            '🗑️ ProfileIconWidget: ✅ All temporary files and directories cleared');
+        Logger.success(
+            '🗑️ ProfileIconWidget:  All temporary files and directories cleared');
       } catch (e) {
-        print('🗑️ ProfileIconWidget: ⚠️ Warning - file cleanup failed: $e');
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - file cleanup failed: $e');
         // Continue with account deletion even if file cleanup fails
       }
 
@@ -765,36 +770,37 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       // CRITICAL: Clear all provider data to prevent old conversations from showing
       if (mounted) {
         try {
-          print('🗑️ ProfileIconWidget: 🧹 Clearing all provider data...');
+          Logger.info(' ProfileIconWidget: 🧹 Clearing all provider data...');
 
           // Clear ChatListProvider
           final chatListProvider =
               Provider.of<ChatListProvider>(context, listen: false);
           chatListProvider.clearAllData();
-          print('🗑️ ProfileIconWidget: ✅ ChatListProvider cleared');
+          Logger.success('🗑️ ProfileIconWidget:  ChatListProvider cleared');
 
           // Clear KeyExchangeRequestProvider
           final keyExchangeProvider =
               Provider.of<KeyExchangeRequestProvider>(context, listen: false);
           keyExchangeProvider.clearAllData();
-          print('🗑️ ProfileIconWidget: ✅ KeyExchangeRequestProvider cleared');
+          Logger.success(
+              '🗑️ ProfileIconWidget:  KeyExchangeRequestProvider cleared');
 
           // Clear IndicatorService
           final indicatorService =
               Provider.of<IndicatorService>(context, listen: false);
           indicatorService.clearAllIndicators();
-          print('🗑️ ProfileIconWidget: ✅ IndicatorService cleared');
+          Logger.success('🗑️ ProfileIconWidget:  IndicatorService cleared');
 
           // Clear SocketStatusProvider
           final socketStatusProvider =
               Provider.of<SocketStatusProvider>(context, listen: false);
           socketStatusProvider.resetState();
-          print('🗑️ ProfileIconWidget: ✅ SocketStatusProvider reset');
+          Logger.success('🗑️ ProfileIconWidget:  SocketStatusProvider reset');
 
-          print('🗑️ ProfileIconWidget: ✅ All provider data cleared');
+          Logger.success('🗑️ ProfileIconWidget:  All provider data cleared');
         } catch (e) {
-          print(
-              '🗑️ ProfileIconWidget: ⚠️ Warning - provider cleanup failed: $e');
+          Logger.warning(
+              '🗑️ ProfileIconWidget:  Warning - provider cleanup failed: $e');
           // Don't fail the account deletion if provider cleanup fails
         }
       }

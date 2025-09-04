@@ -1,3 +1,5 @@
+import 'package:sechat_app//../core/utils/logger.dart';
+
 class User {
   final String id;
   final String? deviceId; // Made optional for Session Protocol compatibility
@@ -55,7 +57,7 @@ class User {
         profilePicture: data['profile_picture'] ?? data['profilePicture'],
       );
     } catch (e) {
-      print('📱 User.fromJson error: $e for data: $json');
+      Logger.debug('📱 User.fromJson error: $e for data: $json');
       // Return a default user with available data
       return User(
         id: json['id']?.toString() ?? 'unknown',

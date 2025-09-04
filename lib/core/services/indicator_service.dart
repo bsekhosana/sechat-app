@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:sechat_app/features/notifications/services/local_notification_badge_service.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 class IndicatorService extends ChangeNotifier {
   static final IndicatorService _instance = IndicatorService._internal();
@@ -27,7 +28,7 @@ class IndicatorService extends ChangeNotifier {
       // The actual counts are updated via updateCounts() method
       notifyListeners();
     } catch (e) {
-      print('🔔 IndicatorService: Error checking for new items: $e');
+      Logger.debug(' IndicatorService: Error checking for new items: $e');
     }
   }
 
@@ -42,11 +43,11 @@ class IndicatorService extends ChangeNotifier {
   }
 
   void clearKeyExchangeIndicator() {
-    print(
+    Logger.debug(
         '🔔 IndicatorService: 🧹 Clearing KER indicator (was: $_pendingKeyExchangeCount)');
     _pendingKeyExchangeCount = 0;
     notifyListeners();
-    print('🔔 IndicatorService: ✅ KER indicator cleared');
+    Logger.success(' IndicatorService:  KER indicator cleared');
   }
 
   /// Clear all indicators at once (used when account is deleted)
@@ -55,7 +56,7 @@ class IndicatorService extends ChangeNotifier {
     _pendingKeyExchangeCount = 0;
     _unreadNotificationsCount = 0;
     notifyListeners();
-    print('🔔 IndicatorService: ✅ All indicators cleared');
+    Logger.success(' IndicatorService:  All indicators cleared');
   }
 
   /// Update counts from external sources
@@ -67,45 +68,45 @@ class IndicatorService extends ChangeNotifier {
     bool hasChanges = false;
 
     if (unreadChats != null && _unreadChatsCount != unreadChats) {
-      print(
-          '🔔 IndicatorService: 🔄 Chat count changing from $_unreadChatsCount to $unreadChats');
+      Logger.info(
+          ' IndicatorService:  Chat count changing from $_unreadChatsCount to $unreadChats');
       _unreadChatsCount = unreadChats;
       hasChanges = true;
     }
 
     if (pendingKeyExchange != null &&
         _pendingKeyExchangeCount != pendingKeyExchange) {
-      print(
-          '🔔 IndicatorService: 🔄 KER count changing from $_pendingKeyExchangeCount to $pendingKeyExchange');
+      Logger.info(
+          ' IndicatorService:  KER count changing from $_pendingKeyExchangeCount to $pendingKeyExchange');
       _pendingKeyExchangeCount = pendingKeyExchange;
       hasChanges = true;
     }
 
     if (unreadNotifications != null &&
         _unreadNotificationsCount != unreadNotifications) {
-      print(
-          '🔔 IndicatorService: 🔄 Notifications count changing from $_unreadNotificationsCount to $unreadNotifications');
+      Logger.info(
+          ' IndicatorService:  Notifications count changing from $_unreadNotificationsCount to $unreadNotifications');
       _unreadNotificationsCount = unreadNotifications;
       hasChanges = true;
     }
 
     if (hasChanges) {
       notifyListeners();
-      print(
-          '🔔 IndicatorService: ✅ Counts updated - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
+      Logger.success(
+          ' IndicatorService:  Counts updated - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
 
       // Update app badge counter
       _updateAppBadgeCounter();
     } else {
-      print('🔔 IndicatorService: ℹ️ No changes detected in badge counts');
+      Logger.info(' IndicatorService:  No changes detected in badge counts');
     }
   }
 
   /// Force display current badge counts (useful when navigating to tabs)
   void forceDisplayCurrentCounts() {
-    print('🔔 IndicatorService: 🔄 Force displaying current badge counts');
-    print(
-        '🔔 IndicatorService: 📊 Current counts - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
+    Logger.info(' IndicatorService:  Force displaying current badge counts');
+    Logger.debug(
+        ' IndicatorService: 📊 Current counts - Chats: $_unreadChatsCount, KER: $_pendingKeyExchangeCount, Notifications: $_unreadNotificationsCount');
     notifyListeners();
   }
 
@@ -123,21 +124,21 @@ class IndicatorService extends ChangeNotifier {
         _isOnKeyExchangeScreen != isOnKeyExchangeScreen) {
       _isOnKeyExchangeScreen = isOnKeyExchangeScreen;
       hasChanges = true;
-      print(
-          '🔔 IndicatorService: 🔄 KER screen context changed to: $_isOnKeyExchangeScreen');
+      Logger.info(
+          ' IndicatorService:  KER screen context changed to: $_isOnKeyExchangeScreen');
     }
 
     if (isOnNotificationsScreen != null &&
         _isOnNotificationsScreen != isOnNotificationsScreen) {
       _isOnNotificationsScreen = isOnNotificationsScreen;
       hasChanges = true;
-      print(
-          '🔔 IndicatorService: 🔄 Notifications screen context changed to: $_isOnNotificationsScreen');
+      Logger.info(
+          ' IndicatorService:  Notifications screen context changed to: $_isOnNotificationsScreen');
     }
 
     if (hasChanges) {
-      print(
-          '🔔 IndicatorService: ✅ Screen context updated - KER: $_isOnKeyExchangeScreen, Notifications: $_isOnNotificationsScreen');
+      Logger.success(
+          ' IndicatorService:  Screen context updated - KER: $_isOnKeyExchangeScreen, Notifications: $_isOnNotificationsScreen');
     }
   }
 
@@ -147,18 +148,18 @@ class IndicatorService extends ChangeNotifier {
     int? pendingKeyExchange,
     int? unreadNotifications,
   }) {
-    print(
-        '🔔 IndicatorService: 🔍 Context check - KER Screen: $_isOnKeyExchangeScreen, Notifications Screen: $_isOnNotificationsScreen');
+    Logger.info(
+        ' IndicatorService:  Context check - KER Screen: $_isOnKeyExchangeScreen, Notifications Screen: $_isOnNotificationsScreen');
 
     // For KER badge: only prevent external updates when on KER screen
     // But allow the badge to show the current count
     if (pendingKeyExchange != null && _isOnKeyExchangeScreen) {
       // If we're on the KER screen and the count is 0, allow the update to show the current count
       if (_pendingKeyExchangeCount == 0 && pendingKeyExchange > 0) {
-        print(
-            '🔔 IndicatorService: ℹ️ Allowing KER badge update to show current count on KER screen: $pendingKeyExchange');
+        Logger.info(
+            ' IndicatorService:  Allowing KER badge update to show current count on KER screen: $pendingKeyExchange');
       } else {
-        print(
+        Logger.debug(
             '🔔 IndicatorService: ℹ️ Skipping KER badge update from external source - user on KER screen (current count: $_pendingKeyExchangeCount)');
         return;
       }
@@ -169,18 +170,18 @@ class IndicatorService extends ChangeNotifier {
     if (unreadNotifications != null && _isOnNotificationsScreen) {
       // If we're on the notifications screen and the count is 0, allow the update to show the current count
       if (_unreadNotificationsCount == 0 && unreadNotifications > 0) {
-        print(
-            '🔔 IndicatorService: ℹ️ Allowing notifications badge update to show current count on notifications screen: $unreadNotifications');
+        Logger.info(
+            ' IndicatorService:  Allowing notifications badge update to show current count on notifications screen: $unreadNotifications');
       } else {
-        print(
+        Logger.debug(
             '🔔 IndicatorService: ℹ️ Skipping notifications badge update from external source - user on notifications screen (current count: $_unreadNotificationsCount)');
         return;
       }
     }
 
     // Proceed with normal update
-    print(
-        '🔔 IndicatorService: ✅ Proceeding with badge update - KER: $pendingKeyExchange, Notifications: $unreadNotifications');
+    Logger.success(
+        ' IndicatorService:  Proceeding with badge update - KER: $pendingKeyExchange, Notifications: $unreadNotifications');
     updateCounts(
       unreadChats: unreadChats,
       pendingKeyExchange: pendingKeyExchange,
@@ -198,10 +199,11 @@ class IndicatorService extends ChangeNotifier {
 
       final localNotificationBadgeService = LocalNotificationBadgeService();
       await localNotificationBadgeService.setBadgeCount(appBadgeCount);
-      print(
+      Logger.debug(
           '🔔 IndicatorService: ✅ App badge counter updated to: $appBadgeCount (notifications only)');
     } catch (e) {
-      print('🔔 IndicatorService: ❌ Failed to update app badge counter: $e');
+      Logger.error(
+          ' IndicatorService:  Failed to update app badge counter: $e');
     }
   }
 }

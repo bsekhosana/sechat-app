@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sechat_app/features/notifications/models/socket_notification.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 /// Database service for storing socket notifications
 class NotificationDatabaseService {
@@ -70,11 +71,11 @@ class NotificationDatabaseService {
       // Add icon column to existing table
       try {
         await db.execute('ALTER TABLE $_tableName ADD COLUMN icon TEXT');
-        print(
-            '📱 NotificationDatabaseService: ✅ Added icon column to existing table');
+        Logger.success(
+            '📱 NotificationDatabaseService:  Added icon column to existing table');
       } catch (e) {
-        print(
-            '📱 NotificationDatabaseService: ℹ️ Icon column may already exist: $e');
+        Logger.info(
+            '📱 NotificationDatabaseService:  Icon column may already exist: $e');
       }
     }
   }
@@ -93,11 +94,12 @@ class NotificationDatabaseService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      print(
-          '📱 NotificationDatabaseService: ✅ Added notification: ${notification.title}');
+      Logger.success(
+          '📱 NotificationDatabaseService:  Added notification: ${notification.title}');
       return notification.id;
     } catch (e) {
-      print('📱 NotificationDatabaseService: ❌ Failed to add notification: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to add notification: $e');
       rethrow;
     }
   }
@@ -155,8 +157,8 @@ class NotificationDatabaseService {
 
       return results.map((row) => _notificationFromRow(row)).toList();
     } catch (e) {
-      print(
-          '📱 NotificationDatabaseService: ❌ Failed to get notifications: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to get notifications: $e');
       return [];
     }
   }
@@ -170,7 +172,8 @@ class NotificationDatabaseService {
           'SELECT COUNT(*) as count FROM $_tableName WHERE is_read = 0');
       return Sqflite.firstIntValue(result) ?? 0;
     } catch (e) {
-      print('📱 NotificationDatabaseService: ❌ Failed to get unread count: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to get unread count: $e');
       return 0;
     }
   }
@@ -207,14 +210,14 @@ class NotificationDatabaseService {
       );
 
       if (result > 0) {
-        print(
-            '📱 NotificationDatabaseService: ✅ Marked notification as read: $notificationId');
+        Logger.success(
+            '📱 NotificationDatabaseService:  Marked notification as read: $notificationId');
         return true;
       }
       return false;
     } catch (e) {
-      print(
-          '📱 NotificationDatabaseService: ❌ Failed to mark notification as read: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to mark notification as read: $e');
       return false;
     }
   }
@@ -230,12 +233,12 @@ class NotificationDatabaseService {
         where: 'is_read = 0',
       );
 
-      print(
-          '📱 NotificationDatabaseService: ✅ Marked $result notifications as read');
+      Logger.success(
+          '📱 NotificationDatabaseService:  Marked $result notifications as read');
       return true;
     } catch (e) {
-      print(
-          '📱 NotificationDatabaseService: ❌ Failed to mark all notifications as read: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to mark all notifications as read: $e');
       return false;
     }
   }
@@ -252,12 +255,12 @@ class NotificationDatabaseService {
         whereArgs: [conversationId],
       );
 
-      print(
-          '📱 NotificationDatabaseService: ✅ Marked $result conversation notifications as read');
+      Logger.success(
+          '📱 NotificationDatabaseService:  Marked $result conversation notifications as read');
       return true;
     } catch (e) {
-      print(
-          '📱 NotificationDatabaseService: ❌ Failed to mark conversation as read: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to mark conversation as read: $e');
       return false;
     }
   }
@@ -274,14 +277,14 @@ class NotificationDatabaseService {
       );
 
       if (result > 0) {
-        print(
-            '📱 NotificationDatabaseService: ✅ Deleted notification: $notificationId');
+        Logger.success(
+            '📱 NotificationDatabaseService:  Deleted notification: $notificationId');
         return true;
       }
       return false;
     } catch (e) {
-      print(
-          '📱 NotificationDatabaseService: ❌ Failed to delete notification: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to delete notification: $e');
       return false;
     }
   }
@@ -298,12 +301,12 @@ class NotificationDatabaseService {
         whereArgs: [thirtyDaysAgo.toIso8601String()],
       );
 
-      print(
-          '📱 NotificationDatabaseService: ✅ Deleted $result expired notifications');
+      Logger.success(
+          '📱 NotificationDatabaseService:  Deleted $result expired notifications');
       return result;
     } catch (e) {
-      print(
-          '📱 NotificationDatabaseService: ❌ Failed to delete expired notifications: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to delete expired notifications: $e');
       return 0;
     }
   }
@@ -314,11 +317,12 @@ class NotificationDatabaseService {
 
     try {
       final result = await db.delete(_tableName);
-      print('📱 NotificationDatabaseService: ✅ Cleared all notifications');
+      Logger.success(
+          '📱 NotificationDatabaseService:  Cleared all notifications');
       return true;
     } catch (e) {
-      print(
-          '📱 NotificationDatabaseService: ❌ Failed to clear all notifications: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to clear all notifications: $e');
       return false;
     }
   }
@@ -350,7 +354,8 @@ class NotificationDatabaseService {
         'type_counts': typeCounts,
       };
     } catch (e) {
-      print('📱 NotificationDatabaseService: ❌ Failed to get statistics: $e');
+      Logger.error(
+          '📱 NotificationDatabaseService:  Failed to get statistics: $e');
       return {
         'total': 0,
         'unread': 0,

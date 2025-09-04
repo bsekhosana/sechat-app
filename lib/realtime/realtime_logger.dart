@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '/../core/utils/logger.dart';
 
 /// Structured logging for realtime features with feature tags and counters
 class RealtimeLogger {
@@ -83,9 +84,9 @@ class RealtimeLogger {
     // Only log in debug mode or when LOG_LEVEL is set
     if (kDebugMode ||
         const bool.fromEnvironment('LOG_LEVEL', defaultValue: false)) {
-      print('$_tag [$feature]$tagString $message$counterString');
+      Logger.debug('$_tag [$feature]$tagString $message$counterString');
       if (details != null && details.isNotEmpty) {
-        print('$_tag [$feature] Details: $details');
+        Logger.debug('$_tag [$feature] Details: $details');
       }
     }
   }

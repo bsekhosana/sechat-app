@@ -6,6 +6,7 @@ import '../../shared/models/chat.dart';
 import '../../shared/models/message.dart';
 import '../../shared/models/user.dart';
 import 'se_shared_preference_service.dart';
+import 'package:sechat_app//../core/utils/logger.dart';
 
 class LocalStorageService extends ChangeNotifier {
   static LocalStorageService? _instance;
@@ -29,14 +30,14 @@ class LocalStorageService extends ChangeNotifier {
       await _createDirectories();
       _isInitialized = true;
     } catch (e) {
-      print('📱 LocalStorageService: Error initializing: $e');
+      Logger.debug('📱 LocalStorageService: Error initializing: $e');
     }
   }
 
   Future<void> _createDirectories() async {
     if (kIsWeb) {
       // Web platform - use temporary directories or skip file storage
-      print(
+      Logger.debug(
           '📱 LocalStorageService: Running on web, skipping file directories');
       return;
     }
@@ -61,29 +62,29 @@ class LocalStorageService extends ChangeNotifier {
 
   @Deprecated('Use MessageStorageService.saveConversation instead')
   Future<void> saveChat(Chat chat) async {
-    print(
-        '📱 LocalStorageService: ⚠️ saveChat is deprecated, use MessageStorageService.saveConversation instead');
+    Logger.warning(
+        '📱 LocalStorageService:  saveChat is deprecated, use MessageStorageService.saveConversation instead');
     // No-op - chats are now stored in database
   }
 
   @Deprecated('Use MessageStorageService instead')
   Future<void> saveChats(List<Chat> chats) async {
-    print(
-        '📱 LocalStorageService: ⚠️ saveChats is deprecated, use MessageStorageService instead');
+    Logger.warning(
+        '📱 LocalStorageService:  saveChats is deprecated, use MessageStorageService instead');
     // No-op - chats are now stored in database
   }
 
   @Deprecated('Use MessageStorageService.getUserConversations instead')
   Future<List<Chat>> getAllChats() async {
-    print(
-        '📱 LocalStorageService: ⚠️ getAllChats is deprecated, use MessageStorageService.getUserConversations instead');
+    Logger.warning(
+        '📱 LocalStorageService:  getAllChats is deprecated, use MessageStorageService.getUserConversations instead');
     return []; // No-op - chats are now stored in database
   }
 
   @Deprecated('Use MessageStorageService instead')
   Future<void> deleteChat(String chatId) async {
-    print(
-        '📱 LocalStorageService: ⚠️ deleteChat is deprecated, use MessageStorageService instead');
+    Logger.warning(
+        '📱 LocalStorageService:  deleteChat is deprecated, use MessageStorageService instead');
     // No-op - chats are now stored in database
   }
 
@@ -93,29 +94,29 @@ class LocalStorageService extends ChangeNotifier {
 
   @Deprecated('Use MessageStorageService.saveMessage instead')
   Future<void> saveMessage(Message message) async {
-    print(
-        '📱 LocalStorageService: ⚠️ saveMessage is deprecated, use MessageStorageService.saveMessage instead');
+    Logger.warning(
+        '📱 LocalStorageService:  saveMessage is deprecated, use MessageStorageService.saveMessage instead');
     // No-op - messages are now stored in database
   }
 
   @Deprecated('Use MessageStorageService instead')
   Future<void> saveMessages(List<Message> messages) async {
-    print(
-        '📱 LocalStorageService: ⚠️ saveMessages is deprecated, use MessageStorageService instead');
+    Logger.warning(
+        '📱 LocalStorageService:  saveMessages is deprecated, use MessageStorageService instead');
     // No-op - messages are now stored in database
   }
 
   @Deprecated('Use MessageStorageService.getConversationMessages instead')
   Future<List<Message>> getMessagesForChat(String chatId) async {
-    print(
-        '📱 LocalStorageService: ⚠️ getMessagesForChat is deprecated, use MessageStorageService.getConversationMessages instead');
+    Logger.warning(
+        '📱 LocalStorageService:  getMessagesForChat is deprecated, use MessageStorageService.getConversationMessages instead');
     return []; // No-op - messages are now stored in database
   }
 
   @Deprecated('Use MessageStorageService instead')
   Future<void> deleteMessage(String messageId) async {
-    print(
-        '📱 LocalStorageService: ⚠️ deleteMessage is deprecated, use MessageStorageService instead');
+    Logger.warning(
+        '📱 LocalStorageService:  deleteMessage is deprecated, use MessageStorageService instead');
     // No-op - messages are now stored in database
   }
 
@@ -143,11 +144,11 @@ class LocalStorageService extends ChangeNotifier {
         try {
           users.add(User.fromJson(userJson));
         } catch (e) {
-          print('📱 LocalStorageService: Error parsing user: $e');
+          Logger.debug('📱 LocalStorageService: Error parsing user: $e');
         }
       }
     } catch (e) {
-      print('📱 LocalStorageService: Error loading users: $e');
+      Logger.debug('📱 LocalStorageService: Error loading users: $e');
     }
     return users;
   }
@@ -180,7 +181,7 @@ class LocalStorageService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('📱 LocalStorageService: Error loading invitation: $e');
+      Logger.debug('📱 LocalStorageService: Error loading invitation: $e');
     }
     return null;
   }
@@ -191,7 +192,7 @@ class LocalStorageService extends ChangeNotifier {
           await _prefsService.getJsonList('invitations') ?? [];
       return invitationsJson;
     } catch (e) {
-      print('📱 LocalStorageService: Error loading invitations: $e');
+      Logger.debug('📱 LocalStorageService: Error loading invitations: $e');
       return [];
     }
   }
@@ -220,7 +221,7 @@ class LocalStorageService extends ChangeNotifier {
           await _prefsService.getJsonList('notifications') ?? [];
       return notificationsJson;
     } catch (e) {
-      print('📱 LocalStorageService: Error loading notifications: $e');
+      Logger.debug('📱 LocalStorageService: Error loading notifications: $e');
       return [];
     }
   }
@@ -255,14 +256,14 @@ class LocalStorageService extends ChangeNotifier {
 
       return stats;
     } catch (e) {
-      print('📱 LocalStorageService: Error getting storage stats: $e');
+      Logger.debug('📱 LocalStorageService: Error getting storage stats: $e');
       return {};
     }
   }
 
   Future<void> clearOldMessages({int daysToKeep = 30}) async {
     try {
-      print(
+      Logger.debug(
           '📱 LocalStorageService: Clearing old messages (keeping last $daysToKeep days)...');
 
       final cutoffDate = DateTime.now().subtract(Duration(days: daysToKeep));
@@ -277,7 +278,8 @@ class LocalStorageService extends ChangeNotifier {
             updatedMessages.add(messageJson);
           }
         } catch (e) {
-          print('📱 LocalStorageService: Error parsing message date: $e');
+          Logger.debug(
+              '📱 LocalStorageService: Error parsing message date: $e');
           // Keep message if we can't parse the date
           updatedMessages.add(messageJson);
         }
@@ -285,16 +287,16 @@ class LocalStorageService extends ChangeNotifier {
 
       await _prefsService.setJsonList('messages', updatedMessages);
       notifyListeners();
-      print(
+      Logger.debug(
           '📱 LocalStorageService: ✅ Old messages cleared (${messagesJson.length - updatedMessages.length} messages removed)');
     } catch (e) {
-      print('📱 LocalStorageService: Error clearing old messages: $e');
+      Logger.debug('📱 LocalStorageService: Error clearing old messages: $e');
     }
   }
 
   Future<void> clearAllData() async {
     try {
-      print('📱 LocalStorageService: Clearing all data...');
+      Logger.debug('📱 LocalStorageService: Clearing all data...');
 
       await _prefsService.remove('chats');
       await _prefsService.remove('messages');
@@ -303,9 +305,9 @@ class LocalStorageService extends ChangeNotifier {
       await _prefsService.remove('notifications');
 
       notifyListeners();
-      print('📱 LocalStorageService: ✅ All data cleared');
+      Logger.success('📱 LocalStorageService:  All data cleared');
     } catch (e) {
-      print('📱 LocalStorageService: Error clearing all data: $e');
+      Logger.debug('📱 LocalStorageService: Error clearing all data: $e');
     }
   }
 
@@ -367,7 +369,7 @@ class LocalStorageService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('📱 LocalStorageService: Error cleaning up temp files: $e');
+      Logger.debug('📱 LocalStorageService: Error cleaning up temp files: $e');
     }
   }
 }

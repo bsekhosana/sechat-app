@@ -24,6 +24,7 @@ import '../../notifications/services/local_notification_badge_service.dart';
 import '../../notifications/services/local_notification_database_service.dart';
 import 'package:sechat_app/main.dart' show updateCurrentScreenIndex;
 import 'package:sechat_app/shared/widgets/global_socket_status_banner.dart';
+import '/../core/utils/logger.dart';
 
 class MainNavScreen extends StatefulWidget {
   final Map<String, dynamic>? notificationPayload;
@@ -109,14 +110,14 @@ Download now and let's chat securely!
 
     // Debug: Check current session ID
     final currentSessionId = SeSessionService().currentSessionId;
-    print('🔌 MainNavScreen: 🔍 Current session ID: $currentSessionId');
-    print(
-        '🔌 MainNavScreen: 🔍 SeSocketService connected: ${socketService.isConnected}');
+    Logger.info(' MainNavScreen:  Current session ID: $currentSessionId');
+    Logger.info(
+        ' MainNavScreen:  SeSocketService connected: ${socketService.isConnected}');
 
     // Check if SeSocketService is already initialized
     if (socketService.isConnected) {
-      print(
-          '🔌 MainNavScreen: ✅ SeSocketService already connected, setting up providers');
+      Logger.success(
+          ' MainNavScreen:  SeSocketService already connected, setting up providers');
 
       // The provider already handles socket connection in its initialize method
       // Just ensure it's initialized
@@ -125,11 +126,11 @@ Download now and let's chat securely!
       // Set up badge count updates
       _setupBadgeCountUpdates();
 
-      print(
-          '🔌 MainNavScreen: ✅ KeyExchangeRequestProvider connected to socket service and initialized');
+      Logger.success(
+          ' MainNavScreen:  KeyExchangeRequestProvider connected to socket service and initialized');
     } else {
-      print(
-          '🔌 MainNavScreen: ⚠️ SeSocketService not connected yet, will retry in setupBadgeCountUpdates');
+      Logger.warning(
+          ' MainNavScreen:  SeSocketService not connected yet, will retry in setupBadgeCountUpdates');
 
       // Set up badge count updates anyway (will retry connection)
       _setupBadgeCountUpdates();
@@ -138,7 +139,7 @@ Download now and let's chat securely!
 
   /// Force refresh badge counts (can be called from external sources)
   void forceRefreshBadgeCounts() {
-    print('🔔 MainNavScreen: 🔄 Force refreshing badge counts');
+    Logger.info(' MainNavScreen:  Force refreshing badge counts');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateBadgeCountsSync(); // Instant update
       _updateBadgeCounts(); // Full update
@@ -147,8 +148,8 @@ Download now and let's chat securely!
 
   /// Refresh notification badge count immediately (for when notifications are marked as read)
   void refreshNotificationBadgeCount() async {
-    print(
-        '🔔 MainNavScreen: 🔄 Refreshing notification badge count immediately');
+    Logger.info(
+        ' MainNavScreen:  Refreshing notification badge count immediately');
     try {
       final localNotificationBadgeService = LocalNotificationBadgeService();
       final unreadCount = await localNotificationBadgeService.getUnreadCount();
@@ -157,17 +158,17 @@ Download now and let's chat securely!
       _indicatorService.updateCountsWithContext(
           unreadNotifications: unreadCount);
 
-      print(
-          '🔔 MainNavScreen: ✅ Notification badge count refreshed: $unreadCount');
+      Logger.success(
+          ' MainNavScreen:  Notification badge count refreshed: $unreadCount');
     } catch (e) {
-      print(
-          '🔔 MainNavScreen: ❌ Error refreshing notification badge count: $e');
+      Logger.error(
+          ' MainNavScreen:  Error refreshing notification badge count: $e');
     }
   }
 
   /// Update badge counts when providers change (for real-time updates)
   void _onProviderChanged() {
-    print('🔔 MainNavScreen: 🔄 Provider changed, updating badge counts');
+    Logger.info(' MainNavScreen:  Provider changed, updating badge counts');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateBadgeCountsSync(); // Instant update for immediate response
     });
@@ -190,8 +191,8 @@ Download now and let's chat securely!
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_indicatorService.pendingKeyExchangeCount > 0 ||
           _indicatorService.unreadNotificationsCount > 0) {
-        print(
-            '🔔 MainNavScreen: 🔍 Ensuring badge counts are visible after setup');
+        Logger.info(
+            ' MainNavScreen:  Ensuring badge counts are visible after setup');
         // Force a refresh to ensure counts are displayed
         _updateBadgeCountsSync();
       }
@@ -224,8 +225,8 @@ Download now and let's chat securely!
       final unreadNotificationsCount =
           await localNotificationBadgeService.getUnreadCount();
 
-      print(
-          '🔔 MainNavScreen: 📱 Local notification count: $unreadNotificationsCount');
+      Logger.debug(
+          ' MainNavScreen: 📱 Local notification count: $unreadNotificationsCount');
 
       // Additional debugging: Check if there are any notifications in the database
       try {
@@ -236,18 +237,18 @@ Download now and let's chat securely!
         final readNotifications =
             allNotifications.where((n) => n.status == 'read').toList();
 
-        print('🔔 MainNavScreen: 🔍 Database notification details:');
-        print('  - Total notifications: ${allNotifications.length}');
-        print('  - Unread notifications: ${unreadNotifications.length}');
-        print('  - Read notifications: ${readNotifications.length}');
+        Logger.info(' MainNavScreen:  Database notification details:');
+        Logger.debug('  - Total notifications: ${allNotifications.length}');
+        Logger.debug('  - Unread notifications: ${unreadNotifications.length}');
+        Logger.debug('  - Read notifications: ${readNotifications.length}');
 
         if (unreadNotifications.isNotEmpty) {
-          print(
+          Logger.debug(
               '  - Unread notification types: ${unreadNotifications.map((n) => n.type).toList()}');
         }
       } catch (e) {
-        print(
-            '🔔 MainNavScreen: ⚠️ Could not get detailed notification info: $e');
+        Logger.warning(
+            ' MainNavScreen:  Could not get detailed notification info: $e');
       }
 
       // Update indicator service using context-aware method
@@ -257,7 +258,7 @@ Download now and let's chat securely!
         unreadNotifications: unreadNotificationsCount,
       );
     } catch (e) {
-      print('🔔 MainNavScreen: ❌ Error updating badge counts: $e');
+      Logger.error(' MainNavScreen:  Error updating badge counts: $e');
     }
   }
 
@@ -290,10 +291,10 @@ Download now and let's chat securely!
         unreadNotifications: null, // Don't update notifications in sync method
       );
 
-      print(
-          '🔔 MainNavScreen: ⚡ Sync badge update - Chats: $unreadChatsCount, KER: $pendingKeyExchangeCount');
+      Logger.debug(
+          ' MainNavScreen: ⚡ Sync badge update - Chats: $unreadChatsCount, KER: $pendingKeyExchangeCount');
     } catch (e) {
-      print('🔔 MainNavScreen: ❌ Error updating sync badge counts: $e');
+      Logger.error(' MainNavScreen:  Error updating sync badge counts: $e');
     }
   }
 

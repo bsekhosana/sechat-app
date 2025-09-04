@@ -5,6 +5,7 @@ import '../../../core/services/se_session_service.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
 import '../../../realtime/realtime_service_manager.dart';
 import '../../../features/chat/services/message_storage_service.dart';
+import '/../core/utils/logger.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -167,7 +168,7 @@ class SettingsScreen extends StatelessWidget {
     Navigator.of(context).pop(); // Close action sheet first
 
     try {
-      print('🔍 Settings: Starting logout process...');
+      Logger.info(' Settings: Starting logout process...');
 
       // Show loading dialog
       showDialog(
@@ -197,28 +198,29 @@ class SettingsScreen extends StatelessWidget {
           socketService.sendPresenceUpdate('', false);
         }
         socketService.dispose();
-        print('🔌 SettingsScreen: ✅ Channel socket disposed during logout');
+        Logger.success(
+            ' SettingsScreen:  Channel socket disposed during logout');
       } catch (e) {
-        print(
-            '🔌 SettingsScreen: ⚠️ Error disposing channel socket: $e, but continuing with logout');
+        Logger.warning(
+            ' SettingsScreen:  Error disposing channel socket: $e, but continuing with logout');
       }
 
       // Note: Session deletion on server is now handled by ChannelSocketService
       // Session cleanup is handled automatically when the connection is closed
-      print('🔌 Settings: Session cleanup will be handled by server');
+      Logger.debug(' Settings: Session cleanup will be handled by server');
 
       // Note: Channel socket has already been disposed in the try block above
-      print('🔌 Settings: ✅ Channel socket disposed');
+      Logger.success(' Settings:  Channel socket disposed');
     } catch (e) {
-      print(
-          '🔌 Settings: ⚠️ Error handling socket during logout: $e, but continuing with logout');
+      Logger.warning(
+          ' Settings:  Error handling socket during logout: $e, but continuing with logout');
     }
 
     // Perform logout using SeSessionService
     final seSessionService = SeSessionService();
     final logoutSuccess = await seSessionService.logout();
 
-    print('🔍 Settings: Logout result: $logoutSuccess');
+    Logger.info(' Settings: Logout result: $logoutSuccess');
 
     // Close loading dialog
     if (context.mounted) {
@@ -227,7 +229,7 @@ class SettingsScreen extends StatelessWidget {
 
     // Check if widget is still mounted before navigation
     if (context.mounted) {
-      print('🔍 Settings: Navigating to login screen...');
+      Logger.info(' Settings: Navigating to login screen...');
       // Navigate to login screen without back button
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
@@ -235,9 +237,9 @@ class SettingsScreen extends StatelessWidget {
         ),
         (route) => false,
       );
-      print('🔍 Settings: Navigation completed');
+      Logger.info(' Settings: Navigation completed');
     } else {
-      print('🔍 Settings: Context not mounted after logout');
+      Logger.info(' Settings: Context not mounted after logout');
       // Force navigation even if context is not mounted
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pushAndRemoveUntil(
@@ -437,7 +439,7 @@ class _StorageManagementSheetState extends State<_StorageManagementSheet> {
         _isLoading = false;
       });
     } catch (e) {
-      print('📱 Settings: Error loading storage stats: $e');
+      Logger.debug('📱 Settings: Error loading storage stats: $e');
       setState(() {
         _isLoading = false;
       });

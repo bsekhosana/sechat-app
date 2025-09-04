@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/message.dart';
 import '../../../core/services/encryption_service.dart';
+import '/../core/utils/logger.dart';
 
 /// Widget for displaying text message bubbles with modern Material 3 design
 class TextMessageBubble extends StatefulWidget {
@@ -256,7 +257,7 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
               if (widget.message.content.containsKey('text')) {
                 final encryptedText = widget.message.content['text'] as String?;
                 if (encryptedText != null && encryptedText.isNotEmpty) {
-                  print(
+                  Logger.debug(
                       '🔐 TextMessageBubble: 🔍 Encrypted text preview: ${encryptedText.substring(0, encryptedText.length > 50 ? 50 : encryptedText.length)}...');
                 }
               }
@@ -323,16 +324,16 @@ class _TextMessageBubbleState extends State<TextMessageBubble> {
         return null;
       }
     } catch (e) {
-      print('🔐 TextMessageBubble: ❌ Error decrypting message: $e');
-      print('🔐 TextMessageBubble: 🔍 Error details: ${e.toString()}');
+      Logger.error(' TextMessageBubble:  Error decrypting message: $e');
+      Logger.debug('🔐 TextMessageBubble: 🔍 Error details: ${e.toString()}');
 
       // Try to provide a more helpful error message
       if (e.toString().contains('FormatException')) {
-        print(
-            '🔐 TextMessageBubble: ℹ️ Format error - message may not be properly encrypted');
+        Logger.info(
+            ' TextMessageBubble:  Format error - message may not be properly encrypted');
       } else if (e.toString().contains('key')) {
-        print(
-            '🔐 TextMessageBubble: ℹ️ Key error - encryption key may be incorrect');
+        Logger.info(
+            ' TextMessageBubble:  Key error - encryption key may be incorrect');
       }
 
       return null;

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'se_session_service.dart';
 import 'se_socket_service.dart';
 import 'local_storage_service.dart';
+import '/..//../core/utils/logger.dart';
 // import 'secure_notification_service.dart'; // Removed - now handled by socket service
 
 class UserExistenceGuard {
@@ -22,13 +23,13 @@ class UserExistenceGuard {
   // Handle user not found - logout and clear all data
   Future<void> handleUserNotFound() async {
     if (_isHandlingLogout) {
-      print('🔍 UserExistenceGuard: Already handling logout, skipping');
+      Logger.info(' UserExistenceGuard: Already handling logout, skipping');
       return;
     }
 
     _isHandlingLogout = true;
-    print(
-        '🔍 UserExistenceGuard: User no longer exists, starting logout process');
+    Logger.info(
+        ' UserExistenceGuard: User no longer exists, starting logout process');
 
     try {
       // 1. Remove session on socket server (if possible) then logout locally
@@ -40,27 +41,28 @@ class UserExistenceGuard {
         // Best-effort; proceed regardless
       }
 
-      print('🔍 UserExistenceGuard: Logging out from SeSessionService');
+      Logger.info(' UserExistenceGuard: Logging out from SeSessionService');
       await SeSessionService().logout();
 
       // 2. Clear all local storage
-      print('🔍 UserExistenceGuard: Clearing local storage');
+      Logger.info(' UserExistenceGuard: Clearing local storage');
       await _clearAllLocalData();
 
       // 3. Clear secure storage
-      print('🔍 UserExistenceGuard: Clearing secure storage');
+      Logger.info(' UserExistenceGuard: Clearing secure storage');
       await _clearSecureStorage();
 
       // 4. Cancel all notifications (now handled by socket service)
-      print('🔍 UserExistenceGuard: Notifications handled by socket service');
+      Logger.info(
+          ' UserExistenceGuard: Notifications handled by socket service');
 
       // 5. Reset all providers (this will be done by the app when it detects the logout)
-      print('🔍 UserExistenceGuard: Logout process completed');
+      Logger.info(' UserExistenceGuard: Logout process completed');
 
       // 6. Show logout message
       _showLogoutMessage();
     } catch (e) {
-      print('🔍 UserExistenceGuard: Error during logout: $e');
+      Logger.info(' UserExistenceGuard: Error during logout: $e');
     } finally {
       _isHandlingLogout = false;
     }
@@ -71,9 +73,9 @@ class UserExistenceGuard {
     try {
       // Clear Hive databases
       await LocalStorageService.instance.clearAllData();
-      print('🔍 UserExistenceGuard: Local storage cleared');
+      Logger.info(' UserExistenceGuard: Local storage cleared');
     } catch (e) {
-      print('🔍 UserExistenceGuard: Error clearing local storage: $e');
+      Logger.info(' UserExistenceGuard: Error clearing local storage: $e');
     }
   }
 
@@ -81,9 +83,9 @@ class UserExistenceGuard {
   Future<void> _clearSecureStorage() async {
     try {
       await _storage.deleteAll();
-      print('🔍 UserExistenceGuard: Secure storage cleared');
+      Logger.info(' UserExistenceGuard: Secure storage cleared');
     } catch (e) {
-      print('🔍 UserExistenceGuard: Error clearing secure storage: $e');
+      Logger.info(' UserExistenceGuard: Error clearing secure storage: $e');
     }
   }
 
@@ -91,7 +93,7 @@ class UserExistenceGuard {
   void _showLogoutMessage() {
     // This will be handled by the app's navigation system
     // The app will detect the cleared storage and navigate to login
-    print('🔍 UserExistenceGuard: User logged out due to account deletion');
+    Logger.info(' UserExistenceGuard: User logged out due to account deletion');
 
     // Show a snackbar or dialog if context is available
     // For now, we'll rely on the app detecting the cleared storage
@@ -100,40 +102,41 @@ class UserExistenceGuard {
   // Handle logout with context for UI updates
   Future<void> handleUserNotFoundWithContext(BuildContext context) async {
     if (_isHandlingLogout) {
-      print('🔍 UserExistenceGuard: Already handling logout, skipping');
+      Logger.info(' UserExistenceGuard: Already handling logout, skipping');
       return;
     }
 
     _isHandlingLogout = true;
-    print(
-        '🔍 UserExistenceGuard: User no longer exists, starting logout process');
+    Logger.info(
+        ' UserExistenceGuard: User no longer exists, starting logout process');
 
     try {
       // 1. Logout from SeSessionService
-      print('🔍 UserExistenceGuard: Logging out from SeSessionService');
+      Logger.info(' UserExistenceGuard: Logging out from SeSessionService');
       await SeSessionService().logout();
 
       // 2. Clear all local storage
-      print('🔍 UserExistenceGuard: Clearing local storage');
+      Logger.info(' UserExistenceGuard: Clearing local storage');
       await _clearAllLocalData();
 
       // 3. Clear secure storage
-      print('🔍 UserExistenceGuard: Clearing secure storage');
+      Logger.info(' UserExistenceGuard: Clearing secure storage');
       await _clearSecureStorage();
 
       // 4. Cancel all notifications (now handled by socket service)
-      print('🔍 UserExistenceGuard: Notifications handled by socket service');
+      Logger.info(
+          ' UserExistenceGuard: Notifications handled by socket service');
 
       // 5. Reset all providers
-      print('🔍 UserExistenceGuard: Resetting providers');
+      Logger.info(' UserExistenceGuard: Resetting providers');
       resetProviders(context);
 
       // 6. Show logout message
       _showLogoutMessageWithContext(context);
 
-      print('🔍 UserExistenceGuard: Logout process completed');
+      Logger.info(' UserExistenceGuard: Logout process completed');
     } catch (e) {
-      print('🔍 UserExistenceGuard: Error during logout: $e');
+      Logger.info(' UserExistenceGuard: Error during logout: $e');
     } finally {
       _isHandlingLogout = false;
     }
@@ -153,10 +156,11 @@ class UserExistenceGuard {
           ),
         );
       } else {
-        print('🔍 UserExistenceGuard: Context not mounted, skipping SnackBar');
+        Logger.info(
+            ' UserExistenceGuard: Context not mounted, skipping SnackBar');
       }
     } catch (e) {
-      print('🔍 UserExistenceGuard: Error showing logout message: $e');
+      Logger.info(' UserExistenceGuard: Error showing logout message: $e');
     }
   }
 
@@ -167,14 +171,14 @@ class UserExistenceGuard {
       final deviceId = await _storage.read(key: 'device_id');
       return userId != null && deviceId != null;
     } catch (e) {
-      print('🔍 UserExistenceGuard: Error checking login status: $e');
+      Logger.info(' UserExistenceGuard: Error checking login status: $e');
       return false;
     }
   }
 
   // Force logout (for manual logout)
   Future<void> forceLogout() async {
-    print('🔍 UserExistenceGuard: Force logout requested');
+    Logger.info(' UserExistenceGuard: Force logout requested');
     await handleUserNotFound();
   }
 
@@ -183,8 +187,8 @@ class UserExistenceGuard {
     try {
       // Check if context is still valid
       if (!context.mounted) {
-        print(
-            '🔍 UserExistenceGuard: Context not mounted, skipping provider reset');
+        Logger.info(
+            ' UserExistenceGuard: Context not mounted, skipping provider reset');
         return;
       }
 
@@ -193,7 +197,7 @@ class UserExistenceGuard {
       //   final authProvider = context.read<AuthProvider>();
       //   authProvider.reset();
       // } catch (e) {
-      //   print('🔍 UserExistenceGuard: Error resetting auth provider: $e');
+      //   Logger.info(' UserExistenceGuard: Error resetting auth provider: $e');
       // }
 
       // Reset other providers - temporarily disabled
@@ -201,26 +205,26 @@ class UserExistenceGuard {
       //   final chatProvider = context.read<ChatProvider>();
       //   chatProvider.reset();
       // } catch (e) {
-      //   print('🔍 UserExistenceGuard: Error resetting chat provider: $e');
+      //   Logger.info(' UserExistenceGuard: Error resetting chat provider: $e');
       // }
 
       // try {
       //   final invitationProvider = context.read<InvitationProvider>();
       //   // invitationProvider.reset(); // Temporarily disabled
       // } catch (e) {
-      //   print('🔍 UserExistenceGuard: Error resetting invitation provider: $e');
+      //   Logger.info(' UserExistenceGuard: Error resetting invitation provider: $e');
       // }
 
       // try {
       //   final searchProvider = context.read<SearchProvider>();
       //   // searchProvider.reset(); // Temporarily disabled
       // } catch (e) {
-      //   print('🔍 UserExistenceGuard: Error resetting search provider: $e');
+      //   Logger.info(' UserExistenceGuard: Error resetting search provider: $e');
       // }
 
-      print('🔍 UserExistenceGuard: All providers reset');
+      Logger.info(' UserExistenceGuard: All providers reset');
     } catch (e) {
-      print('🔍 UserExistenceGuard: Error resetting providers: $e');
+      Logger.info(' UserExistenceGuard: Error resetting providers: $e');
     }
   }
 }
