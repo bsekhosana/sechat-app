@@ -324,10 +324,10 @@ class _UnifiedChatScreenState extends State<UnifiedChatScreen>
                   ),
                 ],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.chat_bubble_outline,
                 size: 64,
-                color: Color(0xFF25D366), // WhatsApp green
+                color: const Color(0xFFFF6B35), // app orange color
               ),
             ),
             const SizedBox(height: 24),
