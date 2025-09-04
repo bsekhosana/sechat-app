@@ -6,6 +6,8 @@ import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 import 'package:sechat_app/features/chat/models/message.dart' as msg;
 import 'package:sechat_app/core/services/encryption_service.dart';
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
+import 'package:sechat_app/core/services/message_notification_service.dart';
+import 'package:sechat_app/core/services/contact_service.dart';
 
 /// Unified Message Service - Single source of truth for all message operations
 /// Replaces all duplicate message services with one consistent implementation
@@ -296,12 +298,61 @@ class UnifiedMessageService extends ChangeNotifier {
 
       String decryptedBody = body;
 
-      // CRITICAL: Do NOT decrypt message here - store only encrypted text
-      // Decryption will happen only when displaying the message content
+      // CRITICAL: Decrypt message and store unhashed value to avoid decryption on chat screen
       if (isEncrypted && body.isNotEmpty) {
-        print(
-            '📤 UnifiedMessageService: 🔐 Storing encrypted message without decryption');
-        // Keep the encrypted body as-is, no decryption at storage time
+        print('📤 UnifiedMessageService: 🔓 Decrypting message for storage');
+        try {
+          // Use EncryptionService to decrypt the message (first layer)
+          final decryptedData =
+              await EncryptionService.decryptAesCbcPkcs7(body);
+
+          if (decryptedData != null && decryptedData.containsKey('text')) {
+            final firstLayerDecrypted = decryptedData['text'] as String;
+            print('📤 UnifiedMessageService: ✅ First layer decrypted');
+
+            // Check if the decrypted text is still encrypted (double encryption scenario)
+            if (firstLayerDecrypted.length > 100 &&
+                firstLayerDecrypted.contains('eyJ')) {
+              print(
+                  '📤 UnifiedMessageService: 🔍 Detected double encryption, decrypting inner layer...');
+              try {
+                // Decrypt the inner encrypted content
+                final innerDecryptedData =
+                    await EncryptionService.decryptAesCbcPkcs7(
+                        firstLayerDecrypted);
+
+                if (innerDecryptedData != null &&
+                    innerDecryptedData.containsKey('text')) {
+                  final finalDecryptedText =
+                      innerDecryptedData['text'] as String;
+                  print(
+                      '📤 UnifiedMessageService: ✅ Inner layer decrypted successfully');
+                  decryptedBody = finalDecryptedText;
+                } else {
+                  print(
+                      '📤 UnifiedMessageService: ⚠️ Inner layer decryption failed, using first layer');
+                  decryptedBody = firstLayerDecrypted;
+                }
+              } catch (e) {
+                print(
+                    '📤 UnifiedMessageService: ❌ Inner layer decryption error: $e, using first layer');
+                decryptedBody = firstLayerDecrypted;
+              }
+            } else {
+              // Single layer encryption, use as is
+              print(
+                  '📤 UnifiedMessageService: ✅ Single layer decryption completed');
+              decryptedBody = firstLayerDecrypted;
+            }
+          } else {
+            print(
+                '📤 UnifiedMessageService: ⚠️ Decryption failed - invalid format, using encrypted text');
+            decryptedBody = '[Encrypted Message]';
+          }
+        } catch (e) {
+          print('📤 UnifiedMessageService: ❌ Decryption failed: $e');
+          decryptedBody = '[Encrypted Message]';
+        }
       }
 
       // CRITICAL: Use consistent conversation ID for both users
@@ -319,9 +370,14 @@ class UnifiedMessageService extends ChangeNotifier {
         recipientId: _sessionService.currentSessionId ?? '',
         type: msg.MessageType.text,
         content: {
-          'text': body, // Store the encrypted text as received
+          'text':
+              decryptedBody, // Store the decrypted text for immediate display
           'checksum': checksum, // Keep the original checksum
-          'isIncomingEncrypted': true, // Flag to indicate this needs decryption
+          'isIncomingEncrypted':
+              isEncrypted, // Flag to indicate if original was encrypted
+          'originalEncryptedBody': isEncrypted
+              ? body
+              : null, // Keep original encrypted body for reference
         },
         status: msg
             .MessageStatus.sent, // 🆕 FIXED: Start with 'sent', not 'delivered'
@@ -341,6 +397,41 @@ class UnifiedMessageService extends ChangeNotifier {
       await _messageStorage.saveMessage(message);
       print(
           '📤 UnifiedMessageService: ✅ Incoming message saved to database: $messageId');
+
+      // Show push notification for received message
+      try {
+        // Get actual sender name from contact service
+        String senderName = fromUserId; // Default to userId
+        try {
+          final contact = ContactService.instance.getContact(fromUserId);
+          if (contact != null &&
+              contact.displayName != null &&
+              contact.displayName!.isNotEmpty) {
+            senderName = contact.displayName!;
+            print(
+                '📤 UnifiedMessageService: ✅ Using contact display name: $senderName');
+          } else {
+            print(
+                '📤 UnifiedMessageService: ⚠️ No contact found or display name empty, using userId: $senderName');
+          }
+        } catch (e) {
+          print(
+              '📤 UnifiedMessageService: ⚠️ Error getting sender name from contact service: $e');
+        }
+
+        await MessageNotificationService.instance.showMessageNotification(
+          messageId: messageId,
+          senderName: senderName,
+          messageContent: decryptedBody,
+          conversationId: consistentConversationId,
+          isEncrypted: isEncrypted,
+        );
+        print(
+            '📤 UnifiedMessageService: ✅ Push notification shown for message: $messageId from: $senderName');
+      } catch (e) {
+        print(
+            '📤 UnifiedMessageService: ❌ Failed to show push notification: $e');
+      }
 
       // Notify listeners
       print(

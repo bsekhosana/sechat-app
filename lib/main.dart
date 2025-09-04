@@ -40,6 +40,7 @@ import 'core/services/contact_service.dart';
 import 'core/services/app_lifecycle_manager.dart';
 import 'features/notifications/services/local_notification_items_service.dart';
 import 'features/notifications/services/local_notification_badge_service.dart';
+import 'core/services/message_notification_service.dart';
 import 'realtime/realtime_service_manager.dart';
 import 'realtime/realtime_test.dart';
 import 'package:sechat_app/core/services/se_socket_service.dart';
@@ -125,6 +126,14 @@ Future<void> main() async {
     print('🔌 Main: ✅ Local notification services initialized successfully');
   } catch (e) {
     print('🔌 Main: ⚠️ Failed to initialize local notification services: $e');
+  }
+
+  // Initialize message notification service
+  try {
+    await MessageNotificationService.instance.initialize();
+    print('🔌 Main: ✅ Message notification service initialized successfully');
+  } catch (e) {
+    print('🔌 Main: ⚠️ Failed to initialize message notification service: $e');
   }
 
   // Initialize presence management system
@@ -295,31 +304,7 @@ Future<void> main() async {
   });
 }
 
-/// Show push notification for received message
-Future<void> _showMessageNotification(
-    String senderName, String messageId, String conversationId) async {
-  try {
-    // Show notification using our new local notification system
-    final localNotificationBadgeService = LocalNotificationBadgeService();
-
-    await localNotificationBadgeService.showMessageNotification(
-      title: senderName,
-      body: 'Has sent you an encrypted message',
-      type: 'message_received',
-      payload: {
-        'type': 'new_message',
-        'senderName': senderName,
-        'messageId': messageId,
-        'conversationId': conversationId,
-        'timestamp': DateTime.now().toIso8601String(),
-      },
-    );
-
-    print('🔔 Main: ✅ Push notification sent for message: $messageId');
-  } catch (e) {
-    print('🔔 Main: ❌ Failed to send push notification: $e');
-  }
-}
+// Note: Push notifications are now handled by UnifiedMessageService
 
 // Set up socket callbacks
 void _setupSocketCallbacks(SeSocketService socketService) {
@@ -535,14 +520,8 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             indicatorService.updateCounts(unreadChats: unreadCount);
             print('🔌 Main: ✅ Chat badge count updated for new message');
 
-            // Show push notification for the message
-            if (actualConversationId != null) {
-              _showMessageNotification(
-                senderName,
-                messageId,
-                actualConversationId,
-              );
-            }
+            // Note: Push notifications are now handled by UnifiedMessageService
+            // to avoid duplicate notifications
           } catch (e) {
             print('🔌 Main: ❌ Failed to update chat badge count: $e');
           }

@@ -29,7 +29,7 @@ class UnifiedChatProvider extends ChangeNotifier {
   TypingService? _typingService;
   final UnifiedChatIntegrationService _integrationService =
       UnifiedChatIntegrationService();
-  
+
   // Stream subscriptions for proper cleanup
   StreamSubscription? _typingStreamSubscription;
   StreamSubscription? _connectionStateSubscription;
@@ -51,12 +51,13 @@ class UnifiedChatProvider extends ChangeNotifier {
   // User state tracking
   bool _isUserOnChatScreen = false;
   bool _isMuted = false;
-  
+
   // Initialization state
   bool _isInitialized = false;
   String? _lastInitializedConversationId;
   bool _socketCallbacksSetup = false;
-  
+  bool _isDisposed = false;
+
   // Debounce mechanism
   Timer? _refreshDebounceTimer;
   Timer? _notifyDebounceTimer;
@@ -131,10 +132,11 @@ class UnifiedChatProvider extends ChangeNotifier {
       }
 
       // Check if already initialized for the same conversation
-      if (_isInitialized && 
+      if (_isInitialized &&
           _lastInitializedConversationId == generatedConversationId &&
           _currentRecipientId == recipientId) {
-        print('UnifiedChatProvider: ⚠️ Already initialized for conversation: $generatedConversationId, skipping...');
+        print(
+            'UnifiedChatProvider: ⚠️ Already initialized for conversation: $generatedConversationId, skipping...');
         return;
       }
 
@@ -408,9 +410,10 @@ class UnifiedChatProvider extends ChangeNotifier {
   void _setupConnectionMonitoring() {
     // Cancel existing subscription if any
     _connectionStateSubscription?.cancel();
-    
+
     // Monitor socket connection status
-    _connectionStateSubscription = _socketService.connectionStateStream.listen((isConnected) {
+    _connectionStateSubscription =
+        _socketService.connectionStateStream.listen((isConnected) {
       if (_isConnected != isConnected) {
         _isConnected = isConnected;
         notifyListeners();
@@ -520,6 +523,9 @@ class UnifiedChatProvider extends ChangeNotifier {
 
   /// Update recipient presence
   void updateRecipientPresence(bool isOnline, DateTime? lastSeen) {
+    // Prevent using disposed provider
+    if (_isDisposed) return;
+
     _isRecipientOnline = isOnline;
     _recipientLastSeen = lastSeen;
     notifyListeners();
@@ -610,6 +616,9 @@ class UnifiedChatProvider extends ChangeNotifier {
   /// Handle incoming message from socket - API Compliant
   Future<void> _handleIncomingMessage(String messageId, String senderId,
       String conversationId, String body) async {
+    // Prevent using disposed provider
+    if (_isDisposed) return;
+
     try {
       final currentUserId = SeSessionService().currentSessionId;
       if (currentUserId == null) return;
@@ -753,6 +762,9 @@ class UnifiedChatProvider extends ChangeNotifier {
 
   /// Handle message status updates
   Future<void> handleMessageStatusUpdate(MessageStatusUpdate update) async {
+    // Prevent using disposed provider
+    if (_isDisposed) return;
+
     try {
       final messageIndex =
           _messages.indexWhere((msg) => msg.id == update.messageId);
@@ -805,6 +817,11 @@ class UnifiedChatProvider extends ChangeNotifier {
     _typingStreamSubscription?.cancel();
     _connectionStateSubscription?.cancel();
 
+    // Clear only typing indicator callback (message callbacks should remain active for push notifications)
+    _socketService.setOnTypingIndicator(null);
+    // Note: onMessageReceived and onOnlineStatusUpdate callbacks should remain active
+    // to handle incoming messages and show push notifications even when chat screen is closed
+
     // Unregister from integration service
     if (_currentConversationId != null) {
       _integrationService.unregisterActiveProvider(_currentConversationId!);
@@ -814,6 +831,7 @@ class UnifiedChatProvider extends ChangeNotifier {
     _isInitialized = false;
     _lastInitializedConversationId = null;
     _socketCallbacksSetup = false;
+    _isDisposed = true;
 
     super.dispose();
   }

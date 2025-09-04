@@ -9,7 +9,7 @@ import '../../../core/services/se_session_service.dart';
 import '../../../core/services/contact_service.dart';
 
 /// Widget for displaying a single chat conversation item in the list
-class ChatListItem extends StatelessWidget {
+class ChatListItem extends StatefulWidget {
   final ChatConversation conversation;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
@@ -26,16 +26,91 @@ class ChatListItem extends StatelessWidget {
   });
 
   @override
+  State<ChatListItem> createState() => _ChatListItemState();
+}
+
+class _ChatListItemState extends State<ChatListItem> {
+  Message? _latestMessage;
+  bool _isLoadingMessage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLatestMessage();
+  }
+
+  @override
+  void didUpdateWidget(ChatListItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reload latest message if conversation ID changed or last message changed
+    if (oldWidget.conversation.id != widget.conversation.id ||
+        oldWidget.conversation.lastMessageId !=
+            widget.conversation.lastMessageId) {
+      _loadLatestMessage();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload latest message when widget becomes visible (e.g., returning from chat screen)
+    _loadLatestMessage();
+  }
+
+  Future<void> _loadLatestMessage() async {
+    if (_isLoadingMessage) return;
+
+    setState(() {
+      _isLoadingMessage = true;
+    });
+
+    try {
+      final provider = Provider.of<ChatListProvider>(context, listen: false);
+      final latestMessage =
+          await provider.getLatestMessage(widget.conversation.id);
+
+      if (mounted) {
+        setState(() {
+          _latestMessage = latestMessage;
+          _isLoadingMessage = false;
+        });
+      }
+    } catch (e) {
+      print('📱 ChatListItem: ❌ Error loading latest message: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingMessage = false;
+        });
+      }
+    }
+  }
+
+  String _getMessagePreview(Message? message) {
+    if (message == null) return '';
+
+    switch (message.type) {
+      case MessageType.text:
+        return message.content['text'] as String? ?? '';
+      case MessageType.reply:
+        return '↩️ Reply';
+      case MessageType.system:
+        return 'System message';
+      default:
+        return 'Message';
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer2<ChatListProvider, ContactService>(
       builder: (context, provider, contactService, child) {
         final currentUserId = _getCurrentUserId();
-        String displayName = conversation.getDisplayName(currentUserId);
+        String displayName = widget.conversation.getDisplayName(currentUserId);
 
         // Check if display name is a session ID and pull from contacts if needed
         if (displayName.startsWith('session_')) {
           final otherParticipantId =
-              conversation.getOtherParticipantId(currentUserId);
+              widget.conversation.getOtherParticipantId(currentUserId);
           if (otherParticipantId != null) {
             final contact = contactService.getContact(otherParticipantId);
             if (contact != null &&
@@ -46,14 +121,14 @@ class ChatListItem extends StatelessWidget {
           }
         }
 
-        final isTyping = conversation.isTyping;
-        final hasUnread = conversation.hasUnreadMessages;
+        final isTyping = widget.conversation.isTyping;
+        final hasUnread = widget.conversation.hasUnreadMessages;
 
         // Get real-time presence information from ContactService
         final otherParticipantId =
-            conversation.getOtherParticipantId(currentUserId);
+            widget.conversation.getOtherParticipantId(currentUserId);
         print(
-            '🔍 ChatListItem: Other participant ID: $otherParticipantId for conversation: ${conversation.id}');
+            '🔍 ChatListItem: Other participant ID: $otherParticipantId for conversation: ${widget.conversation.id}');
 
         final contact = otherParticipantId != null
             ? contactService.getContact(otherParticipantId)
@@ -64,9 +139,9 @@ class ChatListItem extends StatelessWidget {
         // 🆕 FIXED: Use real-time online status from ChatListProvider instead of static data
         final isOnline =
             provider.getRecipientOnlineStatus(otherParticipantId ?? '');
-        final lastSeen = contact?.lastSeen ?? conversation.lastSeen;
+        final lastSeen = contact?.lastSeen ?? widget.conversation.lastSeen;
         print(
-            '🔍 ChatListItem: Final presence: isOnline=$isOnline (real-time from provider, contact: ${contact?.isOnline}, conversation: ${conversation.isOnline})');
+            '🔍 ChatListItem: Final presence: isOnline=$isOnline (real-time from provider, contact: ${contact?.isOnline}, conversation: ${widget.conversation.isOnline})');
 
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
@@ -74,8 +149,8 @@ class ChatListItem extends StatelessWidget {
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
-              onTap: onTap,
-              onLongPress: onLongPress,
+              onTap: widget.onTap,
+              onLongPress: widget.onLongPress,
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 padding: const EdgeInsets.all(16),
@@ -189,14 +264,13 @@ class ChatListItem extends StatelessWidget {
                                 ),
                               ],
                             )
-                          else if (conversation.lastMessagePreview != null &&
-                              conversation.lastMessagePreview!.isNotEmpty)
+                          else if (_latestMessage != null)
                             Row(
                               children: [
                                 Text(
-                                  conversation.lastMessagePreview!.length > 30
-                                      ? '${conversation.lastMessagePreview!.substring(0, 30)}...'
-                                      : conversation.lastMessagePreview!,
+                                  _getMessagePreview(_latestMessage).length > 30
+                                      ? '${_getMessagePreview(_latestMessage).substring(0, 30)}...'
+                                      : _getMessagePreview(_latestMessage),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey[600],
@@ -207,9 +281,9 @@ class ChatListItem extends StatelessWidget {
 
                                 const SizedBox(width: 8),
                                 // Show message status for outgoing messages
-                                if (conversation.lastMessageId != null)
+                                if (widget.conversation.lastMessageId != null)
                                   _buildMessageStatus(
-                                      conversation.lastMessageId!,
+                                      widget.conversation.lastMessageId!,
                                       currentUserId),
                               ],
                             )
@@ -264,7 +338,7 @@ class ChatListItem extends StatelessWidget {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              '${conversation.unreadCount}',
+                              '${widget.conversation.unreadCount}',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
@@ -274,8 +348,8 @@ class ChatListItem extends StatelessWidget {
                           ),
                         // Time
                         Text(
-                          conversation.lastMessageAt != null
-                              ? _formatTime(conversation.lastMessageAt)
+                          widget.conversation.lastMessageAt != null
+                              ? _formatTime(widget.conversation.lastMessageAt)
                               : '',
                           style: TextStyle(
                             color: Colors.grey[500],
@@ -362,7 +436,8 @@ class ChatListItem extends StatelessWidget {
 
         // First, try to get the message from SessionChatProvider (real-time status)
         // BUT ONLY if we're currently in this conversation
-        if (sessionChatProvider.currentConversationId == conversation.id) {
+        if (sessionChatProvider.currentConversationId ==
+            widget.conversation.id) {
           // Get the latest message from SessionChatProvider's memory
           final messages = sessionChatProvider.messages;
           if (messages.isNotEmpty) {
@@ -395,13 +470,13 @@ class ChatListItem extends StatelessWidget {
           // If we're not in this conversation, don't use SessionChatProvider data
           // This prevents showing status for messages from other conversations
           print(
-              '🔍 ChatListItem: Not in this conversation (${conversation.id}), using database fallback');
+              '🔍 ChatListItem: Not in this conversation (${widget.conversation.id}), using database fallback');
         }
 
         // Fallback to database if not found in SessionChatProvider
         if (latestMessage == null) {
           return FutureBuilder<Message?>(
-            future: chatListProvider.getLatestMessage(conversation.id),
+            future: chatListProvider.getLatestMessage(widget.conversation.id),
             builder: (context, snapshot) {
               if (snapshot.hasData && snapshot.data != null) {
                 final message = snapshot.data!;
@@ -454,7 +529,8 @@ class ChatListItem extends StatelessWidget {
 
         // First, try to get the message from SessionChatProvider (real-time status)
         // BUT ONLY if we're currently in this conversation
-        if (sessionChatProvider.currentConversationId == conversation.id) {
+        if (sessionChatProvider.currentConversationId ==
+            widget.conversation.id) {
           // Get the latest message from SessionChatProvider's memory
           final messages = sessionChatProvider.messages;
           if (messages.isNotEmpty) {
@@ -487,13 +563,13 @@ class ChatListItem extends StatelessWidget {
           // If we're not in this conversation, don't use SessionChatProvider data
           // This prevents showing status for messages from other conversations
           print(
-              '🔍 ChatListItem: Not in this conversation (${conversation.id}), using database fallback');
+              '🔍 ChatListItem: Not in this conversation (${widget.conversation.id}), using database fallback');
         }
 
         // Fallback to database if not found in SessionChatProvider
         if (latestMessage == null) {
           return FutureBuilder<Message?>(
-            future: chatListProvider.getLatestMessage(conversation.id),
+            future: chatListProvider.getLatestMessage(widget.conversation.id),
             builder: (context, snapshot) {
               if (snapshot.hasData && snapshot.data != null) {
                 final message = snapshot.data!;

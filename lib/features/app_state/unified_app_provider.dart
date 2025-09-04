@@ -155,19 +155,8 @@ class UnifiedAppProvider extends ChangeNotifier with EventLogger {
       plain = map?['text']?.toString() ?? map?['body']?.toString() ?? '';
     }
 
-    // ✅ FIXED: Always show push notification for message received events
-    // This ensures all message received events show push notifications
-    await _notifyOS(
-      fromUserId.isNotEmpty ? fromUserId : 'SeChat',
-      'New Message',
-      plain.isNotEmpty ? plain : 'You have a new encrypted message',
-      payload: {
-        'type': 'new_message',
-        'messageId': messageId,
-        'conversationId': conversationId,
-        'senderId': fromUserId,
-      },
-    );
+    // Note: Push notifications are now handled by UnifiedMessageService
+    // to avoid duplicate notifications
 
     notifyListeners();
   }

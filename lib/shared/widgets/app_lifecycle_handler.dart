@@ -174,24 +174,24 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
 
   void _handleAppPaused() async {
     try {
-      print('🔌 AppLifecycleHandler: App paused - cleaning up socket services');
+      print(
+          '🔌 AppLifecycleHandler: App paused - keeping socket connected for background messages');
 
-      // CRITICAL: More aggressive cleanup when app goes to background
+      // CRITICAL: Keep socket connected in background to receive messages and trigger push notifications
       try {
         final socketService = SeSocketService.instance;
         if (socketService.isConnected) {
           print(
-              '🔌 AppLifecycleHandler: 🔌 App going to background, disconnecting socket...');
+              '🔌 AppLifecycleHandler: 🔌 App going to background, keeping socket connected for push notifications...');
 
-          // Send offline status first
+          // Send offline status for presence, but keep socket connected
           await _sendOnlineStatusUpdate(false);
-
-          // Force disconnect to prevent background socket activity
-          await socketService.forceDisconnect();
-          print('🔌 AppLifecycleHandler: ✅ Socket disconnected for background');
+          print(
+              '🔌 AppLifecycleHandler: ✅ Socket kept connected for background message reception');
         }
       } catch (e) {
-        print('🔌 AppLifecycleHandler: ⚠️ Warning - socket cleanup failed: $e');
+        print(
+            '🔌 AppLifecycleHandler: ⚠️ Warning - socket status update failed: $e');
       }
 
       // Silent permission check when going to background (no test notifications)

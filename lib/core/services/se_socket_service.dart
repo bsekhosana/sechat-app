@@ -217,8 +217,8 @@ class SeSocketService {
   bool _sessionConfirmed = false;
 
   Function(String messageId)? onMessageAcked;
-  Function(String messageId, String fromUserId, String conversationId,
-      String body)? onMessageReceived;
+  Function(String senderId, String senderName, String message,
+      String conversationId, String messageId)? onMessageReceived;
   Function(String messageId, String fromUserId, String toUserId)? onDelivered;
   Function(String messageId, String fromUserId, String toUserId)? onRead;
   // 🆕 ADD THIS: Callback for queued message status
@@ -781,10 +781,11 @@ class SeSocketService {
             data['senderName'] ?? data['fromUserId'] ?? 'Unknown User';
 
         onMessageReceived!(
-          data['messageId'] ?? '',
-          data['fromUserId'] ?? '',
-          data['conversationId'] ?? '',
-          data['body'] ?? '',
+          data['fromUserId'] ?? '', // senderId
+          senderName, // senderName
+          data['body'] ?? '', // message
+          data['conversationId'] ?? '', // conversationId
+          data['messageId'] ?? '', // messageId
         );
         print(
             '💬 SeSocketService: ✅ Message received callback executed with sender: $senderName');
@@ -1959,25 +1960,8 @@ class SeSocketService {
       Function(String senderId, String senderName, String message,
               String conversationId, String messageId)?
           callback) {
-    // Map the existing callback to the new format
-    if (callback != null) {
-      onMessageReceived = (messageId, fromUserId, conversationId, body) {
-        // Try to get sender name from contact service or use userId as fallback
-        String senderName = fromUserId; // Default to userId
-
-        try {
-          // Get contact display name from contact service
-          final contact = ContactService.instance.getContact(fromUserId);
-          if (contact != null && contact.displayName != null) {
-            senderName = contact.displayName!;
-          }
-        } catch (e) {
-          print('🔌 SeSocketService: ⚠️ Could not get sender name: $e');
-        }
-
-        callback(fromUserId, senderName, body, conversationId, messageId);
-      };
-    }
+    // Set the callback directly since the signature now matches
+    onMessageReceived = callback;
   }
 
   void setOnTypingIndicator(

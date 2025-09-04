@@ -2,9 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:provider/provider.dart';
 import 'local_notification_database_service.dart';
 import '../models/local_notification_item.dart';
 import '../../../core/services/indicator_service.dart';
+import '../../../core/services/se_session_service.dart';
+import '../../../core/services/contact_service.dart';
+import '../../../features/chat/models/chat_conversation.dart';
+import '../../../features/chat/providers/chat_list_provider.dart';
+import '../../../features/chat/providers/unified_chat_provider.dart';
+import '../../../features/chat/screens/unified_chat_screen.dart';
 import '../../../main.dart'; // Import to access global navigator key
 
 /// Service for managing local notification badge counts
@@ -331,16 +338,83 @@ class LocalNotificationBadgeService {
   /// Navigate to chat screen with conversation ID
   void _navigateToChatScreen(String conversationId) {
     try {
+      print(
+          '📱 LocalNotificationBadgeService: 🔍 Attempting to navigate to conversation: $conversationId');
+
       // Use the global navigator key from main.dart
-      if (navigatorKey.currentContext != null) {
-        // Navigate to chat screen with conversation ID
-        Navigator.of(navigatorKey.currentContext!).pushNamed(
-          '/chat',
-          arguments: {'conversationId': conversationId},
+      final context = navigatorKey.currentContext;
+      if (context == null) {
+        print(
+            '📱 LocalNotificationBadgeService: ❌ No navigator context available');
+        return;
+      }
+      print('📱 LocalNotificationBadgeService: ✅ Navigator context available');
+
+      // Get the chat list provider to find the conversation
+      final chatListProvider =
+          Provider.of<ChatListProvider>(context, listen: false);
+
+      // Find the conversation by ID
+      ChatConversation? conversation;
+      try {
+        conversation = chatListProvider.conversations.firstWhere(
+          (conv) => conv.id == conversationId,
         );
         print(
-            '📱 LocalNotificationBadgeService: ✅ Navigated to chat screen: $conversationId');
+            '📱 LocalNotificationBadgeService: ✅ Found conversation: ${conversation.id}');
+      } catch (e) {
+        print(
+            '📱 LocalNotificationBadgeService: ⚠️ Conversation not found: $conversationId');
+        return;
       }
+
+      // Get the other participant ID (recipient)
+      final currentUserId = _getCurrentUserId();
+      final recipientId = conversation.getOtherParticipantId(currentUserId);
+      if (recipientId == null) {
+        print(
+            '📱 LocalNotificationBadgeService: ❌ Could not determine recipient ID');
+        return;
+      }
+      print('📱 LocalNotificationBadgeService: ✅ Recipient ID: $recipientId');
+
+      // Get recipient name from contact service
+      String recipientName = recipientId; // Default to ID
+      try {
+        final contact = ContactService.instance.getContact(recipientId);
+        if (contact != null &&
+            contact.displayName != null &&
+            contact.displayName!.isNotEmpty) {
+          recipientName = contact.displayName!;
+        }
+      } catch (e) {
+        print(
+            '📱 LocalNotificationBadgeService: ⚠️ Could not get recipient name: $e');
+      }
+      print(
+          '📱 LocalNotificationBadgeService: ✅ Recipient name: $recipientName');
+
+      // Get online status
+      final isOnline = chatListProvider.getRecipientOnlineStatus(recipientId);
+      print('📱 LocalNotificationBadgeService: ✅ Online status: $isOnline');
+
+      // Navigate to the chat screen using the same pattern as ChatListScreen
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ChangeNotifierProvider(
+            create: (context) => UnifiedChatProvider(),
+            child: UnifiedChatScreen(
+              conversationId: conversationId,
+              recipientId: recipientId,
+              recipientName: recipientName,
+              isOnline: isOnline,
+            ),
+          ),
+        ),
+      );
+
+      print(
+          '📱 LocalNotificationBadgeService: ✅ Navigated to chat screen: $conversationId');
     } catch (e) {
       print('📱 LocalNotificationBadgeService: ❌ Error navigating to chat: $e');
     }
@@ -358,7 +432,23 @@ class LocalNotificationBadgeService {
       }
     } catch (e) {
       print(
-          '📱 LocalNotificationBadgeService: ✅ Navigated to key exchange screen');
+          '📱 LocalNotificationBadgeService: ❌ Error navigating to key exchange: $e');
+    }
+  }
+
+  /// Get current user ID
+  String _getCurrentUserId() {
+    try {
+      final sessionService = SeSessionService();
+      final currentSessionId = sessionService.currentSessionId;
+      if (currentSessionId != null && currentSessionId.isNotEmpty) {
+        return currentSessionId;
+      }
+      return 'unknown_user';
+    } catch (e) {
+      print(
+          '📱 LocalNotificationBadgeService: ❌ Error getting current user ID: $e');
+      return 'unknown_user';
     }
   }
 
@@ -576,7 +666,7 @@ class LocalNotificationBadgeService {
       final notificationId =
           DateTime.now().millisecondsSinceEpoch.remainder(100000);
 
-      // Force show notification even in foreground
+      // Show notification (only once, no duplicates)
       await _localNotifications.show(
         notificationId,
         title,
@@ -584,29 +674,6 @@ class LocalNotificationBadgeService {
         notificationDetails,
         payload: notificationPayload,
       );
-
-      // Additional attempt to ensure notification is visible
-      if (!isInBackground) {
-        print(
-            '📱 LocalNotificationBadgeService: 🔧 Forcing notification display in foreground');
-        // Try to show again with a different ID to force display
-        await _localNotifications.show(
-          notificationId + 1,
-          title,
-          body,
-          notificationDetails,
-          payload: notificationPayload,
-        );
-
-        // Also try to show a heads-up notification
-        await _localNotifications.show(
-          notificationId + 2,
-          '🔔 $title',
-          body,
-          notificationDetails,
-          payload: notificationPayload,
-        );
-      }
 
       print(
           '📱 LocalNotificationBadgeService: ✅ Message notification shown with ID: $notificationId');
