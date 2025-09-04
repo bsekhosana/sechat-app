@@ -659,19 +659,31 @@ void _setupSocketCallbacks(SeSocketService socketService) {
               listen: false);
 
           Logger.success(' Main:  ContactService obtained successfully');
-          // 🆕 FIXED: Use existing lastSeen from ContactService when server doesn't provide one
+          // 🆕 SMART PRESENCE: Use server's Smart Presence System with actual last seen times
           DateTime lastSeenDateTime;
           if (lastSeen != null && lastSeen.isNotEmpty) {
+            // Server now provides actual last seen times from Smart Presence System
             lastSeenDateTime = DateTime.parse(lastSeen);
+            Logger.success(' Main:  Using Smart Presence lastSeen: $lastSeen');
           } else {
-            // Try to get existing lastSeen from ContactService to preserve offline time
+            // Server didn't provide lastSeen - fallback to existing contact data
             try {
               final existingContact = contactService.getContact(senderId);
-              lastSeenDateTime = existingContact?.lastSeen ??
-                  DateTime.now().subtract(Duration(hours: 1));
+              if (existingContact != null) {
+                lastSeenDateTime = existingContact.lastSeen;
+                Logger.warning(
+                    ' Main:  Server didn\'t provide lastSeen, using existing contact data: ${existingContact.lastSeen}');
+              } else {
+                // No existing contact - use current time minus 1 hour as absolute fallback
+                lastSeenDateTime = DateTime.now().subtract(Duration(hours: 1));
+                Logger.warning(
+                    ' Main:  No server lastSeen and no existing contact, using fallback: $lastSeenDateTime');
+              }
             } catch (e) {
               // Fallback to 1 hour ago if we can't get existing contact
               lastSeenDateTime = DateTime.now().subtract(Duration(hours: 1));
+              Logger.error(
+                  ' Main:  Error getting existing contact, using fallback: $e');
             }
           }
 

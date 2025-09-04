@@ -110,6 +110,12 @@ class PresenceManager extends ChangeNotifier {
       } else {
         Logger.info(
             '🟢 PresenceManager:  No contacts to broadcast presence to');
+
+        // Even with no contacts, send a presence request to get any server-side presence data
+        // This ensures we get proper last seen times if contacts are added later
+        _socketService.requestPresenceStatus([]);
+        Logger.info(
+            '🟢 PresenceManager:  Sent presence request to server (no contacts yet)');
       }
 
       notifyListeners();

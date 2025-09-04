@@ -915,6 +915,69 @@ class SeSocketService {
       }
     });
 
+    // Handle presence:request response - CRITICAL for getting actual last seen times from Smart Presence System
+    _socket!.on('presence:request', (data) async {
+      Logger.debug(
+          '🟢 SeSocketService: Smart Presence System response received');
+      Logger.info('🟢 SeSocketService:  Smart Presence data: $data');
+
+      try {
+        // Handle different possible response formats from server
+        List<dynamic> contactsData = [];
+
+        if (data is Map<String, dynamic>) {
+          // Format 1: { contacts: [...] }
+          if (data['contacts'] is List) {
+            contactsData = data['contacts'] as List<dynamic>;
+          }
+          // Format 3: Single contact object
+          else if (data['sessionId'] != null || data['userId'] != null) {
+            contactsData = [data];
+          }
+        } else if (data is List) {
+          // Format 2: Direct array response
+          contactsData = data;
+        }
+
+        if (contactsData.isNotEmpty) {
+          Logger.success(
+              '🟢 SeSocketService:  Processing ${contactsData.length} contact presence updates from Smart Presence System response');
+
+          for (final contactData in contactsData) {
+            if (contactData is Map<String, dynamic>) {
+              final String contactId =
+                  contactData['sessionId'] ?? contactData['userId'] ?? '';
+              final bool isOnline = contactData['isOnline'] ?? false;
+              // Try multiple possible field names for last seen (prioritize lastSeen from Smart Presence System)
+              final String? lastSeenString = contactData['lastSeen'] ??
+                  contactData['last_seen'] ??
+                  contactData['lastSeenTime'] ??
+                  contactData['offlineTime'] ??
+                  contactData['timestamp'];
+
+              if (contactId.isNotEmpty) {
+                Logger.debug(
+                    '🟢 SeSocketService:  Processing contact from Smart Presence System: $contactId (online: $isOnline, lastSeen: $lastSeenString)');
+
+                // Call the presence callback with the actual server data from Smart Presence System
+                if (onPresence != null) {
+                  onPresence!(contactId, isOnline, lastSeenString ?? '');
+                  Logger.success(
+                      '🟢 SeSocketService:  Smart Presence data processed for: $contactId');
+                }
+              }
+            }
+          }
+        } else {
+          Logger.warning(
+              '🟢 SeSocketService:  No contact data found in Smart Presence System response: $data');
+        }
+      } catch (e) {
+        Logger.error(
+            '🟢 SeSocketService:  Error processing Smart Presence System response: $e');
+      }
+    });
+
     // Contact management events
     _socket!.on('contacts:added', (data) async {
       Logger.debug('🔗 SeSocketService: Contact added event received');
@@ -2835,17 +2898,20 @@ class SeSocketService {
           'timestamp': DateTime.now().toIso8601String(),
         };
 
+        Logger.info(
+            '📡 SeSocketService: 🟢 Sending presence:request to Smart Presence System with payload: $payload');
         _socket!.emit('presence:request', payload);
 
         Logger.success(
-            ' SeSocketService:  Presence status requested for ${contactIds.length} contacts');
+            '📡 SeSocketService:  Smart Presence status requested for ${contactIds.length} contacts');
       } catch (e) {
-        Logger.error(' SeSocketService:  Error requesting presence status: $e');
+        Logger.error(
+            '📡 SeSocketService:  Error requesting presence status: $e');
         _scheduleReconnect();
       }
     } else {
       Logger.error(
-          ' SeSocketService:  Cannot request presence status - socket not connected');
+          '📡 SeSocketService:  Cannot request presence status - socket not connected');
     }
   }
 

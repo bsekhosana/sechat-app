@@ -299,7 +299,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Version 1.0.0 (Build 1)',
+                    'Version 1.0.0 (Beta Build 1)',
                     style: TextStyle(
                       color: Colors.grey[500],
                       fontSize: 12,

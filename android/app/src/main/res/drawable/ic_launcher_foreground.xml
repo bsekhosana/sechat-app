@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Create a smaller, more compact version of your app icon -->
+    <!-- Scale down the icon to 70% of its original size to add padding -->
+    <group android:scaleX="0.7" android:scaleY="0.7" android:pivotX="54" android:pivotY="54">
+        <!-- This is a placeholder for your actual app icon -->
+        <!-- Replace this with your actual icon design -->
+        <!-- For SeChat, you might want to use your chat/message icon -->
+        
+        <!-- Background circle -->
+        <path
+            android:fillColor="#FF6B35"
+            android:pathData="M54,20 C35.1,20 20,35.1 20,54 C20,72.9 35.1,88 54,88 C72.9,88 88,72.9 88,54 C88,35.1 72.9,20 54,20 Z"/>
+        
+        <!-- Chat bubble icon (placeholder for SeChat) -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M35,40 L35,65 L45,65 L50,70 L50,65 L70,65 L70,40 Z"/>
+        
+        <!-- Message lines -->
+        <path
+            android:fillColor="#FF6B35"
+            android:pathData="M40,50 L65,50 M40,55 L60,55 M40,60 L55,60"/>
+    </group>
+</vector>

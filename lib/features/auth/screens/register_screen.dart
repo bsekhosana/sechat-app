@@ -6,7 +6,6 @@ import '../../../shared/widgets/app_icon.dart';
 import '../../../core/services/se_shared_preference_service.dart';
 import '../../../core/services/network_service.dart';
 import 'main_nav_screen.dart';
-import 'dart:convert';
 import '../../../core/services/se_session_service.dart';
 import '../../../core/services/channel_socket_service.dart';
 import '../../../shared/widgets/custom_elevated_button.dart';
@@ -423,7 +422,7 @@ class _AccountCreatedActionSheetState
                           ),
                           const SizedBox(width: 12),
                           const Text(
-                            'Starting...',
+                            'Starting Session...',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,

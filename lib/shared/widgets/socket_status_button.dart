@@ -202,12 +202,12 @@ class _SocketStatusButtonState extends State<SocketStatusButton>
 
                         const SizedBox(height: 8),
 
-                        // Socket URL
-                        _buildDetailItem(
-                          'Server URL',
-                          'sechat-socket.strapblaque.com',
-                          Icons.dns,
-                        ),
+                        // // Socket URL
+                        // _buildDetailItem(
+                        //   'Server URL',
+                        //   'sechat-socket.strapblaque.com',
+                        //   Icons.dns,
+                        // ),
 
                         const SizedBox(height: 8),
 

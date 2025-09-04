@@ -96,13 +96,13 @@ class UnifiedChatHeader extends StatelessWidget {
             ),
 
             // More options button
-            IconButton(
-              onPressed: onMorePressed,
-              icon: const Icon(
-                Icons.more_vert,
-                color: Colors.black, // Match main screen text color
-              ),
-            ),
+            // IconButton(
+            //   onPressed: onMorePressed,
+            //   icon: const Icon(
+            //     Icons.more_vert,
+            //     color: Colors.black, // Match main screen text color
+            //   ),
+            // ),
           ],
         ),
       ),

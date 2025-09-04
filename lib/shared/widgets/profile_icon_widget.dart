@@ -274,14 +274,19 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                                         // Copy Button
                                         Expanded(
                                           child: GestureDetector(
-                                            onTap: () => _copySessionCode(),
+                                            onTap: _showCopySuccess
+                                                ? null
+                                                : () => _copySessionCode(),
                                             child: Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
                                                       vertical: 8),
                                               decoration: BoxDecoration(
-                                                color: Colors.grey
-                                                    .withValues(alpha: 0.1),
+                                                color: _showCopySuccess
+                                                    ? Colors.green
+                                                        .withValues(alpha: 0.1)
+                                                    : Colors.grey
+                                                        .withValues(alpha: 0.1),
                                                 borderRadius:
                                                     BorderRadius.circular(8),
                                               ),
@@ -290,18 +295,26 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                                                     MainAxisAlignment.center,
                                                 children: [
                                                   Icon(
-                                                    Icons.copy,
-                                                    color: Colors.grey,
+                                                    _showCopySuccess
+                                                        ? Icons.check
+                                                        : Icons.copy,
+                                                    color: _showCopySuccess
+                                                        ? Colors.green
+                                                        : Colors.grey,
                                                     size: 16,
                                                   ),
                                                   const SizedBox(width: 4),
-                                                  const Text(
-                                                    'Copy',
+                                                  Text(
+                                                    _showCopySuccess
+                                                        ? 'Copied!'
+                                                        : 'Copy',
                                                     style: TextStyle(
                                                       fontSize: 12,
                                                       fontWeight:
                                                           FontWeight.w600,
-                                                      color: Colors.grey,
+                                                      color: _showCopySuccess
+                                                          ? Colors.green
+                                                          : Colors.grey,
                                                     ),
                                                   ),
                                                 ],
@@ -338,13 +351,6 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                           ),
                           child: Column(
                             children: [
-                              _buildMenuButton(
-                                icon: Icons.delete_sweep,
-                                title: 'Clear All Chats',
-                                subtitle: 'Delete all your conversations',
-                                onTap: () => _showClearChatsConfirmation(),
-                                isDestructive: true,
-                              ),
                               const SizedBox(height: 16),
                               _buildMenuButton(
                                 icon: Icons.account_circle_outlined,
@@ -1189,22 +1195,14 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
       _showCopySuccess = true;
     });
 
-    // Hide success message after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
+    // Hide success message after 2 seconds
+    Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         setState(() {
           _showCopySuccess = false;
         });
       }
     });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Session code copied to clipboard!'),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ),
-    );
   }
 
   @override

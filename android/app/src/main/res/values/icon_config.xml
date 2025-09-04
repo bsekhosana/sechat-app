@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Icon configuration for Android -->
+    <!-- Adjust these values to control icon appearance -->
+    
+    <!-- Icon scale factor (0.5 = 50% size, 0.7 = 70% size, 0.8 = 80% size) -->
+    <dimen name="icon_scale_factor">0.7</dimen>
+    
+    <!-- Icon padding in dp -->
+    <dimen name="icon_padding">8dp</dimen>
+    
+    <!-- Background color for adaptive icon -->
+    <color name="adaptive_icon_background">#FFFFFF</color>
+    
+    <!-- Foreground color for adaptive icon -->
+    <color name="adaptive_icon_foreground">#FF6B35</color>
+</resources>
