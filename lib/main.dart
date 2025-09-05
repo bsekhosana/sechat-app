@@ -118,11 +118,16 @@ Future<void> main() async {
   // Initialize local notification services
   try {
     final localNotificationBadgeService = LocalNotificationBadgeService();
+    Logger.info(
+        ' Main: 🔔 Creating notification service instance: ${localNotificationBadgeService.hashCode}');
 
     // Initialize the notification service first
+    Logger.info(
+        ' Main: 🔔 About to initialize notification service at startup...');
     await localNotificationBadgeService.initialize();
 
     // Force reset any old notification counts first
+    Logger.info(' Main: 🔔 About to force reset and reinitialize...');
     await localNotificationBadgeService.forceResetAndReinitialize();
 
     Logger.success(
@@ -318,308 +323,385 @@ void _setupSocketCallbacks(SeSocketService socketService) {
   // Set up callbacks for the socket service
   socketService.setOnMessageReceived(
       (senderId, senderName, message, conversationId, messageId) async {
-    Logger.debug(
-        ' Main: Message received callback from socket: $senderName: $message');
-
-    // CRITICAL: Save incoming message to database via UnifiedMessageService
+    Logger.info(
+        ' Main: 🔔 CALLBACK ENTRY - Starting onMessageReceived callback');
     try {
-      final unifiedMessageService = UnifiedMessageService.instance;
       Logger.info(
-          ' Main:  Using UnifiedMessageService instance: ${unifiedMessageService.hashCode}');
+          ' Main: 🔔 MESSAGE RECEIVED CALLBACK TRIGGERED - senderId: $senderId, senderName: $senderName, messageId: $messageId');
+      Logger.info(
+          ' Main: 🔔 App lifecycle state: ${WidgetsBinding.instance.lifecycleState}');
+      Logger.debug(
+          ' Main: Message received callback from socket: $senderName: $message');
 
-      // Check if message is encrypted (default to true for security)
-      bool isEncrypted = true;
-      String? checksum;
+      // CRITICAL: Save incoming message to database via UnifiedMessageService
+      try {
+        final unifiedMessageService = UnifiedMessageService.instance;
+        Logger.info(
+            ' Main:  Using UnifiedMessageService instance: ${unifiedMessageService.hashCode}');
 
-      // CRITICAL: Declare conversation ID outside the if block for use in callback
-      String? actualConversationId;
+        // Check if message is encrypted (default to true for security)
+        bool isEncrypted = true;
+        String? checksum;
 
-      // If the message payload contains encryption info, extract it
-      // This would come from the socket event data structure
-      if (messageId.isNotEmpty && message.isNotEmpty) {
-        // CRITICAL: Use consistent conversation ID for both users
-        final currentUserId = SeSessionService().currentSessionId ?? '';
-        actualConversationId =
-            _generateConsistentConversationId(currentUserId, senderId);
+        // CRITICAL: Declare conversation ID outside the if block for use in callback
+        String? actualConversationId;
 
-        Logger.info(' Main:  Socket conversationId: $conversationId');
-        Logger.info(' Main:  SenderId: $senderId');
-        Logger.info(' Main:  Using conversationId: $actualConversationId');
+        // If the message payload contains encryption info, extract it
+        // This would come from the socket event data structure
+        if (messageId.isNotEmpty && message.isNotEmpty) {
+          // CRITICAL: Use consistent conversation ID for both users
+          final currentUserId = SeSessionService().currentSessionId ?? '';
+          actualConversationId =
+              _generateConsistentConversationId(currentUserId, senderId);
 
-        // CRITICAL: Ensure conversation exists before saving message
-        _ensureConversationExists(actualConversationId, senderId, senderName);
+          Logger.info(' Main:  Socket conversationId: $conversationId');
+          Logger.info(' Main:  SenderId: $senderId');
+          Logger.info(' Main:  Using conversationId: $actualConversationId');
 
-        // Store message to database with encrypted text only
-        unifiedMessageService.handleIncomingMessage(
-          messageId: messageId,
-          fromUserId: senderId,
-          conversationId: actualConversationId,
-          body: message,
-          timestamp: DateTime.now(),
-          isEncrypted: isEncrypted,
-          checksum: checksum,
-        );
-        Logger.success(
-            ' Main:  Incoming message saved to database via UnifiedMessageService');
+          // Check if app is in background for debugging
+          final isAppInBackground = WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.paused ||
+              WidgetsBinding.instance.lifecycleState ==
+                  AppLifecycleState.detached;
+          Logger.info(' Main:  App in background: $isAppInBackground');
 
-        // CRITICAL: Show push notification for incoming message
-        try {
-          final localNotificationBadgeService = LocalNotificationBadgeService();
+          // CRITICAL: Ensure conversation exists before saving message
+          await _ensureConversationExists(
+              actualConversationId, senderId, senderName);
 
-          // Ensure notification service is initialized
-          await localNotificationBadgeService.initialize();
+          // Store message to database with encrypted text only
+          await unifiedMessageService.handleIncomingMessage(
+            messageId: messageId,
+            fromUserId: senderId,
+            conversationId: actualConversationId,
+            body: message,
+            timestamp: DateTime.now(),
+            isEncrypted: isEncrypted,
+            checksum: checksum,
+          );
+          Logger.success(
+              ' Main:  Incoming message saved to database via UnifiedMessageService');
 
-          // Resolve contact name for notification title
-          String contactName = senderName;
+          // CRITICAL: Show push notification for incoming message
           try {
-            final contactService = ContactService.instance;
-            final contact = contactService.getContact(senderId);
-            if (contact != null && contact.displayName.isNotEmpty) {
-              contactName = contact.displayName;
-              Logger.debug(
-                  ' Main:  Resolved contact name: $senderId -> $contactName');
-            } else {
-              Logger.warning(
-                  ' Main:  Contact not found for $senderId, using fallback: $senderName');
-            }
-          } catch (e) {
-            Logger.warning(
-                ' Main:  Error resolving contact name: $e, using fallback: $senderName');
-          }
+            Logger.info(
+                ' Main: 🔔 Starting notification process for message: $messageId');
+            Logger.info(
+                ' Main: 🔔 App lifecycle state: ${WidgetsBinding.instance.lifecycleState}');
+            Logger.info(
+                ' Main: 🔔 Message details - senderId: $senderId, senderName: $senderName, messageId: $messageId');
+            final localNotificationBadgeService =
+                LocalNotificationBadgeService();
 
-          // Decrypt message for notification preview
-          String notificationBody = message;
-          if (message.length > 100 && message.contains('eyJ')) {
+            // Ensure notification service is initialized
+            Logger.info(
+                ' Main: 🔔 About to initialize notification service...');
+            await localNotificationBadgeService.initialize();
+            Logger.info(' Main: 🔔 Notification service initialized');
+            Logger.info(
+                ' Main: 🔔 Notification service instance: ${localNotificationBadgeService.hashCode}');
+
+            // Resolve contact name for notification title
+            String contactName = senderName;
             try {
-              final decryptedData =
-                  await EncryptionService.decryptAesCbcPkcs7(message);
-              if (decryptedData != null && decryptedData.containsKey('text')) {
-                final firstLayerDecrypted = decryptedData['text'] as String;
+              final contactService = ContactService.instance;
+              final contact = contactService.getContact(senderId);
+              if (contact != null && contact.displayName.isNotEmpty) {
+                contactName = contact.displayName;
+                Logger.debug(
+                    ' Main:  Resolved contact name: $senderId -> $contactName');
+              } else {
+                Logger.warning(
+                    ' Main:  Contact not found for $senderId, using fallback: $senderName');
+              }
+            } catch (e) {
+              Logger.warning(
+                  ' Main:  Error resolving contact name: $e, using fallback: $senderName');
+            }
 
-                // Check for double encryption
-                if (firstLayerDecrypted.length > 100 &&
-                    firstLayerDecrypted.contains('eyJ')) {
-                  final innerDecryptedData =
-                      await EncryptionService.decryptAesCbcPkcs7(
-                          firstLayerDecrypted);
-                  if (innerDecryptedData != null &&
-                      innerDecryptedData.containsKey('text')) {
-                    notificationBody = innerDecryptedData['text'] as String;
+            // Check if app is in background - if so, show encrypted message
+            final isAppInBackground = WidgetsBinding.instance.lifecycleState ==
+                    AppLifecycleState.paused ||
+                WidgetsBinding.instance.lifecycleState ==
+                    AppLifecycleState.detached;
+
+            String notificationBody = '[Encrypted Message]';
+
+            // Only decrypt message for foreground notifications
+            if (!isAppInBackground &&
+                message.length > 100 &&
+                message.contains('eyJ')) {
+              try {
+                final decryptedData =
+                    await EncryptionService.decryptAesCbcPkcs7(message);
+                if (decryptedData != null &&
+                    decryptedData.containsKey('text')) {
+                  final firstLayerDecrypted = decryptedData['text'] as String;
+
+                  // Check for double encryption
+                  if (firstLayerDecrypted.length > 100 &&
+                      firstLayerDecrypted.contains('eyJ')) {
+                    final innerDecryptedData =
+                        await EncryptionService.decryptAesCbcPkcs7(
+                            firstLayerDecrypted);
+                    if (innerDecryptedData != null &&
+                        innerDecryptedData.containsKey('text')) {
+                      notificationBody = innerDecryptedData['text'] as String;
+                    } else {
+                      notificationBody = firstLayerDecrypted;
+                    }
                   } else {
                     notificationBody = firstLayerDecrypted;
                   }
-                } else {
-                  notificationBody = firstLayerDecrypted;
                 }
+              } catch (e) {
+                Logger.warning(
+                    ' Main:  Failed to decrypt message for notification: $e');
+                notificationBody = '[Encrypted Message]';
               }
-            } catch (e) {
-              Logger.warning(
-                  ' Main:  Failed to decrypt message for notification: $e');
-              notificationBody = '[Encrypted Message]';
-            }
-          }
-
-          // Truncate message for notification
-          if (notificationBody.length > 100) {
-            notificationBody = notificationBody.substring(0, 100) + '...';
-          }
-
-          await localNotificationBadgeService.showMessageNotification(
-            title: contactName,
-            body: notificationBody,
-            type: 'message_received',
-            payload: {
-              'messageId': messageId,
-              'senderId': senderId,
-              'conversationId': actualConversationId,
-              'timestamp': DateTime.now().toIso8601String(),
-            },
-          );
-
-          Logger.success(
-              ' Main:  Push notification shown for incoming message from $contactName');
-        } catch (e) {
-          Logger.error(' Main:  Failed to show push notification: $e');
-        }
-
-        // CRITICAL: Update conversation with new message and decrypt preview
-        WidgetsBinding.instance.addPostFrameCallback((_) async {
-          try {
-            final indicatorService = Provider.of<IndicatorService>(
-                navigatorKey.currentContext!,
-                listen: false);
-
-            final chatListProvider = Provider.of<ChatListProvider>(
-                navigatorKey.currentContext!,
-                listen: false);
-
-            try {
-              // CRITICAL: Decrypt the message content first
-              String decryptedContent = message;
-
-              // Check if this looks like encrypted content
-              if (message.length > 100 && message.contains('eyJ')) {
-                Logger.debug(
-                    ' Main: 🔓 Attempting to decrypt message for chat list preview');
-                try {
-                  // Use EncryptionService to decrypt the message (first layer)
-                  final decryptedData =
-                      await EncryptionService.decryptAesCbcPkcs7(message);
-
-                  if (decryptedData != null &&
-                      decryptedData.containsKey('text')) {
-                    final firstLayerDecrypted = decryptedData['text'] as String;
-                    Logger.success(
-                        ' Main:  First layer decrypted: $firstLayerDecrypted');
-
-                    // Check if the decrypted text is still encrypted (double encryption scenario)
-                    if (firstLayerDecrypted.length > 100 &&
-                        firstLayerDecrypted.contains('eyJ')) {
-                      Logger.info(
-                          ' Main:  Detected double encryption, decrypting inner layer...');
-                      try {
-                        // Decrypt the inner encrypted content
-                        final innerDecryptedData =
-                            await EncryptionService.decryptAesCbcPkcs7(
-                                firstLayerDecrypted);
-
-                        if (innerDecryptedData != null &&
-                            innerDecryptedData.containsKey('text')) {
-                          final finalDecryptedText =
-                              innerDecryptedData['text'] as String;
-                          Logger.success(
-                              ' Main:  Inner layer decrypted successfully');
-                          decryptedContent = finalDecryptedText;
-                        } else {
-                          Logger.warning(
-                              ' Main:  Inner layer decryption failed, using first layer');
-                          decryptedContent = firstLayerDecrypted;
-                        }
-                      } catch (e) {
-                        Logger.error(
-                            ' Main:  Inner layer decryption error: $e, using first layer');
-                        decryptedContent = firstLayerDecrypted;
-                      }
-                    } else {
-                      // Single layer encryption, use as is
-                      Logger.success(
-                          ' Main:  Single layer decryption completed');
-                      decryptedContent = firstLayerDecrypted;
-                    }
-                  } else {
-                    Logger.warning(
-                        ' Main:  Decryption failed - invalid format, using encrypted text');
-                    decryptedContent = '[Encrypted Message]';
-                  }
-                } catch (e) {
-                  Logger.error(' Main:  Decryption failed: $e');
-                  decryptedContent = '[Encrypted Message]';
-                }
-              } else {
-                Logger.info(
-                    ' Main:  Message appears to be plain text, using as-is');
-              }
-
-              // Call handleIncomingMessage to decrypt the message preview
-              if (actualConversationId != null) {
-                chatListProvider.handleIncomingMessage(
-                  senderId: senderId,
-                  senderName: senderName,
-                  message: decryptedContent, // Use decrypted content
-                  conversationId: actualConversationId,
-                  messageId: messageId,
-                );
-                Logger.success(
-                    ' Main:  Conversation updated with decrypted message preview');
-
-                // CRITICAL: Also update chat list in real-time with new message using decrypted content
-                chatListProvider.handleNewMessageArrival(
-                  messageId: messageId,
-                  senderId: senderId,
-                  content:
-                      decryptedContent, // Use decrypted content instead of raw message
-                  conversationId: actualConversationId,
-                  timestamp: DateTime.now(),
-                  messageType: MessageType.text,
-                );
-                Logger.success(
-                    ' Main:  Chat list updated in real-time with decrypted message');
-              }
-            } catch (e) {
-              Logger.warning(
-                  ' Main:  Failed to update conversation with decrypted preview: $e');
             }
 
-            // CRITICAL: Update SessionChatProvider if the message is for the current conversation
+            // Truncate message for notification
+            if (notificationBody.length > 100) {
+              notificationBody = notificationBody.substring(0, 100) + '...';
+            }
+
+            Logger.info(
+                ' Main: 🔔 About to show notification - Title: "New message from $contactName", Body: "$notificationBody"');
+            Logger.info(
+                ' Main: 🔔 Notification payload: messageId=$messageId, senderId=$senderId, conversationId=$actualConversationId');
+            Logger.info(
+                ' Main: 🔔 Notification service instance: ${localNotificationBadgeService.hashCode}');
+
+            // CRITICAL: Add try-catch around notification call to catch any errors
             try {
-              final sessionChatProvider = Provider.of<SessionChatProvider>(
+              Logger.info(' Main: 🔔 Calling showMessageNotification...');
+              await localNotificationBadgeService.showMessageNotification(
+                title: 'New message from $contactName',
+                body: notificationBody,
+                type: 'message_received',
+                payload: {
+                  'messageId': messageId,
+                  'senderId': senderId,
+                  'conversationId': actualConversationId,
+                  'timestamp': DateTime.now().toIso8601String(),
+                },
+              );
+              Logger.success(
+                  ' Main: 🔔 showMessageNotification completed successfully');
+            } catch (notificationError) {
+              Logger.error(
+                  ' Main: 🔔 showMessageNotification failed: $notificationError');
+              Logger.error(
+                  ' Main: 🔔 Notification error details: ${notificationError.toString()}');
+              Logger.error(
+                  ' Main: 🔔 Notification error stack trace: ${StackTrace.current}');
+            }
+
+            Logger.success(
+                ' Main:  Push notification shown for incoming message from $contactName');
+            Logger.info(
+                ' Main: 🔔 Notification process completed successfully');
+            Logger.info(
+                ' Main: 🔔 Final notification service instance: ${localNotificationBadgeService.hashCode}');
+          } catch (e) {
+            Logger.error(' Main:  Failed to show push notification: $e');
+            Logger.error(' Main:  Error details: ${e.toString()}');
+            Logger.error(' Main:  Stack trace: ${StackTrace.current}');
+            Logger.error(
+                ' Main:  App lifecycle state: ${WidgetsBinding.instance.lifecycleState}');
+            Logger.error(
+                ' Main:  Message details - senderId: $senderId, senderName: $senderName, messageId: $messageId');
+            Logger.error(
+                ' Main:  Platform: ${Platform.isAndroid ? 'Android' : Platform.isIOS ? 'iOS' : 'Other'}');
+          }
+
+          // CRITICAL: Update conversation with new message and decrypt preview
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            try {
+              final indicatorService = Provider.of<IndicatorService>(
                   navigatorKey.currentContext!,
                   listen: false);
 
-              // Check if this message is for the current conversation
-              if (sessionChatProvider.currentConversationId ==
-                      actualConversationId ||
-                  (sessionChatProvider.currentRecipientId == senderId)) {
-                Logger.info(
-                    ' Main:  Updating SessionChatProvider for current conversation');
+              final chatListProvider = Provider.of<ChatListProvider>(
+                  navigatorKey.currentContext!,
+                  listen: false);
 
-                // Trigger message refresh from database
-                await sessionChatProvider.refreshMessages();
-                Logger.success(
-                    ' Main:  SessionChatProvider messages refreshed');
+              try {
+                // CRITICAL: Decrypt the message content first
+                String decryptedContent = message;
 
-                // CRITICAL FIX: Don't send immediate read receipts
-                // According to SeChat API docs, read receipts should only be sent when user actually reads
-                // The server will handle the proper receipt:read event flow
-                Logger.info(
-                    ' Main:  Message received - read receipts will be sent via proper server flow');
-              } else {
-                Logger.info(
-                    ' Main:  Message not for current conversation - SessionChatProvider not updated');
+                // Check if this looks like encrypted content
+                if (message.length > 100 && message.contains('eyJ')) {
+                  Logger.debug(
+                      ' Main: 🔓 Attempting to decrypt message for chat list preview');
+                  try {
+                    // Use EncryptionService to decrypt the message (first layer)
+                    final decryptedData =
+                        await EncryptionService.decryptAesCbcPkcs7(message);
+
+                    if (decryptedData != null &&
+                        decryptedData.containsKey('text')) {
+                      final firstLayerDecrypted =
+                          decryptedData['text'] as String;
+                      Logger.success(
+                          ' Main:  First layer decrypted: $firstLayerDecrypted');
+
+                      // Check if the decrypted text is still encrypted (double encryption scenario)
+                      if (firstLayerDecrypted.length > 100 &&
+                          firstLayerDecrypted.contains('eyJ')) {
+                        Logger.info(
+                            ' Main:  Detected double encryption, decrypting inner layer...');
+                        try {
+                          // Decrypt the inner encrypted content
+                          final innerDecryptedData =
+                              await EncryptionService.decryptAesCbcPkcs7(
+                                  firstLayerDecrypted);
+
+                          if (innerDecryptedData != null &&
+                              innerDecryptedData.containsKey('text')) {
+                            final finalDecryptedText =
+                                innerDecryptedData['text'] as String;
+                            Logger.success(
+                                ' Main:  Inner layer decrypted successfully');
+                            decryptedContent = finalDecryptedText;
+                          } else {
+                            Logger.warning(
+                                ' Main:  Inner layer decryption failed, using first layer');
+                            decryptedContent = firstLayerDecrypted;
+                          }
+                        } catch (e) {
+                          Logger.error(
+                              ' Main:  Inner layer decryption error: $e, using first layer');
+                          decryptedContent = firstLayerDecrypted;
+                        }
+                      } else {
+                        // Single layer encryption, use as is
+                        Logger.success(
+                            ' Main:  Single layer decryption completed');
+                        decryptedContent = firstLayerDecrypted;
+                      }
+                    } else {
+                      Logger.warning(
+                          ' Main:  Decryption failed - invalid format, using encrypted text');
+                      decryptedContent = '[Encrypted Message]';
+                    }
+                  } catch (e) {
+                    Logger.error(' Main:  Decryption failed: $e');
+                    decryptedContent = '[Encrypted Message]';
+                  }
+                } else {
+                  Logger.info(
+                      ' Main:  Message appears to be plain text, using as-is');
+                }
+
+                // Call handleIncomingMessage to decrypt the message preview
+                if (actualConversationId != null) {
+                  // CRITICAL: Always update chat list, even in background
+                  await chatListProvider.handleIncomingMessage(
+                    senderId: senderId,
+                    senderName: senderName,
+                    message: decryptedContent, // Use decrypted content
+                    conversationId: actualConversationId,
+                    messageId: messageId,
+                  );
+                  Logger.success(
+                      ' Main:  Conversation updated with decrypted message preview');
+
+                  // CRITICAL: Also update chat list in real-time with new message using decrypted content
+                  await chatListProvider.handleNewMessageArrival(
+                    messageId: messageId,
+                    senderId: senderId,
+                    content:
+                        decryptedContent, // Use decrypted content instead of raw message
+                    conversationId: actualConversationId,
+                    timestamp: DateTime.now(),
+                    messageType: MessageType.text,
+                  );
+                  Logger.success(
+                      ' Main:  Chat list updated in real-time with decrypted message');
+                }
+              } catch (e) {
+                Logger.warning(
+                    ' Main:  Failed to update conversation with decrypted preview: $e');
               }
-            } catch (e) {
-              Logger.warning(
-                  ' Main:  Failed to update SessionChatProvider: $e');
-            }
 
-            // CRITICAL: Update UnifiedChatProvider if the message is for the current conversation
-            try {
-              final unifiedChatSocketIntegration =
-                  UnifiedChatSocketIntegration();
-              unifiedChatSocketIntegration.handleIncomingMessage(
-                messageId: messageId,
-                senderId: senderId,
-                conversationId: actualConversationId ?? '',
-                body: message,
-                senderName: senderName,
-              );
+              // CRITICAL: Update SessionChatProvider if the message is for the current conversation
+              try {
+                final sessionChatProvider = Provider.of<SessionChatProvider>(
+                    navigatorKey.currentContext!,
+                    listen: false);
+
+                // Check if this message is for the current conversation
+                if (sessionChatProvider.currentConversationId ==
+                        actualConversationId ||
+                    (sessionChatProvider.currentRecipientId == senderId)) {
+                  Logger.info(
+                      ' Main:  Updating SessionChatProvider for current conversation');
+
+                  // Trigger message refresh from database
+                  await sessionChatProvider.refreshMessages();
+                  Logger.success(
+                      ' Main:  SessionChatProvider messages refreshed');
+
+                  // CRITICAL FIX: Don't send immediate read receipts
+                  // According to SeChat API docs, read receipts should only be sent when user actually reads
+                  // The server will handle the proper receipt:read event flow
+                  Logger.info(
+                      ' Main:  Message received - read receipts will be sent via proper server flow');
+                } else {
+                  Logger.info(
+                      ' Main:  Message not for current conversation - SessionChatProvider not updated');
+                }
+              } catch (e) {
+                Logger.warning(
+                    ' Main:  Failed to update SessionChatProvider: $e');
+              }
+
+              // CRITICAL: Update UnifiedChatProvider if the message is for the current conversation
+              try {
+                final unifiedChatSocketIntegration =
+                    UnifiedChatSocketIntegration();
+                unifiedChatSocketIntegration.handleIncomingMessage(
+                  messageId: messageId,
+                  senderId: senderId,
+                  conversationId: actualConversationId ?? '',
+                  body: message,
+                  senderName: senderName,
+                );
+                Logger.success(
+                    ' Main:  UnifiedChatProvider updated for incoming message');
+              } catch (e) {
+                Logger.warning(
+                    ' Main:  Failed to update UnifiedChatProvider: $e');
+              }
+
+              // Count unread conversations
+              final unreadCount = chatListProvider.conversations
+                  .where((conv) => conv.unreadCount > 0)
+                  .length;
+
+              // Update the indicator service
+              indicatorService.updateCounts(unreadChats: unreadCount);
               Logger.success(
-                  ' Main:  UnifiedChatProvider updated for incoming message');
+                  ' Main:  Chat badge count updated for new message');
+
+              // Note: Push notifications are now handled by UnifiedMessageService
+              // to avoid duplicate notifications
             } catch (e) {
-              Logger.warning(
-                  ' Main:  Failed to update UnifiedChatProvider: $e');
+              Logger.error(' Main:  Failed to update chat badge count: $e');
             }
-
-            // Count unread conversations
-            final unreadCount = chatListProvider.conversations
-                .where((conv) => conv.unreadCount > 0)
-                .length;
-
-            // Update the indicator service
-            indicatorService.updateCounts(unreadChats: unreadCount);
-            Logger.success(' Main:  Chat badge count updated for new message');
-
-            // Note: Push notifications are now handled by UnifiedMessageService
-            // to avoid duplicate notifications
-          } catch (e) {
-            Logger.error(' Main:  Failed to update chat badge count: $e');
-          }
-        });
-      } else {
-        Logger.warning(' Main:  Invalid message data received');
+          });
+        } else {
+          Logger.warning(' Main:  Invalid message data received');
+        }
+      } catch (e) {
+        Logger.error(' Main:  Failed to save incoming message to database: $e');
       }
     } catch (e) {
-      Logger.error(' Main:  Failed to save incoming message to database: $e');
+      Logger.error(' Main: ❌ CRITICAL ERROR in onMessageReceived callback: $e');
+      Logger.error(' Main: ❌ Error details: ${e.toString()}');
+      Logger.error(' Main: ❌ Stack trace: ${StackTrace.current}');
     }
   });
 
@@ -1742,20 +1824,14 @@ Future<void> _ensureConversationExists(
     String conversationId, String senderId, String senderName) async {
   try {
     // Get ChatListProvider to create/update conversation
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        final chatListProvider = Provider.of<ChatListProvider>(
-            navigatorKey.currentContext!,
-            listen: false);
+    final chatListProvider = Provider.of<ChatListProvider>(
+        navigatorKey.currentContext!,
+        listen: false);
 
-        // Create conversation if it doesn't exist
-        await chatListProvider.ensureConversationExists(
-            conversationId, senderId, senderName);
-        Logger.success(' Main:  Conversation ensured: $conversationId');
-      } catch (e) {
-        Logger.error(' Main:  Failed to ensure conversation: $e');
-      }
-    });
+    // Create conversation if it doesn't exist
+    await chatListProvider.ensureConversationExists(
+        conversationId, senderId, senderName);
+    Logger.success(' Main:  Conversation ensured: $conversationId');
   } catch (e) {
     Logger.error(' Main:  Error in _ensureConversationExists: $e');
   }

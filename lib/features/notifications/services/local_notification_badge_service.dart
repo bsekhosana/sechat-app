@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:provider/provider.dart';
@@ -19,8 +20,15 @@ import 'package:sechat_app//../core/utils/logger.dart';
 class LocalNotificationBadgeService {
   static final LocalNotificationBadgeService _instance =
       LocalNotificationBadgeService._internal();
-  factory LocalNotificationBadgeService() => _instance;
-  LocalNotificationBadgeService._internal();
+  factory LocalNotificationBadgeService() {
+    Logger.info(
+        '📱 LocalNotificationBadgeService: 🔧 Factory constructor called - returning instance: ${_instance.hashCode}');
+    return _instance;
+  }
+  LocalNotificationBadgeService._internal() {
+    Logger.info(
+        '📱 LocalNotificationBadgeService: 🔧 Internal constructor called - instance: ${this.hashCode}');
+  }
 
   final LocalNotificationDatabaseService _databaseService =
       LocalNotificationDatabaseService();
@@ -34,7 +42,15 @@ class LocalNotificationBadgeService {
 
   /// Initialize the badge service
   Future<void> initialize() async {
-    if (_isInitialized) return;
+    Logger.info(
+        '📱 LocalNotificationBadgeService: 🔧 Initialize called - instance: ${this.hashCode}, already initialized: $_isInitialized');
+    Logger.info(
+        '📱 LocalNotificationBadgeService: 🔧 App lifecycle state: ${WidgetsBinding.instance.lifecycleState}');
+    if (_isInitialized) {
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔧 Already initialized, skipping...');
+      return;
+    }
 
     try {
       // Initialize local notifications
@@ -59,6 +75,8 @@ class LocalNotificationBadgeService {
       }
 
       _isInitialized = true;
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔧 Marked as initialized - instance: ${this.hashCode}');
       Logger.debug(
           '📱 LocalNotificationBadgeService: ✅ Initialized successfully (unread count: $unreadCount)');
     } catch (e) {
@@ -154,6 +172,18 @@ class LocalNotificationBadgeService {
         ledColor: Color(0xFFFF6B35),
       );
 
+      // Create badge reset channel
+      const AndroidNotificationChannel badgeResetChannel =
+          AndroidNotificationChannel(
+        'badge_reset',
+        'Badge Reset',
+        description: 'Silent notification for badge reset',
+        importance: Importance.min,
+        playSound: false,
+        enableVibration: false,
+        showBadge: false,
+      );
+
       // Register channels
       await _localNotifications
           .resolvePlatformSpecificImplementation<
@@ -169,6 +199,11 @@ class LocalNotificationBadgeService {
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(messageChannel);
+
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(badgeResetChannel);
 
       Logger.success(
           '📱 LocalNotificationBadgeService:  Notification channels created');
@@ -221,6 +256,8 @@ class LocalNotificationBadgeService {
   /// Ensure notification channel exists
   Future<void> _ensureNotificationChannelExists(String channelId) async {
     try {
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Checking if channel $channelId exists...');
       final androidPlugin =
           _localNotifications.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
@@ -232,18 +269,28 @@ class LocalNotificationBadgeService {
             existingChannels?.any((channel) => channel.id == channelId) ??
                 false;
 
+        Logger.info(
+            '📱 LocalNotificationBadgeService: 🔔 Channel $channelId exists: $channelExists');
+
         if (!channelExists) {
           Logger.warning(
               '📱 LocalNotificationBadgeService: ⚠️ Channel $channelId does not exist, creating it...');
           await _createNotificationChannels();
+          Logger.info(
+              '📱 LocalNotificationBadgeService: 🔔 Channel creation completed');
         } else {
-          Logger.debug(
+          Logger.info(
               '📱 LocalNotificationBadgeService: ✅ Channel $channelId exists');
         }
+      } else {
+        Logger.warning(
+            '📱 LocalNotificationBadgeService: ⚠️ Android plugin is null');
       }
     } catch (e) {
       Logger.error(
           '📱 LocalNotificationBadgeService: ❌ Failed to ensure channel exists: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService: ❌ Error details: ${e.toString()}');
     }
   }
 
@@ -304,6 +351,13 @@ class LocalNotificationBadgeService {
         Logger.info(
             '📱 LocalNotificationBadgeService:  Parsing payload: $payload');
 
+        // Handle special payloads that are not JSON
+        if (payload == 'badge_update' || payload == 'badge_reset') {
+          Logger.info(
+              '📱 LocalNotificationBadgeService:  Badge update notification tapped - no action needed');
+          return;
+        }
+
         // Try to parse as JSON first
         try {
           final Map<String, dynamic> payloadMap = jsonDecode(payload);
@@ -337,6 +391,9 @@ class LocalNotificationBadgeService {
             }
           } else if (payload.contains('type=ker_received')) {
             _navigateToKeyExchangeScreen();
+          } else {
+            Logger.info(
+                '📱 LocalNotificationBadgeService:  Unknown payload format: $payload');
           }
         }
       }
@@ -647,11 +704,25 @@ class LocalNotificationBadgeService {
     try {
       Logger.info(
           '📱 LocalNotificationBadgeService: 🔔 Attempting to show message notification: $title');
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Notification body: $body');
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Notification type: $type');
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 App lifecycle state: ${WidgetsBinding.instance.lifecycleState}');
 
       // Check if app is in background - only increment notification count if in background
       final isInBackground = await _isAppInBackground();
-      Logger.debug(
+      Logger.info(
           '📱 LocalNotificationBadgeService: 🔍 App in background: $isInBackground');
+
+      // Log notification details for debugging
+      Logger.debug(
+          '📱 LocalNotificationBadgeService: 🔍 Notification title: $title');
+      Logger.debug(
+          '📱 LocalNotificationBadgeService: 🔍 Notification body: $body');
+      Logger.debug(
+          '📱 LocalNotificationBadgeService: 🔍 Notification type: $type');
 
       // Create notification details
       final AndroidNotificationDetails androidDetails =
@@ -691,11 +762,22 @@ class LocalNotificationBadgeService {
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
-        presentBadge:
-            false, // Don't increment badge here - let IndicatorService handle it
+        presentBadge: true, // Enable badge for iOS
+        interruptionLevel:
+            InterruptionLevel.active, // Ensure notification is shown
         presentSound: true,
       );
 
+      // Generate notification ID
+      final notificationId =
+          DateTime.now().millisecondsSinceEpoch.remainder(100000);
+
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Creating notification details...');
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Notification ID: $notificationId');
+      Logger.info('📱 LocalNotificationBadgeService: 🔔 Title: $title');
+      Logger.info('📱 LocalNotificationBadgeService: 🔔 Body: $body');
       final NotificationDetails notificationDetails = NotificationDetails(
         android: androidDetails,
         iOS: iosDetails,
@@ -703,6 +785,8 @@ class LocalNotificationBadgeService {
 
       // Show the notification
       final notificationPayload = payload != null ? jsonEncode(payload) : null;
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Notification details created successfully');
       Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 Creating message notification with payload: $notificationPayload');
       Logger.debug(
@@ -710,11 +794,12 @@ class LocalNotificationBadgeService {
       Logger.debug(
           '📱 LocalNotificationBadgeService: 🔧 Notification details: $notificationDetails');
 
-      final notificationId =
-          DateTime.now().millisecondsSinceEpoch.remainder(100000);
-
       // Ensure notification channel exists before showing notification
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Ensuring notification channel exists...');
       await _ensureNotificationChannelExists('message_notifications');
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Notification channel ensured');
 
       // Check if notifications are enabled
       final areNotificationsEnabled = await _localNotifications
@@ -722,18 +807,27 @@ class LocalNotificationBadgeService {
               AndroidFlutterLocalNotificationsPlugin>()
           ?.areNotificationsEnabled();
 
-      Logger.debug(
+      Logger.info(
           '📱 LocalNotificationBadgeService: 🔍 Notifications enabled: $areNotificationsEnabled');
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔍 Platform: ${Platform.isAndroid ? 'Android' : Platform.isIOS ? 'iOS' : 'Other'}');
 
       if (areNotificationsEnabled == false) {
         Logger.warning(
             '📱 LocalNotificationBadgeService: ⚠️ Notifications are disabled, requesting permissions...');
         await _requestNotificationPermissions();
+        Logger.info(
+            '📱 LocalNotificationBadgeService: 🔔 Permission request completed');
+      } else {
+        Logger.info(
+            '📱 LocalNotificationBadgeService: 🔔 Notifications are enabled, proceeding...');
       }
 
       // Show notification (only once, no duplicates)
       Logger.info(
           '📱 LocalNotificationBadgeService: 🔔 Showing notification with ID: $notificationId, title: $title, body: $body');
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 About to call _localNotifications.show');
 
       await _localNotifications.show(
         notificationId,
@@ -745,6 +839,8 @@ class LocalNotificationBadgeService {
 
       Logger.success(
           '📱 LocalNotificationBadgeService: ✅ Message notification shown with ID: $notificationId');
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Notification show completed successfully');
 
       // Only create notification item in database if app is in background
       if (isInBackground) {
@@ -761,6 +857,10 @@ class LocalNotificationBadgeService {
     } catch (e) {
       Logger.error(
           '📱 LocalNotificationBadgeService:  Failed to show message notification: $e');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Error details: ${e.toString()}');
+      Logger.error(
+          '📱 LocalNotificationBadgeService:  Stack trace: ${StackTrace.current}');
     }
   }
 
@@ -807,8 +907,9 @@ class LocalNotificationBadgeService {
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
-        presentBadge:
-            false, // Don't increment badge here - let IndicatorService handle it
+        presentBadge: true, // Enable badge for iOS
+        interruptionLevel:
+            InterruptionLevel.active, // Ensure notification is shown
         presentSound: true,
       );
 
@@ -860,6 +961,22 @@ class LocalNotificationBadgeService {
   /// Reset app icon badge count to 0
   Future<void> resetBadgeCount() async {
     try {
+      // Create Android notification details for badge reset
+      final AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'badge_reset',
+        'Badge Reset',
+        channelDescription: 'Silent notification for badge reset',
+        importance: Importance.min,
+        priority: Priority.min,
+        showWhen: false,
+        enableVibration: false,
+        playSound: false,
+        silent: true,
+        visibility: NotificationVisibility.private,
+        category: AndroidNotificationCategory.status,
+      );
+
       // Reset badge count on iOS
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: false,
@@ -873,7 +990,10 @@ class LocalNotificationBadgeService {
         DateTime.now().millisecondsSinceEpoch.remainder(100000),
         '', // Empty title
         '', // Empty body
-        NotificationDetails(iOS: iosDetails),
+        NotificationDetails(
+          android: androidDetails,
+          iOS: iosDetails,
+        ),
         payload: 'badge_reset',
       );
 
@@ -917,6 +1037,8 @@ class LocalNotificationBadgeService {
         enableVibration: false,
         playSound: false,
         silent: true,
+        visibility: NotificationVisibility.private,
+        category: AndroidNotificationCategory.status,
       );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(

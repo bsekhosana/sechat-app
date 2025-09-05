@@ -786,38 +786,53 @@ class SeSocketService {
     _socket!.on('message:received', (data) async {
       Logger.debug('💬 SeSocketService: Message received');
       Logger.info('💬 SeSocketService:  Message data: $data');
+      Logger.info(
+          '💬 SeSocketService: 🔍 onMessageReceived callback status: ${onMessageReceived != null ? 'SET' : 'NULL'}');
 
       if (onMessageReceived != null) {
-        // Extract sender name from data or use senderId as fallback
-        String senderName =
-            data['senderName'] ?? data['fromUserId'] ?? 'Unknown User';
+        try {
+          // Extract sender name from data or use senderId as fallback
+          String senderName =
+              data['senderName'] ?? data['fromUserId'] ?? 'Unknown User';
 
-        // Try to resolve contact name if senderName is a session ID
-        if (senderName == data['fromUserId'] ||
-            senderName.startsWith('session_')) {
-          try {
-            final contactService = ContactService.instance;
-            final contact = contactService.getContact(data['fromUserId'] ?? '');
-            if (contact != null && contact.displayName.isNotEmpty) {
-              senderName = contact.displayName;
+          // Try to resolve contact name if senderName is a session ID
+          if (senderName == data['fromUserId'] ||
+              senderName.startsWith('session_')) {
+            try {
+              final contactService = ContactService.instance;
+              final contact =
+                  contactService.getContact(data['fromUserId'] ?? '');
+              if (contact != null && contact.displayName.isNotEmpty) {
+                senderName = contact.displayName;
+                Logger.debug(
+                    '💬 SeSocketService:  Resolved contact name: ${data['fromUserId']} -> $senderName');
+              }
+            } catch (e) {
               Logger.debug(
-                  '💬 SeSocketService:  Resolved contact name: ${data['fromUserId']} -> $senderName');
+                  '💬 SeSocketService:  Could not resolve contact name: $e');
             }
-          } catch (e) {
-            Logger.debug(
-                '💬 SeSocketService:  Could not resolve contact name: $e');
           }
-        }
 
-        onMessageReceived!(
-          data['fromUserId'] ?? '', // senderId
-          senderName, // senderName
-          data['body'] ?? '', // message
-          data['conversationId'] ?? '', // conversationId
-          data['messageId'] ?? '', // messageId
-        );
-        Logger.success(
-            '💬 SeSocketService:  Message received callback executed with sender: $senderName');
+          Logger.info(
+              '💬 SeSocketService: 🔔 About to call onMessageReceived callback');
+          onMessageReceived!(
+            data['fromUserId'] ?? '', // senderId
+            senderName, // senderName
+            data['body'] ?? '', // message
+            data['conversationId'] ?? '', // conversationId
+            data['messageId'] ?? '', // messageId
+          );
+          Logger.info(
+              '💬 SeSocketService: 🔔 onMessageReceived callback call completed');
+          Logger.success(
+              '💬 SeSocketService:  Message received callback executed with sender: $senderName');
+        } catch (e) {
+          Logger.error(
+              '💬 SeSocketService: ❌ Error in onMessageReceived callback: $e');
+          Logger.error('💬 SeSocketService: ❌ Error details: ${e.toString()}');
+          Logger.error(
+              '💬 SeSocketService: ❌ Stack trace: ${StackTrace.current}');
+        }
       } else {
         Logger.error(
             '💬 SeSocketService:  onMessageReceived callback is null - message not processed!');

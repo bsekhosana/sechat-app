@@ -424,15 +424,16 @@ class UnifiedMessageService extends ChangeNotifier {
               '📤 UnifiedMessageService:  Error getting sender name from contact service: $e');
         }
 
-        await MessageNotificationService.instance.showMessageNotification(
-          messageId: messageId,
-          senderName: senderName,
-          messageContent: decryptedBody,
-          conversationId: consistentConversationId,
-          isEncrypted: isEncrypted,
-        );
-        Logger.success(
-            '📤 UnifiedMessageService:  Push notification shown for message: $messageId from: $senderName');
+        // Notification is now handled in main.dart to avoid duplicates
+        // await MessageNotificationService.instance.showMessageNotification(
+        //   messageId: messageId,
+        //   senderName: senderName,
+        //   messageContent: decryptedBody,
+        //   conversationId: consistentConversationId,
+        //   isEncrypted: isEncrypted,
+        // );
+        Logger.debug(
+            '📤 UnifiedMessageService:  Notification handled by main.dart for message: $messageId from: $senderName');
       } catch (e) {
         Logger.error(
             '📤 UnifiedMessageService:  Failed to show push notification: $e');

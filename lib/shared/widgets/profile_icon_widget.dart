@@ -12,6 +12,7 @@ import 'package:sechat_app/core/services/network_service.dart';
 import 'package:sechat_app/features/chat/services/message_storage_service.dart';
 import 'package:sechat_app/core/services/se_shared_preference_service.dart';
 import 'package:sechat_app/core/services/local_storage_service.dart';
+import 'package:sechat_app/features/notifications/services/local_notification_badge_service.dart';
 import '../../core/utils/store_link_resolver.dart';
 import '../../core/services/global_user_service.dart';
 import 'package:sechat_app/features/auth/screens/welcome_screen.dart';
@@ -351,7 +352,7 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
                           ),
                           child: Column(
                             children: [
-                              const SizedBox(height: 16),
+                              // const SizedBox(height: 16),
                               _buildMenuButton(
                                 icon: Icons.account_circle_outlined,
                                 title: 'Delete Session',
@@ -739,6 +740,27 @@ class _ProfileIconWidgetState extends State<ProfileIconWidget>
         Logger.warning(
             '🗑️ ProfileIconWidget:  Warning - local storage service cleanup failed: $e');
         // Continue with account deletion even if local storage service cleanup fails
+      }
+
+      // Clear all notifications
+      try {
+        Logger.info(' ProfileIconWidget: 🔔 Clearing all notifications...');
+        final localNotificationBadgeService = LocalNotificationBadgeService();
+
+        // Clear all device notifications
+        await localNotificationBadgeService.clearAllDeviceNotifications();
+        Logger.success(
+            '🗑️ ProfileIconWidget:  All device notifications cleared');
+
+        // Reset badge count
+        await localNotificationBadgeService.resetBadgeCount();
+        Logger.success('🗑️ ProfileIconWidget:  Badge count reset');
+
+        Logger.success('🗑️ ProfileIconWidget:  All notifications cleared');
+      } catch (e) {
+        Logger.warning(
+            '🗑️ ProfileIconWidget:  Warning - notification cleanup failed: $e');
+        // Continue with account deletion even if notification cleanup fails
       }
 
       // Clear all temporary files and directories

@@ -12,6 +12,7 @@ import 'key_exchange_service.dart';
 import 'indicator_service.dart';
 import 'encryption_service.dart';
 import 'se_socket_service.dart';
+import '../../features/notifications/services/local_notification_badge_service.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -824,10 +825,21 @@ class SeSessionService {
 
       // 9. Clear all notifications
       try {
-        // NotificationManagerService removed, using new local notification system
-        // Notifications cleared by new local notification system
+        Logger.info(' SeSessionService: 🔔 Clearing all notifications...');
+
+        // Import and use LocalNotificationBadgeService
+        final localNotificationBadgeService = LocalNotificationBadgeService();
+
+        // Clear all device notifications
+        await localNotificationBadgeService.clearAllDeviceNotifications();
         Logger.success(
-            '🗑️ SeSessionService:  Notifications handled by new system');
+            '🗑️ SeSessionService:  All device notifications cleared');
+
+        // Reset badge count
+        await localNotificationBadgeService.resetBadgeCount();
+        Logger.success('🗑️ SeSessionService:  Badge count reset');
+
+        Logger.success('🗑️ SeSessionService:  All notifications cleared');
       } catch (e) {
         Logger.warning(
             '🗑️ SeSessionService:  Warning - notification cleanup failed: $e');

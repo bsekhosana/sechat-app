@@ -8,6 +8,7 @@ import '../../core/services/background_connection_manager.dart';
 import '../../features/notifications/services/local_notification_badge_service.dart';
 import '../../realtime/realtime_service_manager.dart';
 import '../../features/key_exchange/providers/key_exchange_request_provider.dart';
+import '../../features/chat/providers/chat_list_provider.dart';
 import '../../main.dart';
 import 'package:flutter/services.dart';
 import '/../core/utils/logger.dart';
@@ -92,6 +93,23 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
     Logger.debug(
         '🔄 AppLifecycleHandler: 🚀 _handleAppResumed() method called - starting badge reset and notification clearing...');
 
+    // CRITICAL: Ensure UI is properly restored
+    try {
+      Logger.debug(
+          ' AppLifecycleHandler: 🔧 Ensuring UI state is properly restored...');
+      // Force a frame update to ensure UI is rendered
+      WidgetsBinding.instance.ensureVisualUpdate();
+
+      // Additional UI restoration steps
+      await Future.delayed(Duration(milliseconds: 100));
+      WidgetsBinding.instance.scheduleFrame();
+
+      Logger.success(' AppLifecycleHandler: ✅ UI state restoration initiated');
+    } catch (e) {
+      Logger.warning(
+          ' AppLifecycleHandler: ⚠️ UI state restoration warning: $e');
+    }
+
     // Stop background connection maintenance when app comes to foreground
     try {
       Logger.debug(
@@ -168,6 +186,19 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       } catch (e) {
         Logger.warning(
             ' AppLifecycleHandler:  Failed to refresh KeyExchangeRequestProvider: $e');
+      }
+
+      // CRITICAL: Force refresh ChatListProvider to show background messages
+      try {
+        final chatListProvider = Provider.of<ChatListProvider>(
+            navigatorKey.currentContext!,
+            listen: false);
+        await chatListProvider.refreshConversations();
+        Logger.success(
+            ' AppLifecycleHandler:  ChatListProvider refreshed to show background messages');
+      } catch (e) {
+        Logger.warning(
+            ' AppLifecycleHandler:  Failed to refresh ChatListProvider: $e');
       }
     } catch (e) {
       Logger.warning(

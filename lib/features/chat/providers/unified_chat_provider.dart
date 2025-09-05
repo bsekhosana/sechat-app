@@ -378,13 +378,14 @@ class UnifiedChatProvider extends ChangeNotifier {
         _updateMessageStatus(messageId, MessageStatus.sent);
       });
 
-      // Message received callback
-      _socketService.setOnMessageReceived(
-          (senderId, senderName, message, conversationId, messageId) {
-        Logger.debug(
-            'UnifiedChatProvider:  Message received: $messageId from $senderId');
-        _handleIncomingMessage(messageId, senderId, conversationId, message);
-      });
+      // Message received callback - removed to avoid overriding main.dart callback
+      // The main.dart callback will handle notifications and call _handleIncomingMessage
+      // _socketService.setOnMessageReceived(
+      //     (senderId, senderName, message, conversationId, messageId) {
+      //   Logger.debug(
+      //       'UnifiedChatProvider:  Message received: $messageId from $senderId');
+      //   _handleIncomingMessage(messageId, senderId, conversationId, message);
+      // });
 
       // Presence update callback
       _socketService.setOnOnlineStatusUpdate((userId, isOnline, lastSeen) {
