@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:sechat_app/core/services/se_session_service.dart';
@@ -12,7 +11,6 @@ import 'package:sechat_app/core/services/contact_service.dart';
 
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
 import 'package:sechat_app//../core/utils/logger.dart';
-import '/..//../core/utils/logger.dart';
 
 class SeSocketService {
   SeSocketService._();
@@ -274,8 +272,8 @@ class SeSocketService {
         'autoConnect': false,
         'reconnection': true,
         'reconnectionAttempts': _maxReconnectAttempts,
-        'reconnectionDelay': 1000,
-        'reconnectionDelayMax': 10000,
+        'reconnectionDelay': 500,
+        'reconnectionDelayMax': 5000,
         'timeout': 30000, // Extended to 30 seconds as per server update
         'forceNew': true,
         'upgrade': true, // Enable transport upgrade
@@ -374,13 +372,9 @@ class SeSocketService {
       Logger.success(
           ' SeSocketService: Session confirmed: ${data['sessionId']}');
 
-      // Create notification for session registered
-      await _createSocketEventNotification(
-        eventType: 'session_registered',
-        title: 'Session Established',
-        body: 'Real-time connection established successfully',
-        metadata: data,
-      );
+      // Skip notification for session registered (connection established)
+      Logger.debug(
+          '🔗 SeSocketService: 🔇 Skipping notification for session_registered (connection established)');
 
       _sessionConfirmed = true;
       _ready = true;
@@ -795,8 +789,25 @@ class SeSocketService {
 
       if (onMessageReceived != null) {
         // Extract sender name from data or use senderId as fallback
-        final senderName =
+        String senderName =
             data['senderName'] ?? data['fromUserId'] ?? 'Unknown User';
+
+        // Try to resolve contact name if senderName is a session ID
+        if (senderName == data['fromUserId'] ||
+            senderName.startsWith('session_')) {
+          try {
+            final contactService = ContactService.instance;
+            final contact = contactService.getContact(data['fromUserId'] ?? '');
+            if (contact != null && contact.displayName.isNotEmpty) {
+              senderName = contact.displayName;
+              Logger.debug(
+                  '💬 SeSocketService:  Resolved contact name: ${data['fromUserId']} -> $senderName');
+            }
+          } catch (e) {
+            Logger.debug(
+                '💬 SeSocketService:  Could not resolve contact name: $e');
+          }
+        }
 
         onMessageReceived!(
           data['fromUserId'] ?? '', // senderId
@@ -884,20 +895,9 @@ class SeSocketService {
         }
       }
 
-      // Create notification for presence update (only if not silent)
-      final bool silent = decryptedData['silent'] ?? false;
-      if (!silent) {
-        final bool isOnline = decryptedData['isOnline'] ?? false;
-        await _createSocketEventNotification(
-          eventType: 'presence:update',
-          title: isOnline ? 'User Online' : 'User Offline',
-          body: isOnline ? 'User came online' : 'User went offline',
-          senderId: decryptedData['fromUserId']?.toString() ??
-              decryptedData['sessionId']?.toString(),
-          metadata: decryptedData,
-          silent: silent,
-        );
-      }
+      // Skip notifications for presence updates (online/offline status)
+      Logger.debug(
+          '🟢 SeSocketService: 🔇 Skipping notification for presence update (online/offline status)');
 
       // Call the main presence callback (mapped to onPresence via setOnOnlineStatusUpdate)
       if (onPresence != null) {
@@ -1010,7 +1010,6 @@ class SeSocketService {
       final String fromUserId = data['fromUserId'];
       final String toUserId = data['toUserId'];
       String? conversationId = data['conversationId'];
-      final bool silent = data['silent'] ?? true; // Usually silent
 
       // Receipt delivered event received
       Logger.success(
@@ -1329,9 +1328,6 @@ class SeSocketService {
         }
       }
 
-      // Create notification for typing update (only if not silent)
-      final bool silent = decryptedData['silent'] ?? false;
-
       // CRITICAL: Only call typing callback if we should show the typing indicator
       final currentSessionId = _sessionId;
       final showIndicatorOnSessionId =
@@ -1361,7 +1357,6 @@ class SeSocketService {
       // ✅ FIX: Only call internal handler if we should show the typing indicator
       try {
         final fromUserId = decryptedData['fromUserId'] ?? '';
-        final conversationId = decryptedData['conversationId'] ?? '';
         final showIndicatorOnSessionId =
             decryptedData['showIndicatorOnSessionId'] ??
                 ''; // NEW: Server field
@@ -1553,7 +1548,7 @@ class SeSocketService {
   void _startClientHeartbeat() {
     _clientHeartbeatTimer?.cancel();
     _clientHeartbeatTimer =
-        Timer.periodic(const Duration(seconds: 30), (timer) {
+        Timer.periodic(const Duration(seconds: 15), (timer) {
       if (_socket != null && _socket!.connected && _sessionId != null) {
         _socket!.emit('client:heartbeat', {
           'sessionId': _sessionId,
@@ -2717,23 +2712,6 @@ class SeSocketService {
     } catch (e) {
       Logger.error(' SeSocketService:  Test connection failed: $e');
       return false;
-    }
-  }
-
-  void _onSocketConnected() {
-    Logger.success(' SeSocketService:  Connected to server');
-    _isConnecting = false;
-    _ready = false;
-    _addConnectionStateEvent(true);
-
-    // Send presence update to indicate we're online
-    if (_sessionId != null) {
-      try {
-        sendPresence(true, []); // Empty array means broadcast to all users
-        Logger.success(' SeSocketService:  Online presence sent on connection');
-      } catch (e) {
-        Logger.warning(' SeSocketService:  Failed to send online presence: $e');
-      }
     }
   }
 

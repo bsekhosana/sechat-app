@@ -205,12 +205,45 @@ class LocalNotificationBadgeService {
     try {
       // Import WidgetsBinding to check app lifecycle state
       final binding = WidgetsBinding.instance;
-      return binding.lifecycleState == AppLifecycleState.paused ||
+      final isBackground = binding.lifecycleState == AppLifecycleState.paused ||
           binding.lifecycleState == AppLifecycleState.detached;
+
+      Logger.debug(
+          '📱 LocalNotificationBadgeService: 🔍 App lifecycle state: ${binding.lifecycleState}, isBackground: $isBackground');
+      return isBackground;
     } catch (e) {
       Logger.error(
           '📱 LocalNotificationBadgeService:  Failed to check app state: $e');
       return false; // Default to foreground if we can't determine
+    }
+  }
+
+  /// Ensure notification channel exists
+  Future<void> _ensureNotificationChannelExists(String channelId) async {
+    try {
+      final androidPlugin =
+          _localNotifications.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      if (androidPlugin != null) {
+        // Check if channel exists
+        final existingChannels = await androidPlugin.getNotificationChannels();
+        final channelExists =
+            existingChannels?.any((channel) => channel.id == channelId) ??
+                false;
+
+        if (!channelExists) {
+          Logger.warning(
+              '📱 LocalNotificationBadgeService: ⚠️ Channel $channelId does not exist, creating it...');
+          await _createNotificationChannels();
+        } else {
+          Logger.debug(
+              '📱 LocalNotificationBadgeService: ✅ Channel $channelId exists');
+        }
+      }
+    } catch (e) {
+      Logger.error(
+          '📱 LocalNotificationBadgeService: ❌ Failed to ensure channel exists: $e');
     }
   }
 
@@ -370,7 +403,7 @@ class LocalNotificationBadgeService {
       // Get the other participant ID (recipient)
       final currentUserId = _getCurrentUserId();
       final recipientId = conversation.getOtherParticipantId(currentUserId);
-      if (recipientId == null) {
+      if (recipientId.isEmpty) {
         Logger.error(
             '📱 LocalNotificationBadgeService:  Could not determine recipient ID');
         return;
@@ -382,10 +415,8 @@ class LocalNotificationBadgeService {
       String recipientName = recipientId; // Default to ID
       try {
         final contact = ContactService.instance.getContact(recipientId);
-        if (contact != null &&
-            contact.displayName != null &&
-            contact.displayName!.isNotEmpty) {
-          recipientName = contact.displayName!;
+        if (contact != null && contact.displayName.isNotEmpty) {
+          recipientName = contact.displayName;
         }
       } catch (e) {
         Logger.warning(
@@ -614,11 +645,16 @@ class LocalNotificationBadgeService {
     Map<String, dynamic>? payload,
   }) async {
     try {
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Attempting to show message notification: $title');
+
       // Check if app is in background - only increment notification count if in background
       final isInBackground = await _isAppInBackground();
+      Logger.debug(
+          '📱 LocalNotificationBadgeService: 🔍 App in background: $isInBackground');
 
       // Create notification details
-      const AndroidNotificationDetails androidDetails =
+      final AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
         'message_notifications',
         'Message Notifications',
@@ -630,6 +666,8 @@ class LocalNotificationBadgeService {
         playSound: true,
         enableLights: true,
         ledColor: Color(0xFFFF6B35),
+        ledOnMs: 1000,
+        ledOffMs: 1000,
         fullScreenIntent: false,
         autoCancel: true,
         ongoing: false,
@@ -644,6 +682,11 @@ class LocalNotificationBadgeService {
         maxProgress: 0,
         indeterminate: false,
         onlyAlertOnce: false,
+        // Critical settings for foreground notifications
+        when: DateTime.now().millisecondsSinceEpoch,
+        usesChronometer: false,
+        // Ensure notification appears in foreground
+        silent: false,
       );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
@@ -670,7 +713,28 @@ class LocalNotificationBadgeService {
       final notificationId =
           DateTime.now().millisecondsSinceEpoch.remainder(100000);
 
+      // Ensure notification channel exists before showing notification
+      await _ensureNotificationChannelExists('message_notifications');
+
+      // Check if notifications are enabled
+      final areNotificationsEnabled = await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.areNotificationsEnabled();
+
+      Logger.debug(
+          '📱 LocalNotificationBadgeService: 🔍 Notifications enabled: $areNotificationsEnabled');
+
+      if (areNotificationsEnabled == false) {
+        Logger.warning(
+            '📱 LocalNotificationBadgeService: ⚠️ Notifications are disabled, requesting permissions...');
+        await _requestNotificationPermissions();
+      }
+
       // Show notification (only once, no duplicates)
+      Logger.info(
+          '📱 LocalNotificationBadgeService: 🔔 Showing notification with ID: $notificationId, title: $title, body: $body');
+
       await _localNotifications.show(
         notificationId,
         title,
@@ -680,7 +744,7 @@ class LocalNotificationBadgeService {
       );
 
       Logger.success(
-          '📱 LocalNotificationBadgeService:  Message notification shown with ID: $notificationId');
+          '📱 LocalNotificationBadgeService: ✅ Message notification shown with ID: $notificationId');
 
       // Only create notification item in database if app is in background
       if (isInBackground) {
@@ -712,7 +776,7 @@ class LocalNotificationBadgeService {
       final isInBackground = await _isAppInBackground();
 
       // Create notification details
-      const AndroidNotificationDetails androidDetails =
+      final AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
         'ker_notifications',
         'Key Exchange Requests',
@@ -724,6 +788,8 @@ class LocalNotificationBadgeService {
         playSound: true,
         enableLights: true,
         ledColor: Color(0xFFFF6B35),
+        ledOnMs: 1000,
+        ledOffMs: 1000,
         fullScreenIntent: false,
         autoCancel: true,
         ongoing: false,
@@ -732,6 +798,11 @@ class LocalNotificationBadgeService {
         // Force notification to show even when app is in foreground
         channelShowBadge: true,
         channelAction: AndroidNotificationChannelAction.createIfNotExists,
+        // Critical settings for foreground notifications
+        when: DateTime.now().millisecondsSinceEpoch,
+        usesChronometer: false,
+        // Ensure notification appears in foreground
+        silent: false,
       );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(

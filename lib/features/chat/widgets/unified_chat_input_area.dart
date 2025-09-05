@@ -35,7 +35,10 @@ class _UnifiedChatInputAreaState extends State<UnifiedChatInputArea> {
   }
 
   void _onTextChanged() {
-    hasText.value = _textController.text.trim().isNotEmpty;
+    final hasTextValue = _textController.text.trim().isNotEmpty;
+    if (hasText.value != hasTextValue) {
+      hasText.value = hasTextValue;
+    }
   }
 
   void _setupTextListener() {
@@ -130,6 +133,10 @@ class _UnifiedChatInputAreaState extends State<UnifiedChatInputArea> {
         maxLines: null,
         textCapitalization: TextCapitalization.sentences,
         enabled: widget.isConnected,
+        onChanged: (text) {
+          // Immediate response to text changes
+          _onTextChanged();
+        },
         decoration: InputDecoration(
           hintText: widget.isConnected
               ? 'Type a message...'
@@ -156,21 +163,26 @@ class _UnifiedChatInputAreaState extends State<UnifiedChatInputArea> {
 
   /// Build send button
   Widget _buildSendButton() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      width: 40,
-      height: 40,
-      child: IconButton(
-        onPressed:
-            (hasText.value && widget.isConnected) ? _sendTextMessage : null,
-        icon: Icon(
-          Icons.send,
-          color: (hasText.value && widget.isConnected)
-              ? const Color(0xFFFF6B35) // Use app's primary orange color
-              : Colors.grey[400],
-        ),
-        tooltip: 'Send message',
-      ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: hasText,
+      builder: (context, hasTextValue, child) {
+        final isEnabled = hasTextValue && widget.isConnected;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 40,
+          height: 40,
+          child: IconButton(
+            onPressed: isEnabled ? _sendTextMessage : null,
+            icon: Icon(
+              Icons.send,
+              color: isEnabled
+                  ? const Color(0xFFFF6B35) // Use app's primary orange color
+                  : Colors.grey[400],
+            ),
+            tooltip: 'Send message',
+          ),
+        );
+      },
     );
   }
 

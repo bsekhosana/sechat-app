@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
-import 'dart:io' show Platform, ProcessSignal, Process;
+import 'dart:io' show Platform, ProcessSignal;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import '/../core/utils/logger.dart';
@@ -44,11 +44,9 @@ import 'features/notifications/services/local_notification_badge_service.dart';
 import 'core/services/message_notification_service.dart';
 import 'realtime/realtime_service_manager.dart';
 import 'realtime/realtime_test.dart';
-import 'package:sechat_app/core/services/se_socket_service.dart';
 import 'core/services/indicator_service.dart';
 import 'core/services/encryption_service.dart';
 import 'package:sechat_app/shared/providers/socket_status_provider.dart';
-import 'package:sechat_app/core/services/network_service.dart';
 import 'package:sechat_app/core/services/unified_message_service.dart';
 
 import 'package:sechat_app/core/utils/conversation_id_generator.dart';
@@ -119,8 +117,10 @@ Future<void> main() async {
 
   // Initialize local notification services
   try {
-    final localNotificationService = LocalNotificationItemsService();
     final localNotificationBadgeService = LocalNotificationBadgeService();
+
+    // Initialize the notification service first
+    await localNotificationBadgeService.initialize();
 
     // Force reset any old notification counts first
     await localNotificationBadgeService.forceResetAndReinitialize();
@@ -362,7 +362,85 @@ void _setupSocketCallbacks(SeSocketService socketService) {
         Logger.success(
             ' Main:  Incoming message saved to database via UnifiedMessageService');
 
-        // Push notification will be shown later in the callback
+        // CRITICAL: Show push notification for incoming message
+        try {
+          final localNotificationBadgeService = LocalNotificationBadgeService();
+
+          // Ensure notification service is initialized
+          await localNotificationBadgeService.initialize();
+
+          // Resolve contact name for notification title
+          String contactName = senderName;
+          try {
+            final contactService = ContactService.instance;
+            final contact = contactService.getContact(senderId);
+            if (contact != null && contact.displayName.isNotEmpty) {
+              contactName = contact.displayName;
+              Logger.debug(
+                  ' Main:  Resolved contact name: $senderId -> $contactName');
+            } else {
+              Logger.warning(
+                  ' Main:  Contact not found for $senderId, using fallback: $senderName');
+            }
+          } catch (e) {
+            Logger.warning(
+                ' Main:  Error resolving contact name: $e, using fallback: $senderName');
+          }
+
+          // Decrypt message for notification preview
+          String notificationBody = message;
+          if (message.length > 100 && message.contains('eyJ')) {
+            try {
+              final decryptedData =
+                  await EncryptionService.decryptAesCbcPkcs7(message);
+              if (decryptedData != null && decryptedData.containsKey('text')) {
+                final firstLayerDecrypted = decryptedData['text'] as String;
+
+                // Check for double encryption
+                if (firstLayerDecrypted.length > 100 &&
+                    firstLayerDecrypted.contains('eyJ')) {
+                  final innerDecryptedData =
+                      await EncryptionService.decryptAesCbcPkcs7(
+                          firstLayerDecrypted);
+                  if (innerDecryptedData != null &&
+                      innerDecryptedData.containsKey('text')) {
+                    notificationBody = innerDecryptedData['text'] as String;
+                  } else {
+                    notificationBody = firstLayerDecrypted;
+                  }
+                } else {
+                  notificationBody = firstLayerDecrypted;
+                }
+              }
+            } catch (e) {
+              Logger.warning(
+                  ' Main:  Failed to decrypt message for notification: $e');
+              notificationBody = '[Encrypted Message]';
+            }
+          }
+
+          // Truncate message for notification
+          if (notificationBody.length > 100) {
+            notificationBody = notificationBody.substring(0, 100) + '...';
+          }
+
+          await localNotificationBadgeService.showMessageNotification(
+            title: contactName,
+            body: notificationBody,
+            type: 'message_received',
+            payload: {
+              'messageId': messageId,
+              'senderId': senderId,
+              'conversationId': actualConversationId,
+              'timestamp': DateTime.now().toIso8601String(),
+            },
+          );
+
+          Logger.success(
+              ' Main:  Push notification shown for incoming message from $contactName');
+        } catch (e) {
+          Logger.error(' Main:  Failed to show push notification: $e');
+        }
 
         // CRITICAL: Update conversation with new message and decrypt preview
         WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -1080,9 +1158,6 @@ void _setupSocketCallbacks(SeSocketService socketService) {
             navigatorKey.currentContext!,
             listen: false);
 
-        // Check if user is currently on K.Exchange screen (index 1)
-        final isOnKeyExchangeScreen = _currentScreenIndex == 1;
-
         // Always update badge count using context-aware method
         // The indicator service will handle screen context internally
         // Only count pending/received requests that haven't been processed yet
@@ -1608,26 +1683,6 @@ void _setupSocketCallbacks(SeSocketService socketService) {
   });
 }
 
-/// Parse message status string to MessageDeliveryStatus enum
-msg_status.MessageDeliveryStatus _parseMessageStatus(String status) {
-  switch (status.toLowerCase()) {
-    case 'sending':
-      return msg_status.MessageDeliveryStatus.pending;
-    case 'sent':
-      return msg_status.MessageDeliveryStatus.sent;
-    case 'delivered':
-      return msg_status.MessageDeliveryStatus.delivered;
-    case 'read':
-      return msg_status.MessageDeliveryStatus.read;
-    case 'failed':
-      return msg_status.MessageDeliveryStatus.failed;
-    case 'deleted':
-      return msg_status.MessageDeliveryStatus.failed; // Map deleted to failed
-    default:
-      return msg_status.MessageDeliveryStatus.sent; // Default to sent
-  }
-}
-
 class SeChatApp extends StatelessWidget {
   const SeChatApp({super.key});
 
@@ -1757,7 +1812,7 @@ class _AuthCheckerState extends State<AuthChecker> {
 
           // Initialize socket connection
           final socketService = SeSocketService.instance;
-          await socketService.connect(session!.sessionId);
+          await socketService.connect(session.sessionId);
 
           Logger.success(
               '🔍 AuthChecker:  Socket service initialized successfully');

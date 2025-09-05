@@ -4,9 +4,9 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../core/services/se_socket_service.dart';
 import '../../core/services/app_state_service.dart';
+import '../../core/services/background_connection_manager.dart';
 import '../../features/notifications/services/local_notification_badge_service.dart';
 import '../../realtime/realtime_service_manager.dart';
-import '../../core/services/indicator_service.dart';
 import '../../features/key_exchange/providers/key_exchange_request_provider.dart';
 import '../../main.dart';
 import 'package:flutter/services.dart';
@@ -85,17 +85,24 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       case AppLifecycleState.hidden:
         Logger.debug(' AppLifecycleHandler: App hidden - by system UI');
         break;
-
-      default:
-        Logger.debug(
-            ' AppLifecycleHandler: Unknown app lifecycle state: $state');
-        break;
     }
   }
 
   void _handleAppResumed() async {
     Logger.debug(
         '🔄 AppLifecycleHandler: 🚀 _handleAppResumed() method called - starting badge reset and notification clearing...');
+
+    // Stop background connection maintenance when app comes to foreground
+    try {
+      Logger.debug(
+          ' AppLifecycleHandler: 🔧 Stopping background connection maintenance...');
+      await BackgroundConnectionManager().stopBackgroundMaintenance();
+      Logger.success(
+          ' AppLifecycleHandler: ✅ Background connection maintenance stopped');
+    } catch (e) {
+      Logger.warning(
+          ' AppLifecycleHandler: ⚠️ Error stopping background connection maintenance: $e');
+    }
 
     // Reset socket service if it was destroyed
     try {
@@ -186,6 +193,9 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
       // CRITICAL: Keep socket connected in background to receive messages and trigger push notifications
       try {
         final socketService = SeSocketService.instance;
+        Logger.debug(
+            ' AppLifecycleHandler: 🔌 Socket service status - isConnected: ${socketService.isConnected}');
+
         if (socketService.isConnected) {
           Logger.debug(
               ' AppLifecycleHandler: 🔌 App going to background, keeping socket connected for push notifications...');
@@ -194,10 +204,34 @@ class _AppLifecycleHandlerState extends State<AppLifecycleHandler>
           await _sendOnlineStatusUpdate(false);
           Logger.success(
               ' AppLifecycleHandler:  Socket kept connected for background message reception');
+        } else {
+          Logger.warning(
+              ' AppLifecycleHandler: ⚠️ Socket not connected when going to background, attempting to maintain connection...');
+          // Try to ensure socket stays connected
+          try {
+            // Don't reconnect here, just log the status
+            Logger.debug(
+                ' AppLifecycleHandler: 🔌 Socket will attempt reconnection automatically');
+          } catch (e) {
+            Logger.warning(
+                ' AppLifecycleHandler: ⚠️ Could not maintain socket connection: $e');
+          }
         }
       } catch (e) {
         Logger.warning(
             ' AppLifecycleHandler:  Warning - socket status update failed: $e');
+      }
+
+      // Start background connection maintenance
+      try {
+        Logger.debug(
+            ' AppLifecycleHandler: 🔧 Starting background connection maintenance...');
+        await BackgroundConnectionManager().startBackgroundMaintenance();
+        Logger.success(
+            ' AppLifecycleHandler: ✅ Background connection maintenance started');
+      } catch (e) {
+        Logger.error(
+            ' AppLifecycleHandler: ❌ Error starting background connection maintenance: $e');
       }
 
       // Silent permission check when going to background (no test notifications)

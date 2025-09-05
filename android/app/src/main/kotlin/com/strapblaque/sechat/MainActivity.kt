@@ -21,6 +21,7 @@ class MainActivity : FlutterActivity() {
     }
     
     private lateinit var sessionApiImpl: SessionApiImpl
+    private lateinit var methodChannelHandler: MethodChannelHandler
     // Notification-related variables removed - socket-based communication only
 
     init {
@@ -41,6 +42,9 @@ class MainActivity : FlutterActivity() {
         // Initialize Session Protocol implementation
         sessionApiImpl = SessionApiImpl(this)
         
+        // Initialize method channel handler for foreground service
+        methodChannelHandler = MethodChannelHandler(this)
+        
         // Set up Pigeon-generated SessionApi
         try {
             SessionApi.SessionApiHandler.setUp(flutterEngine.dartExecutor.binaryMessenger, sessionApiImpl)
@@ -54,6 +58,9 @@ class MainActivity : FlutterActivity() {
         
         // Set up simplified method channel - socket-based communication only
         setupPushNotifications(flutterEngine)
+        
+        // Set up foreground service method channel
+        methodChannelHandler.setupMethodChannel(flutterEngine)
         
         Log.d("MainActivity", "Flutter engine configuration complete")
     }

@@ -35,7 +35,10 @@ class _ChatInputAreaState extends State<ChatInputArea> {
   }
 
   void _onTextChanged() {
-    hasText.value = _textController.text.trim().isNotEmpty;
+    final hasTextValue = _textController.text.trim().isNotEmpty;
+    if (hasText.value != hasTextValue) {
+      hasText.value = hasTextValue;
+    }
   }
 
   void _setupTextListener() {
@@ -125,6 +128,10 @@ class _ChatInputAreaState extends State<ChatInputArea> {
         focusNode: _focusNode,
         maxLines: null,
         textCapitalization: TextCapitalization.sentences,
+        onChanged: (text) {
+          // Immediate response to text changes
+          _onTextChanged();
+        },
         decoration: InputDecoration(
           hintText: 'Type a message...',
           hintStyle: TextStyle(
@@ -147,20 +154,27 @@ class _ChatInputAreaState extends State<ChatInputArea> {
 
   /// Build send button
   Widget _buildSendButton() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      width: 40,
-      height: 40,
-      child: IconButton(
-        onPressed: hasText.value ? _sendTextMessage : null,
-        icon: Icon(
-          Icons.send,
-          color: hasText.value
-              ? Theme.of(context).colorScheme.primary // Keep orange when active
-              : Colors.grey[400], // Grey when inactive
-        ),
-        tooltip: 'Send message',
-      ),
+    return ValueListenableBuilder<bool>(
+      valueListenable: hasText,
+      builder: (context, hasTextValue, child) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 40,
+          height: 40,
+          child: IconButton(
+            onPressed: hasTextValue ? _sendTextMessage : null,
+            icon: Icon(
+              Icons.send,
+              color: hasTextValue
+                  ? Theme.of(context)
+                      .colorScheme
+                      .primary // Keep orange when active
+                  : Colors.grey[400], // Grey when inactive
+            ),
+            tooltip: 'Send message',
+          ),
+        );
+      },
     );
   }
 
@@ -170,8 +184,7 @@ class _ChatInputAreaState extends State<ChatInputArea> {
     if (text.isEmpty) return;
 
     Logger.debug('📱 ChatInputArea: 🔧 _sendTextMessage called with: "$text"');
-    Logger.info(
-        '📱 ChatInputArea:  onTextMessageSent callback: ${widget.onTextMessageSent != null ? 'SET' : 'NULL'}');
+    Logger.info('📱 ChatInputArea:  onTextMessageSent callback: SET');
     Logger.info('📱 ChatInputArea:  Text length: ${text.length}');
 
     widget.onTextMessageSent(text);
